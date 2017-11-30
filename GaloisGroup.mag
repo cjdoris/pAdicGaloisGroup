@@ -13,7 +13,7 @@
 // - Allow for using some smallish unramified ell-adic field instead of the complexes? It may be easier to control precision this way. What does rounding mean in this context?
 // - since Spl(R) subset Spl(f), then Spl(fR) = Spl(f) so Gal(fR) isom Gal(f) (and the isomorphism is explicit in terms of the coset action of W on U); hence in the resolvent method, we could (conceptually if not literally) keep multiplying f by each resolvent that we find. We can then find more resolvents in terms of the roots of both f and previous resolvents, which may give us deeper information. The main downside would be that the group theory may become unwieldy, lots of potential subgroups U will give the same information, but we may be able to overcome this. This is a bit like the relative resolvent method, where the overgroup W gets extended by Gal(R) which has a direct factor of C_1, with the additional information that this is a certain image of Gal(f). This is kind of a more subtle way of setting the resolvent statistic to "compute the Galois group recursively".
 
-declare verbose GaloisGroup_Doris, 1;
+declare verbose PGG_GaloisGroup, 1;
 
 Z := IntegerRing();
 Q := RationalField();
@@ -778,7 +778,7 @@ intrinsic Start(alg :: PGGAlg_ResGroups_All, conj :: PGGConj, overgroup :: GrpPe
   s`overgroup := overgroup;
   // get a list of possible groups
   s`possible_groups := (known select [G] else [G : x in Subgroups(Overgroup(conj) : IsSolvable, IsTransitive:=IsTransitive(conj)) | IsConsistent(conj, G) where G:=x`subgroup]) where known,G:=IsKnown(conj);
-  vprint GaloisGroup_Doris: "#possible groups =", #s`possible_groups;
+  vprint PGG_GaloisGroup: "#possible groups =", #s`possible_groups;
   return s;
 end intrinsic;
 
@@ -814,7 +814,7 @@ intrinsic SubgroupTranche(s :: PGGAlgState_ResGroups_All) -> []
     while #s`possible_subgroups`cur_groups eq 0 do
       n := 1+#s`possible_subgroups`all_groups;
       index := s`possible_subgroups`indices[n];
-      vprint GaloisGroup_Doris: "index =", index;
+      vprint PGG_GaloisGroup: "index =", index;
       Append(~s`possible_subgroups`all_groups, [x`subgroup : x in Subgroups(s`overgroup : IndexEqual:=index)]);
       s`possible_subgroups`cur_groups := s`possible_subgroups`all_groups[n];
     end while;
@@ -826,10 +826,10 @@ intrinsic SubgroupTranche(s :: PGGAlgState_ResGroups_All) -> []
     while #s`possible_subgroups`cur_groups eq 0 do
       if #s`possible_subgroups`useful ne 0 then
         pop_start(~U, ~s`possible_subgroups`useful);
-        vprint GaloisGroup_Doris: "maximal subgroups of useful group", U;
+        vprint PGG_GaloisGroup: "maximal subgroups of useful group", U;
       elif #s`possible_subgroups`others ne 0 then
         pop_start(~U, ~s`possible_subgroups`others);
-        vprint GaloisGroup_Doris: "maximal subgroups of useless group", U;
+        vprint PGG_GaloisGroup: "maximal subgroups of useless group", U;
       else
         assert false;
       end if;
@@ -1001,7 +1001,7 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_All, resolvent :: RngUPolE
   rstat := ResStat(s, resolvent);
   h := CosetAction(s`overgroup, subgroup);
   s`possible_groups := [G : G in s`possible_groups | StatEq(s, gstat, rstat) where gstat := GroupStat(s, h(G))];
-  vprint GaloisGroup_Doris: "#possible groups =", #s`possible_groups;
+  vprint PGG_GaloisGroup: "#possible groups =", #s`possible_groups;
 end intrinsic;
 
 intrinsic GlobalModel(F :: FldPad) -> PGGGloMod
@@ -1146,7 +1146,7 @@ intrinsic ComplexRoots(s :: PGGAlgState_ResEval_Global, pr :: RngIntElt) -> []
   {A sequence of complex roots, one for each embedding of the base field.}
   C := ComplexField(pr);
   if pr gt s`precision then
-    vprint GaloisGroup_Doris: "complex precision =", pr;
+    vprint PGG_GaloisGroup: "complex precision =", pr;
     s`complex_roots := ComplexRoots(s`pol_model, ComplexEmbeddings(s`base_field_model, [map<Q -> C | x :-> C!x>]));
     s`precision := pr;
   end if;
@@ -1481,36 +1481,36 @@ end intrinsic;
 
 intrinsic GaloisGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt[FldPad]) -> GrpPerm
   {The Galois group of f.}
-  vprint GaloisGroup_Doris: "ResolventMethod...";
+  vprint PGG_GaloisGroup: "ResolventMethod...";
   t := PGG_Timer();
   Push(t, "conjugacy");
   conj := Conjugacy(Alg`conjugacy_alg, f);
-  vprint GaloisGroup_Doris: "conjugacy =", conj;
+  vprint PGG_GaloisGroup: "conjugacy =", conj;
   Swap(t, "start resolvent");
   rst := Start(Alg`resolvent_alg, conj);
   Swap(t, "overgroup");
   W := Overgroup(rst);
-  vprint GaloisGroup_Doris: "overgroup =", W;
+  vprint PGG_GaloisGroup: "overgroup =", W;
   Swap(t, "start groups");
   gst := Start(Alg`groups_alg, conj, W);
-  vprint GaloisGroup_Doris: "main loop...";
+  vprint PGG_GaloisGroup: "main loop...";
   while not IsDone(gst) do
     Swap(t, "subgroup");
     U := Subgroup(gst);
-    vprint GaloisGroup_Doris: "subgroup =", U;
-    vprint GaloisGroup_Doris: "subgroup index =", Index(W, U);
+    vprint PGG_GaloisGroup: "subgroup =", U;
+    vprint PGG_GaloisGroup: "subgroup index =", Index(W, U);
     Swap(t, "invariant");
     I := RelativeInvariant(W, U);
-    vprint GaloisGroup_Doris: "invariant =", I;
+    vprint PGG_GaloisGroup: "invariant =", I;
     Swap(t, "resolvent");
     R := Resolvent(rst, I, U);
-    vprint GaloisGroup_Doris: "resolvent =", R;
+    vprint PGG_GaloisGroup: "resolvent =", R;
     Swap(t, "process resolvent");
     ProcessResolvent(gst, R, U);
   end while;
-  vprint GaloisGroup_Doris: "success";
+  vprint PGG_GaloisGroup: "success";
   Pop(t);
-  if GetVerbose("GaloisGroup_Doris") gt 0 then
+  if GetVerbose("PGG_GaloisGroup") gt 0 then
     PrintTree(t);
   end if;
   return TheGroup(gst);
