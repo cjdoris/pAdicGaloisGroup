@@ -1,0 +1,3 @@
+{
+  GaloisGroup.mag
+}

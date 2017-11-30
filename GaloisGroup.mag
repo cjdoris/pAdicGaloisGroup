@@ -1,0 +1,1766 @@
+// implementation of a general galois-group finding algorithm, general in the sense that the algorithms involved are written in a modular fashion so that each piece can be changed independently of the rest, as far as possible
+
+// TODO:
+// - factor out the code to evaluate invariants from the resolvent method code
+// - add local-only code for evaluating invariants (e.g. Sn-relative can be evaluated directly from polynomial coefficients)
+// - implement a relative resolvent method (i.e. a chain of subgroups, with a root for each, and evaluate the resolvent by evaluating at the known roots to make invariant in the top group)
+// - is conjugacy a parameter to galois group, not to resolvent method?
+// - to cut down on the group theory in the absolute resolvent algorithm, try only using maximal subgroups of groups which were previously useful? how do we limit this to only consider each group once?
+// - a variant of the absolute resolvent method which works down the tree of possible galois groups one level at a time; unlike the relative resolvent method which specifically looks for roots of resolvents, we can still use more information coming from each resolvent to see if it provides any cut-down
+// - we know that for a W-relative U-invariant I (where Gal(f/K) subset W) that Gal(f/K) subset U iff R_I(t) has a root in K. More generally, for an extension L/K we have that Gal(f/L) subset U iff R has a root in L. In particular if L is defined by a factor of R, then this holds. This seems to give some information about the Galois group. If we can combine information about these resolvent fields somehow, then we could work out the Galois group.
+// - Spl(R) subset Spl(f) so the ramification breaks of a factor of R is a subset of that of Spl(f), so with enough resolvents we can get the ramification breaks of Spl(f). Once we know this, then the previous point allows us to figure out the ramification filtratation of Gal(f) precisely.
+// - Is it possible to get a global model for R in a manner compatible with f? That way we could recover the relative resolvent method?
+// - Allow for using some smallish unramified ell-adic field instead of the complexes? It may be easier to control precision this way. What does rounding mean in this context?
+// - since Spl(R) subset Spl(f), then Spl(fR) = Spl(f) so Gal(fR) isom Gal(f) (and the isomorphism is explicit in terms of the coset action of W on U); hence in the resolvent method, we could (conceptually if not literally) keep multiplying f by each resolvent that we find. We can then find more resolvents in terms of the roots of both f and previous resolvents, which may give us deeper information. The main downside would be that the group theory may become unwieldy, lots of potential subgroups U will give the same information, but we may be able to overcome this. This is a bit like the relative resolvent method, where the overgroup W gets extended by Gal(R) which has a direct factor of C_1, with the additional information that this is a certain image of Gal(f). This is kind of a more subtle way of setting the resolvent statistic to "compute the Galois group recursively".
+
+declare verbose GaloisGroup_Doris, 1;
+
+Z := IntegerRing();
+Q := RationalField();
+
+declare type PGGSetConjCls[PGGConjCls];
+declare attributes PGGSetConjCls: overgroup, class_function;
+declare attributes PGGConjCls: subgroup, parent, hash;
+
+intrinsic PGG_ConjugacyClasses(G :: GrpPerm) -> PGGSetConjCls
+  {The conjugacy classes of subgroups of G.}
+  X := New(PGGSetConjCls);
+  X`overgroup := G;
+  X`class_function := func<H | <#H, Hash(H), {*cf(x[3])^^x[2] : x in Classes(H)*}>>
+    where cf := ClassMap(G);
+  return X;
+end intrinsic;
+
+intrinsic 'eq'(X :: PGGSetConjCls, Y :: PGGSetConjCls) -> BoolElt
+  {Equality.}
+  return IsIdentical(X, Y);
+end intrinsic;
+
+intrinsic IsCoercible(X :: PGGSetConjCls, H) -> BoolElt, .
+  {IsCoercible.}
+  return false, "wrong type";
+end intrinsic;
+
+intrinsic IsCoercible(X :: PGGSetConjCls, H :: GrpPerm) -> BoolElt, .
+  {"}
+  if H subset X`overgroup then
+    x := New(PGGConjCls);
+    x`subgroup := H;
+    x`parent := X;
+    x`class_function_value := x`parent`class_function(H);
+    x`hash := Hash(x`class_function_value);
+    return true, x;
+  else
+    return false, "not a subgroup of the right group";
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(X :: PGGSetConjCls, H :: PGGConjCls) -> BoolElt, .
+  {"}
+  if Parent(H) eq X then
+    return true, H;
+  elif Parent(H)`overgroup subset X`overgroup then
+    return true, X ! Rep(H);
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic Parent(x :: PGGConjCls) -> PGGSetConjCls
+  {The parent set.}
+  return x`parent;
+end intrinsic;
+
+intrinsic Hash(x :: PGGConjCls) -> RngIntElt
+  {Hash.}
+  return x`hash;
+end intrinsic;
+
+intrinsic Rep(x :: PGGConjCls) -> GrpPerm
+  {A representative.}
+  return x`subgroup;
+end intrinsic;
+
+intrinsic 'eq'(x :: PGGConjCls, y :: PGGConjCls) -> BoolElt
+  {Equality.}
+  assert Parent(x) eq Parent(y);
+  return (x`class_function_value eq y`class_function_value) and IsConjugate(Parent(x)`overgroup, x`subgroup, y`subgroup);
+end intrinsic;
+
+declare type PGGTimer;
+declare attributes PGGTimer: last_time, times, labels, current_label, idxs;
+
+intrinsic PGG_Timer() -> PGGTimer
+  {A new timer.}
+  t := New(PGGTimer);
+  t`last_time := Cputime();
+  t`times := [RealField()|];
+  t`labels := [PowerSequence(Strings())|];
+  t`current_label := [Strings()|];
+  t`idxs := AssociativeArray(PowerSequence(Strings()));
+  return t;
+end intrinsic;
+
+intrinsic FindIndex(t :: PGGTimer, label :: [MonStgElt]) -> RngIntElt
+  {The index of the given label. If it doesn't exist, creates it first.}
+  ok, i := IsDefined(t`idxs, label);
+  if ok then
+    return i;
+  end if;
+  Append(~t`times, 0);
+  Append(~t`labels, label);
+  t`idxs[label] := #t`labels;
+  return #t`labels;
+end intrinsic;
+
+intrinsic Update(t :: PGGTimer, label :: [MonStgElt])
+  {Assigns the accumulated time to the given label.}
+  i := FindIndex(t, label);
+  now := Cputime();
+  t`times[i] +:= now - t`last_time;
+  t`last_time := now;
+end intrinsic;
+
+intrinsic Push(t :: PGGTimer, x :: MonStgElt)
+  {Assings time to the current label, then appends x to the label.}
+  Update(t, t`current_label);
+  Append(~t`current_label, x);
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimer, n :: RngIntElt)
+  {Assigns time to the current label, then pops n items from the label.}
+  error if #t`current_label lt n, "n greater than label length";
+  Update(t, t`current_label);
+  t`current_label := t`current_label[1..#t`current_label-n];
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimer, n :: RngIntElt, x :: MonStgElt)
+  {Assigns time to the current label, then pops n items from the label, the nth being x.}
+  error if #t`current_label lt n, "n greater than label length";
+  error if t`current_label[#t`current_label-n+1] ne x, "incorrect label entry";
+  Update(t, t`current_label);
+  t`current_label := t`current_label[1..#t`current_label-n];
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimer, x :: MonStgElt)
+  {Assigns time to the current label, then pops the last item from the label, which must be x.}
+  Pop(t, 1, x);
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimer)
+  {Assigns time to the current label, then pops the last item from the label.}
+  Pop(t, 1);
+end intrinsic;
+
+intrinsic Swap(t :: PGGTimer, x :: MonStgElt)
+  {Assigns time to the current label, then swaps the last item from the label to x.}
+  error if #t`current_label lt 1, "label too short";
+  Update(t, t`current_label);
+  t`current_label[#t`current_label] := x;
+end intrinsic;
+
+intrinsic Log(t :: PGGTimer, x :: MonStgElt)
+  {Assigns time to the current label with x appended.}
+  Update(t, Append(t`current_label, x));
+end intrinsic;
+
+intrinsic Tree(t :: PGGTimer) -> Tup
+  {A tree representation of t.}
+  procedure insert(~node, label, tm)
+    node[2] +:= tm;
+    if #label gt 0 then
+      for i in [1..#node[3]] do
+        if node[3][i][1] eq label[1] then
+          insert(~node[3][i], label[2..#label], tm);
+          return;
+        end if;
+      end for;
+      Append(~node[3], <label[1], 0.0, [**]>);
+      insert(~node[3][#node[3]], label[2..#label], tm);
+    end if;
+  end procedure;
+  root := <"TOTAL", 0.0, [**]>;
+  for i in [1..#t`labels] do
+    insert(~root, t`labels[i], t`times[i]);
+  end for;
+  return root;
+end intrinsic;
+
+intrinsic PrintTree(t :: PGGTimer)
+  {Prints t as a tree.}
+  procedure pr(node, depth)
+    printf "%o%6.2o %o\n", &cat[Strings() | "  " : i in [1..depth]], node[2], node[1];
+    for n in node[3] do
+      pr(n, depth+1);
+    end for;
+  end procedure;
+  pr(Tree(t), 0);
+end intrinsic;
+
+declare type PGGAttr;
+declare attributes PGGAttr: name, arguments;
+
+intrinsic Print(x :: PGGAttr, lvl :: MonStgElt)
+  {Print.}
+  case lvl:
+  when "Magma":
+    printf "PGG_Attribute(%m, %m)", Name(x), Arguments(x);
+  else
+    printf "%o", Name(x);
+    if #Arguments(x) gt 0 then
+      printf "(%o)", Join([Sprintf("%o",a) : a in Arguments(x)], ",");
+    end if;
+  end case;
+end intrinsic;
+
+intrinsic Name(a :: PGGAttr) -> MonStgElt
+  {The name.}
+  return a`name;
+end intrinsic;
+
+intrinsic Arguments(a :: PGGAttr) -> []
+  {The arguments.}
+  return a`arguments;
+end intrinsic;
+
+intrinsic PGG_Attribute(name :: MonStgElt, arguments :: [PGGAttr]) -> PGGAttr
+  {An attribute.}
+  a := New(PGGAttr);
+  a`name := name;
+  a`arguments := arguments;
+  return a;
+end intrinsic;
+
+intrinsic PGG_Attribute(name :: MonStgElt) -> PGGAttr
+  {"}
+  a := New(PGGAttr);
+  a`name := name;
+  a`arguments := [];
+  return a;
+end intrinsic;
+
+intrinsic PGG_Attribute() -> PGGAttr
+  {"}
+  a := New(PGGAttr);
+  a`name := "";
+  a`arguments := [];
+  return a;
+end intrinsic;
+
+intrinsic PGG_Attribute_IsCoercible(x) -> BoolElt, .
+  {True if x is coercible to a PGGAttr.}
+  return false, "wrong type";
+end intrinsic;
+
+intrinsic PGG_Attribute_IsCoercible(x :: PGGAttr) -> BoolElt, .
+  {"}
+  return true, x;
+end intrinsic;
+
+intrinsic PGG_Attribute_IsCoercible(x :: MonStgElt) -> BoolElt, .
+  {"}
+  // process each character in turn
+  stack := [PGG_Attribute()];
+  i := 0;
+  for i in [1..#x] do
+    c := x[i];
+    assert #stack ge 1;
+    case c:
+    when ",":
+      if #stack lt 2 then
+        return false, Sprintf("parse error: %o: illegal ','", i);
+      end if;
+      Append(~stack[#stack-1]`arguments, stack[#stack]);
+      stack[#stack] := PGG_Attribute();
+    when "[":
+      Append(~stack, PGG_Attribute());
+    when "]":
+      if #stack lt 2 then
+        return false, Sprintf("parse error: %o: illegal ')'");
+      end if;
+      Append(~stack[#stack-1]`arguments, stack[#stack]);
+      stack := stack[1..#stack-1];
+    else
+      stack[#stack]`name cat:= c;
+    end case;
+  end for;
+  assert #stack ge 1;
+  if #stack gt 1 then
+    return false, Sprintf("parse error: end of input: too few ')'");
+  end if;
+  // done
+  return true, stack[1];
+end intrinsic;
+
+function not_implemented(msg, ...)
+  error "not implemented: " cat Join([Sprintf("%o", x) : x in msg], " ");  
+end function;
+
+function precision_error()
+  error "precision error";
+end function;
+
+function is_any_coercible(coercers, x)
+  for i in [1..#coercers] do
+    ok, y := coercers[i](x);
+    if ok then
+      return true, i, y;
+    end if;
+  end for;
+  return false, _, _;
+end function;
+
+function all_coercible(dflts, coercers, xs)
+  assert #dflts eq #coercers;
+  dflts := [* d : d in dflts *];
+  for x in xs do
+    ok, i, y := is_any_coercible(coercers, x);
+    if ok then
+      dflts[i] := y;
+    else
+      return false, _;
+    end if;
+  end for;
+  return true, dflts;
+end function;
+
+function the(xs)
+  assert #xs eq 1;
+  return [x : x in xs][1];
+end function;
+
+// the roots of f as a sequence (no multiplicities)
+// f must be squarefree
+function roots(f)
+  rs := Roots(f : IsSquarefree);
+  assert forall{r : r in rs | r[2] eq 1};
+  return [r[1] : r in rs];
+end function;
+
+// true if f has a root
+// f must be squarefree
+// also returns a root
+function has_root(f)
+  rs := roots(f);
+  if #rs eq 0 then
+    return false, _;
+  else
+    return true, rs[1];
+  end if;
+end function;
+
+// the factorization of f as a sequence (no multiplicities)
+// f must be squarefree
+// also the certificates
+function factorization(f : Extensions:=false)
+  slope := Ceiling(Max(Slopes(NewtonPolygon(f))));
+  d := Degree(f);
+  vlc := Valuation(Coefficient(f, d));
+  f2 := Parent(f) ! [ShiftValuation(Coefficient(f, i), (d-i)*slope - vlc) : i in [0..d]];
+  facs, _, certs := Factorization(f2 : IsSquarefree, Certificates, Extensions:=Extensions);
+  assert forall{fac : fac in facs | fac[2] eq 1};
+  return [Parent(g)![ShiftValuation(Coefficient(g,i), (i-d)*slope-vlc) : i in [0..d]] where vlc:=Valuation(Coefficient(g,d)) where d:=Degree(g) where g:=fac[1] : fac in facs], certs;
+end function;
+
+// the factorization of f into pieces corresponding to the slopes of its newton polygon as a sequence
+function newton_polygon_factorization(f : alg:="Cheat")
+  case alg:
+  when "Cheat":
+    // we cheat and do a full factorization and then aggregate the results
+    // this will be very inefficient for some polynomials!
+    facs := factorization(f);
+    a := AssociativeArray();
+    for fac in facs do
+      s := the(Slopes(NewtonPolygon(fac)));
+      if IsDefined(a, s) then
+        Append(~a[s], fac);
+      else
+        a[s] := [fac];
+      end if;
+    end for;
+    return [&*a[s] : s in Sort([s : s in Keys(a)])];
+  else
+    assert false;
+  end case;
+end function;
+
+function multiplicities_to_information(mults)
+  mults := [m : m in mults | m ne 0];
+  assert forall{m : m in mults | m gt 0};
+  assert #mults gt 0;
+  if #mults eq 1 then
+    return 0.0;
+  end if;
+  total := &+mults;
+  return &+[-p*Log(2,p) where p:=m/total : m in mults];
+end function;
+
+function largest_coefficient(x)
+  if IsPrimeField(Parent(x)) then
+    return Abs(x);
+  else
+    return Max([largest_coefficient(c) : c in Eltseq(x)]);
+  end if;
+end function;
+
+function reduce_coefficients(x, M)
+  if IsPrimeField(Parent(x)) then
+    return Parent(x) ! ((Z!x) mod M);
+  else
+    return Parent(x) ! [reduce_coefficients(c, M) : c in Eltseq(x)];
+  end if;
+end function;
+
+function startswith(x, y)
+  if #x ge #y and x[1..#y] eq y then
+    return true, x[#y+1..#x];
+  else
+    return false, _;
+  end if;
+end function;
+
+procedure seq_idiff(~xs, ys)
+  ys := {y : y in ys};
+  xs := [xs[i] : i in [1..#xs] | xs[i] notin ys];
+end procedure;
+
+// a bound on |f(a_1,...,a_n)| where |a_i| le b.
+// f is a RngSLPolElt
+function slpol_bound(f, b)
+  op := Operator(f);
+  f1, f2 := Operands(f);
+  case op:
+  when "var":
+    return b;
+  when "const":
+    return Abs(f1);
+  when "+", "-":
+    return slpol_bound(f1, b) + slpol_bound(f2, b);
+  when "*":
+    return slpol_bound(f1, b) * slpol_bound(f2, b);
+  when "^":
+    return slpol_bound(f1, b) ^ f2;
+  else
+    assert false;
+  end case;
+end function;
+
+function permute_seq(g, xs)
+  d := Degree(Parent(g));
+  assert d eq #xs;
+  return [xs[i^g] : i in [1..d]];
+end function;
+
+procedure pop_start(~x, ~xs)
+  assert #xs ne 0;
+  x := xs[1];
+  xs := xs[2..#xs];
+end procedure;
+
+function polynomial_with_roots(rs)
+  U := Universe(rs);
+  R := PolynomialRing(U);
+  return &*[R| [-r, 1] : r in rs];
+end function;
+
+function left_coset_representatives(G, H)
+  assert H subset G;
+  cosets, indices := DoubleCosetRepresentatives(G, H, sub<G | 1>);
+  return cosets;
+end function;
+
+function is_extension_of(L, K)
+  if L eq K then
+    return true, [K];
+  elif IsPrimeField(L) then
+    return false, _;
+  else
+    ok, twr := is_extension_of(BaseField(L), K);
+    if ok then
+      return true, Append(twr, L);
+    else
+      return false, _;
+    end if;
+  end if;
+end function;
+
+function tower(L, K)
+  ok, twr := is_extension_of(L, K);
+  assert ok;
+  return twr;
+end function;
+
+function is_in_standard_form(L, K)
+  t := tower(L, K);
+  if #t eq 1 then
+    return true, K;
+  elif #t eq 2 then
+    if RamificationDegree(t[2]) gt 1 then
+      return true, K;
+    elif InertiaDegree(t[2]) gt 1 then
+      return true, L;
+    end if;
+  elif #t eq 3 then
+    U := t[2];
+    if RamificationDegree(L) gt 1 and InertiaDegree(U) gt 1 then
+      return true, U;
+    end if;
+  end if;
+  return false;
+end function;
+
+function valuation_eq(c, n)
+  if Valuation(c) gt n then
+    return false;
+  elif IsWeaklyZero(c) then
+    precision_error();
+  else
+    return Valuation(c) eq n;
+  end if;
+end function;
+
+function valuation_ge(c, n)
+  if Valuation(c) ge n then
+    return true;
+  elif IsWeaklyZero(c) then
+    precision_error();
+  else
+    return false;
+  end if;
+end function;
+
+function is_eisenstein(f)
+  d := Degree(f);
+  return (d ge 0) and valuation_eq(Coefficient(f, d), 0) and valuation_eq(Coefficient(f, 0), 1) and forall{i : i in [1..d-1] | valuation_ge(Coefficient(f, i), 1)};
+end function;
+
+function xdiv(x, y)
+  ok, z := IsDivisibleBy(x, y);
+  assert ok;
+  return z;
+end function;
+
+// solves S*M=V for S
+function solve(M, V)
+  return V * M^-1;
+  ok, S := IsSolvable(M, V);
+  if ok then
+    return S;
+  else
+    return V * M^-1;
+  end if;
+end function;
+
+// given L/K and a sequence pis of elements of L which are uniformizing elements of subextensions K(pis[#pis])/.../K(pis[1]), return this tower from the bottom up
+function tower_from_uniformizers(L, K, pis : alg:="LA")
+  timer := PGG_Timer();
+  assert Universe(pis) eq L;
+  assert not IsPrimeField(L);
+  assert BaseField(L) eq K;
+  t := [];
+  K2 := K;
+  L2 := L;
+  LtoL2 := map<L -> L2 | x :-> x>;
+  f := DefiningPolynomial(L);
+  Lpi := L.1;
+  Log(timer, "init");
+  for i in [1..#pis] do
+    pi2 := LtoL2(pis[i]);
+    m := MinimalPolynomial(pi2, K2);
+    Log(timer, "MinimalPolynomial");
+    assert is_eisenstein(m);
+    d := Degree(m);
+    n := xdiv(Degree(L2, K2), d);
+    if d gt 1 then
+      K2new := ext<K2 | ChangePrecision(m, Precision(K2))>;
+      case alg:
+      when "Factorization":
+        f2 := factorization(ChangeRing(f, K2new))[1];
+      when "LA":
+        V := VectorSpace(K2, Degree(L2, K2));
+        vmap := map<L2 -> V | x :-> V!Eltseq(x), y :-> L2!Eltseq(y)>;
+        L2pi := LtoL2(Lpi);
+        vec := vmap(L2pi^n);
+        mat := Matrix([vmap(L2pi^i * pi2^j) : j in [0..d-1], i in [0..n-1]]);
+        coeffs := Eltseq(solve(mat, vec));
+        f2 := Polynomial([K2new| i eq n select 1 else -&+[coeffs[i*d+j+1] * K2new.1^j : j in [0..d-1]] : i in [0..n]]);
+      else
+        assert false;
+      end case;
+      assert Degree(f2) eq n;
+      assert is_eisenstein(f2);
+      L2new := ext<K2new | ChangePrecision(f2, Precision(L2))>;
+      LtoL2new := map<L -> L2new | x :-> &+[L2new| L2new.1^(i-1) * cs[i] : i in [1..#cs]] where cs:=Eltseq(x)>;
+      // rename for iterating
+      K2 := K2new;
+      L2 := L2new;
+      LtoL2 := LtoL2new;
+    end if;
+    Append(~t, K2);
+    Log(timer, "factorization");
+  end for;
+  return t;
+end function;
+
+function ramification_tower(L, K)
+  ok, U := is_in_standard_form(L, K);
+  assert ok;
+  if L eq K then
+    return [K];
+  elif L eq U then
+    return [K, U];
+  elif U eq K then
+    timer := PGG_Timer();
+    f := DefiningPolynomial(L);
+    assert is_eisenstein(f);
+    pi := L.1;
+    assert IsWeaklyZero(Evaluate(f, pi));
+    r := Evaluate(f, PolynomialRing(L) ! [pi, 1]);
+    assert IsWeaklyZero(Coefficient(r, 0));
+    Log(timer, "ramification polynomial");
+    rfacs := newton_polygon_factorization(r);
+    Log(timer, "newton_polygon_factorization");
+    assert Degree(rfacs[1]) eq 1;
+    assert forall{i : i in [1..#rfacs] | IsDivisibleBy(Degree(f), &+[Degree(rfacs[j]) : j in [1..i]])};
+    crfacs := [&*rfacs[1..i] : i in [1..#rfacs]];
+    cffacs := [Evaluate(crfac, PolynomialRing(L) ! [-pi, 1]) : crfac in crfacs];
+    pis := [Coefficient(cffac, 0) : cffac in cffacs];
+    Log(timer, "get uniformizers");
+    twr := tower_from_uniformizers(L, K, Reverse(pis));
+    Log(timer, "tower_from_uniformizers");
+    return twr;
+  else
+    return [K] cat ramification_tower(L, U);
+  end if;
+end function;
+
+function random_element(E, B)
+  if IsPrimeField(E) then
+    return E ! Random(B);
+  else
+    return E ! [random_element(BaseField(E), B) : i in [1..Degree(E)]];
+  end if;
+end function;
+
+function random_primitive_element(E, F)
+  d := Degree(E, F);
+  if d eq 1 then
+    return E!0, PolynomialRing(F)![0,1];
+  end if;
+  B := 1;
+  while true do
+    x := random_element(E, B);
+    minpol := MinimalPolynomial(x, F);
+    if Degree(minpol) eq d then
+      return x, minpol;
+    else
+      B +:= 1;
+    end if;
+  end while;
+end function;
+
+function zero(K, apr)
+  z := (K!1) - (K!1);
+  return ShiftValuation(z, apr - AbsolutePrecision(z));
+end function;
+
+function change_apr(x, apr)
+  if IsWeaklyZero(x) or apr le Valuation(x) then
+    return zero(Parent(x), apr);
+  else
+    return ChangePrecision(x, apr - Valuation(x));
+  end if;
+end function;
+
+DEFAULT_TSCHIRNHAUS_TRANSFORMATIONS := [PolynomialRing(Z) | [0,1], [0,0,1], [0,-1,1], [0,1,1], [0,0,0,1], [0,1,0,1], [0,-1,0,1], [0,0,1,1], [0,0,-1,1], [0,1,1,1], [0,-1,-1,1]];
+
+function tschirnhaus_transformation(ntries, degree)
+  assert ntries gt 0;
+  if ntries le #DEFAULT_TSCHIRNHAUS_TRANSFORMATIONS then
+    t := DEFAULT_TSCHIRNHAUS_TRANSFORMATIONS[ntries];
+    if Degree(t) le degree then
+      return t;
+    end if;
+  end if;
+  return PolynomialRing(Z) ! [Random(ntries) : i in [1..degree]];
+end function;
+
+function dflt(what, d)
+  return (what cmpne false) select what else d;
+end function;
+
+
+
+
+declare type PGGAlg;
+
+declare type PGGAlgState;
+declare attributes PGGAlgState: algorithm;
+
+declare type PGGAlg_GaloisGroup: PGGAlg;
+
+declare type PGGAlg_GaloisGroup_Builtin: PGGAlg_GaloisGroup;
+
+declare type PGGAlg_GaloisGroup_ResolventMethod: PGGAlg_GaloisGroup;
+declare attributes PGGAlg_GaloisGroup_ResolventMethod: groups_alg, resolvent_alg, conjugacy_alg;
+
+declare type PGGAlg_ResGroups: PGGAlg;
+
+declare type PGGAlg_ResGroups_All: PGGAlg_ResGroups;
+declare attributes PGGAlg_ResGroups_All: subgroup_tranche, subgroup_score, subgroup_order, subgroup_choice, statistic;
+
+declare type PGGAlgState_ResGroups_All: PGGAlgState;
+declare attributes PGGAlgState_ResGroups_All: conjugacy, overgroup, possible_groups, possible_subgroups;
+
+declare type PGGAlg_ResEval: PGGAlg;
+
+declare type PGGAlg_ResEval_Global: PGGAlg_ResEval;
+
+declare type PGGAlgState_ResEval_Global: PGGAlgState;
+declare attributes PGGAlgState_ResEval_Global: conjugacy, base_field_model, pol_model, precision, complex_roots;
+
+declare type PGGAlg_Conjugacy: PGGAlg;
+
+declare type PGGAlg_Conjugacy_Symmetric: PGGAlg_Conjugacy;
+declare attributes PGGAlg_Conjugacy_Symmetric: galois_group_alg;
+
+declare type PGGAlg_Conjugacy_Factors: PGGAlg_Conjugacy;
+declare attributes PGGAlg_Conjugacy_Factors: next;
+
+declare type PGGAlg_Conjugacy_RamTower: PGGAlg_Conjugacy;
+declare attributes PGGAlg_Conjugacy_RamTower: next;
+
+declare type PGGConj;
+declare attributes PGGConj
+  : group           // the group in which the Galois group is defined up to conjugacy
+  , base_field      // the base field of the Galois group
+  , parent_subgroup // when part of a larger Galois group, this group is a quotient of a subgroup of the parent group; parent_subgroup is the subgroup
+  , parent_quotient // the quotient map from parent_subgroup to this group
+  , is_known        // [* false *] or [* true, G *] where G is the actual Galois group
+  , is_transitive   // true if the actual Galois group is known to be transitive
+  , overgroup       // an overgroup of the actual Galois group (a subgroup of `group`)
+  ;
+
+declare type PGGConj_Symmetric: PGGConj;
+declare attributes PGGConj_Symmetric: pol, top_field;
+
+declare type PGGConj_Factors: PGGConj;
+declare attributes PGGConj_Factors: factors;
+
+declare type PGGConj_Tower: PGGConj;
+declare attributes PGGConj_Tower: tower, top_field;
+
+declare type PGGGloMod;
+
+declare type PGGGloMod_Rational: PGGGloMod;
+declare attributes PGGGloMod_Rational: local_field, global_field, embedding;
+
+declare type PGGGloMod_Symmetric: PGGGloMod;
+declare attributes PGGGloMod_Symmetric: local_pol, global_pol, local_field, global_field, embedding;
+
+declare type PGGGloMod_Factors: PGGGloMod;
+declare attributes PGGGloMod_Factors: factors;
+
+declare type PGGGloMod_Tower: PGGGloMod;
+declare attributes PGGGloMod_Tower: tower, global_pol, global_pol_root;
+
+intrinsic PGG_AllGroups() -> PGGAlg_ResGroups_All
+  {The "AllGroups" group theory algorithm for the resolvent method.}
+  return New(PGGAlg_ResGroups_All);
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_ResGroups_All, conj :: PGGConj, overgroup :: GrpPerm) -> PGGAlgState_ResGroups_All
+  {Starts the algorithm and returns its state.}
+  assert overgroup subset conj`group;
+  s := New(PGGAlgState_ResGroups_All);
+  s`algorithm := alg;
+  s`conjugacy := conj;
+  s`overgroup := overgroup;
+  // get a list of possible groups
+  s`possible_groups := (known select [G] else [G : x in Subgroups(Overgroup(conj) : IsSolvable, IsTransitive:=IsTransitive(conj)) | IsConsistent(conj, G) where G:=x`subgroup]) where known,G:=IsKnown(conj);
+  vprint GaloisGroup_Doris: "#possible groups =", #s`possible_groups;
+  return s;
+end intrinsic;
+
+intrinsic IsDone(s :: PGGAlgState_ResGroups_All) -> BoolElt, GrpPerm
+  {True if we have deduced the Galois group.}
+  if #s`possible_groups eq 1 then
+    return true, s`possible_groups[1];
+  else
+    assert #s`possible_groups gt 1;
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic TheGroup(s :: PGGAlgState_ResGroups_All) -> GrpPerm
+  {The Galois group, assuming it is already known.}
+  ok, G := IsDone(s);
+  assert ok;
+  return G;
+end intrinsic;
+
+intrinsic SubgroupTranche(s :: PGGAlgState_ResGroups_All) -> []
+  {A sequence of subgroups to consider using.}
+  case s`algorithm`subgroup_tranche:
+  when "All":
+    if not assigned s`possible_subgroups then
+      s`possible_subgroups := [x`subgroup : x in Subgroups(s`overgroup)];
+    end if;
+    return s`possible_subgroups;
+  when "Index":
+    if not assigned s`possible_subgroups then
+      s`possible_subgroups := rec<recformat<i, indices, all_groups, cur_groups> | indices:=Sort(Divisors(Order(s`overgroup))), all_groups:=[], cur_groups:=[]>;
+    end if;
+    while #s`possible_subgroups`cur_groups eq 0 do
+      n := 1+#s`possible_subgroups`all_groups;
+      index := s`possible_subgroups`indices[n];
+      vprint GaloisGroup_Doris: "index =", index;
+      Append(~s`possible_subgroups`all_groups, [x`subgroup : x in Subgroups(s`overgroup : IndexEqual:=index)]);
+      s`possible_subgroups`cur_groups := s`possible_subgroups`all_groups[n];
+    end while;
+    return s`possible_subgroups`cur_groups;
+  when "MostUseful":
+    if not assigned s`possible_subgroups then
+      s`possible_subgroups := rec<recformat<others, useful, cur_groups> | others:=[], useful:=[s`overgroup], cur_groups:=[]>;
+    end if;
+    while #s`possible_subgroups`cur_groups eq 0 do
+      if #s`possible_subgroups`useful ne 0 then
+        pop_start(~U, ~s`possible_subgroups`useful);
+        vprint GaloisGroup_Doris: "maximal subgroups of useful group", U;
+      elif #s`possible_subgroups`others ne 0 then
+        pop_start(~U, ~s`possible_subgroups`others);
+        vprint GaloisGroup_Doris: "maximal subgroups of useless group", U;
+      else
+        assert false;
+      end if;
+      s`possible_subgroups`cur_groups := [x`subgroup : x in MaximalSubgroups(U)];
+    end while;
+    return s`possible_subgroups`cur_groups;
+  else
+    assert false;
+  end case;
+end intrinsic;
+
+intrinsic GroupStat(s :: PGGAlgState_ResGroups_All, G :: GrpPerm) -> .
+  {The statistic for the Galois group G.}
+  case s`algorithm`statistic:
+  when "HasRoot":
+    return exists{o : o in Orbits(G) | #o eq 1};
+  when "NumRoots":
+    return #[o : o in Orbits(G) | #o eq 1];
+  when "FactorDegrees":
+    return {* #o : o in Orbits(G) *};
+  else
+    assert false;
+  end case;
+end intrinsic;
+
+intrinsic ResStat(s :: PGGAlgState_ResGroups_All, R :: RngUPolElt[FldPad]) -> .
+  {The statistic for the resolvent R.}
+  case s`algorithm`statistic:
+  when "HasRoot":
+    return has_root(R);
+  when "NumRoots":
+    return #roots(R);
+  when "FactorDegrees":
+    return {* Degree(fac) : fac in factorization(R) *};
+  else
+    assert false;
+  end case;
+end intrinsic;
+
+intrinsic StatEq(s :: PGGAlgState_ResGroups_All, a, b) -> BoolElt
+  {True if a and b are equal statistics.}
+  case s`algorithm`statistic:
+  when "HasRoot", "NumRoots", "FactorDegrees":
+    return a eq b;
+  else
+    assert false;
+  end case;
+end intrinsic;
+
+intrinsic ScoreSubgroup(s :: PGGAlgState_ResGroups_All, subgroup :: GrpPerm) -> FldReElt
+  {Scores the given subgroup.}
+  assert #s`possible_groups gt 0;
+  stats := [**];
+  h := CosetAction(s`overgroup, subgroup);
+  for G in s`possible_groups do
+    stat := GroupStat(s, h(G));
+    for i in [1..#stats] do
+      if StatEq(s, stats[i][1], stat) then
+        Append(~stats[i][2], G);
+        continue G;
+      end if;
+    end for;
+    Append(~stats, <stat, [G]>);
+    if (s`algorithm`subgroup_score eq "IsUseful") and (#stats gt 1) then
+      return 1;
+    end if;
+  end for;
+  case s`algorithm`subgroup_score:
+  when "IsUseful":
+    assert #stats le 1;
+    return -1;
+  when "Diversity":
+    return #stats le 1 select -1 else #stats;
+  when "Information":
+    return #stats le 1 select -1 else multiplicities_to_information([#x[2] : x in stats]);
+  else
+    assert false;
+  end case;
+end intrinsic;
+
+intrinsic TerminateScoring(s :: PGGAlgState_ResGroups_All, scores :: []) -> BoolElt
+  {True if we know enough scores to finish.}
+  case s`algorithm`subgroup_choice:
+  when "First":
+    return #scores ge 1;
+  when "Best":
+    return false;
+  else
+    assert false;
+  end case;
+end intrinsic;
+
+intrinsic OrderSubgroups(s :: PGGAlgState_ResGroups_All, groups :: [GrpPerm]) -> []
+  {Orders the subgroups.}
+  case s`algorithm`subgroup_order:
+  when "None":
+    return groups;
+  when "Random":
+    return [groups[i^r] : i in [1..#groups]] where r:=Random(SymmetricGroup(#groups));
+  when "Index":
+    return Sort(groups, func<A,B| #A-#B>);
+  else
+    assert false;
+  end case;
+end intrinsic;
+
+intrinsic UselessSubgroups(s :: PGGAlgState_ResGroups_All, subgroups :: [GrpPerm])
+  {Declares we are done considering these groups.}
+  case s`algorithm`subgroup_tranche:
+  when "All":
+    seq_idiff(~s`possible_subgroups, subgroups);
+  when "Index":
+    seq_idiff(~s`possible_subgroups`cur_groups, subgroups);
+  when "MostUseful":
+    seq_idiff(~s`possible_subgroups`cur_groups, subgroups);
+    s`possible_subgroups`others cat:= subgroups;
+  else
+    assert false;
+  end case;
+end intrinsic;
+
+intrinsic UsefulSubgroup(s :: PGGAlgState_ResGroups_All, subgroup :: GrpPerm)
+  {Declare that we are using the given subgroup.}
+  case s`algorithm`subgroup_tranche:
+  when "All", "Index":
+    UselessSubgroups(s, [subgroup]);
+  when "MostUseful":
+    Append(~s`possible_subgroups`useful, subgroup);
+    seq_idiff(~s`possible_subgroups`cur_groups, [subgroup]);
+  else
+    assert false;
+  end case;
+end intrinsic;
+
+intrinsic Subgroup(s :: PGGAlgState_ResGroups_All) -> GrpPerm
+  {A subgroup to get a resolvent of.}
+  while true do
+    // get the next tranche of groups
+    groups := SubgroupTranche(s);
+    // reorder them
+    groups := OrderSubgroups(s, groups);
+    // score them
+    scores := [car<Universe(groups), RealField()>| ];
+    useless := [Universe(groups)| ];
+    for U in groups do
+      score := ScoreSubgroup(s, U);
+      if score ge 0 then
+        Append(~scores, <U, score>);
+        if TerminateScoring(s, scores) then
+          break U;
+        end if;
+      else
+        Append(~useless, U);
+      end if;
+    end for;
+    // ignore the useless subgroups
+    UselessSubgroups(s, useless);
+    // get the best scoring
+    if #scores gt 0 then
+      U := Sort(scores, func<a,b | b[2]-a[2]>)[1][1];
+      UsefulSubgroup(s, U);
+      return U;
+    end if;
+  end while;
+end intrinsic;
+
+intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_All, resolvent :: RngUPolElt[FldPad], subgroup :: GrpPerm)
+  {Use the resolvent to get information about the Galois group.}
+  rstat := ResStat(s, resolvent);
+  h := CosetAction(s`overgroup, subgroup);
+  s`possible_groups := [G : G in s`possible_groups | StatEq(s, gstat, rstat) where gstat := GroupStat(s, h(G))];
+  vprint GaloisGroup_Doris: "#possible groups =", #s`possible_groups;
+end intrinsic;
+
+intrinsic GlobalModel(F :: FldPad) -> PGGGloMod
+  {A global model for F.}
+  if IsPrimeField(F) then
+    m := New(PGGGloMod_Rational);
+    m`local_field := F;
+    m`global_field := Q;
+    m`embedding := map<Q -> F | x :-> x, y :-> y>;
+    return m;
+  else
+    not_implemented("global_model: non-prime field");
+  end if;
+end intrinsic;
+
+intrinsic GlobalModel(conj :: PGGConj_Symmetric, bm :: PGGGloMod) -> PGGGloMod
+  {Global model with the given base model.}
+  m := New(PGGGloMod_Symmetric);
+  e := bm`embedding;
+  locpol := conj`pol;
+  m`local_pol := locpol;
+  glopol0 := Polynomial([c@@e : c in Coefficients(locpol)]);
+  if assigned conj`top_field then
+    locext := conj`top_field;
+    assert IsWeaklyEqual(DefiningPolynomial(locext), locpol);
+    // minimize the coefficients of glopol
+    K := BaseRing(locpol);
+    pr := Precision(K);
+    glopol := glopol0;
+    root := locext.1;
+    locext2 := locext;
+    isom := map<locext -> locext2 | x :-> x, y :-> y>;
+    pr := Ceiling(Log(Prime(K), Max([largest_coefficient(c) : c in Coefficients(glopol)])));
+    while true do
+      pr div:= 2;
+      if pr lt 2 then
+        break;
+      end if;
+      glopol2 := Polynomial([reduce_coefficients(c, Prime(K)^pr) : c in Coefficients(glopol)]);
+      locpol2 := Polynomial([change_apr(c@e, Precision(K)) : c in Coefficients(glopol2)]);
+      locext2 := ext<K | locpol2>;
+      ok1, root := has_root(ChangeRing(locpol, locext2));
+      ok2, root2 := has_root(ChangeRing(locpol2, locext));
+      if ok1 and ok2 then
+        isom := map<locext -> locext2 | x :-> &+[cs[i] * root^(i-1) : i in [1..#cs]] where cs:=Eltseq(x), y :-> &+[cs[i] * root2^(i-1) : i in [1..#cs]] where cs:=Eltseq(y)>;
+        glopol := glopol2;
+      else
+        break;
+      end if;
+    end while;
+    // make the embedding
+    m`global_pol := glopol;
+    gloext := ext<BaseRing(glopol) | glopol>;
+    ee := map<gloext -> locext | x :-> (locext2![c@e : c in Eltseq(x)]) @@ isom, y :-> gloext![c@@e : c in Eltseq(y @ isom)]>;
+    m`local_field := locext;
+    m`global_field := gloext;
+    m`embedding := ee;
+  else
+    m`global_pol := glopol0;
+  end if;
+  return m;
+end intrinsic;
+
+intrinsic GlobalModel(conj :: PGGConj_Factors, bm :: PGGGloMod) -> PGGGloMod
+  {"}
+  m := New(PGGGloMod_Factors);
+  m`factors := [GlobalModel(c, bm) : c in conj`factors];
+  return m;
+end intrinsic;
+
+intrinsic GlobalModel(conj :: PGGConj_Tower, bm :: PGGGloMod) -> PGGGloMod
+  {"}
+  m := New(PGGGloMod_Tower);
+  m`tower := [**];
+  m2 := bm;
+  for c in conj`tower do
+    m2 := GlobalModel(c, m2);
+    Append(~m`tower, m2);
+  end for;
+  gloroot, glopol := random_primitive_element(m`tower[#m`tower]`global_field, BaseRing(m`tower[1]`global_pol));
+  m`global_pol := glopol;
+  m`global_pol_root := gloroot;
+  return m;
+end intrinsic;
+
+intrinsic PGG_AbsoluteResolvents() -> PGGAlg_ResEval_Global
+  {The "AbsoluteResolvents" resolvent algorithm for the resolvent method.}
+  return New(PGGAlg_ResEval_Global);
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_ResEval_Global, conj :: PGGConj) -> PGGAlgState_ResEval_Global
+  {Starts the algorithm and returns its state.}
+  s := New(PGGAlgState_ResEval_Global);
+  s`algorithm := alg;
+  s`conjugacy := conj;
+  s`precision := -Infinity();
+  s`base_field_model := GlobalModel(BaseField(conj));
+  s`pol_model := GlobalModel(conj, s`base_field_model);
+  return s;
+end intrinsic;
+
+intrinsic Overgroup(s :: PGGAlgState_ResEval_Global) -> GrpPerm
+  {The overgroup we can evaluate resolvents in.}
+  return s`conjugacy`group;
+end intrinsic;
+
+intrinsic ComplexEmbeddings(m :: PGGGloMod_Rational, embs :: [Map]) -> []
+  {The complex embeddings of m extending embs.}
+  return embs;
+end intrinsic;
+
+intrinsic ComplexEmbeddings(m :: PGGGloMod_Symmetric, embs :: [Map]) -> []
+  {"}
+  rss := ComplexRoots(m, embs);
+  return [map<m`global_field -> C | x :-> &+[(cs[j] @ e) * r^(j-1) : j in [1..#cs]] where cs:=Eltseq(x)> where C:=Codomain(e) where e:=embs[i] : r in rss[i], i in [1..#embs]];
+end intrinsic;
+
+intrinsic ComplexRoots(m :: PGGGloMod_Symmetric, embs :: [Map]) -> []
+  {The complex roots of the polynomial model.}
+  return [[r[1] : r in Roots(Polynomial([c@e : c in Coefficients(m`global_pol)]))] : e in embs];
+end intrinsic;
+
+intrinsic ComplexRoots(m :: PGGGloMod_Factors, embs :: [Map]) -> []
+  {"}
+  rsss := [ComplexRoots(fac, embs) : fac in m`factors];
+  return [&cat[rss[i] : rss in rsss] : i in [1..#embs]];
+end intrinsic;
+
+intrinsic ComplexRoots(m :: PGGGloMod_Tower, embs :: [Map]) -> []
+  {"}
+  es := embs;
+  for m2 in m`tower do
+    es := ComplexEmbeddings(m2, es);
+  end for;
+  d := Degree(m`tower[#m`tower]`local_field, BaseRing(m`tower[1]`local_pol));
+  assert #es eq #embs * d;
+  // todo: also find complex roots of the global_pol, which should be more accurate but unordered, and pair them up
+  return [[e(m`global_pol_root) : e in es[1+d*(i-1)..d*i]] : i in [1..#embs]];
+end intrinsic;
+
+intrinsic ComplexRoots(s :: PGGAlgState_ResEval_Global, pr :: RngIntElt) -> []
+  {A sequence of complex roots, one for each embedding of the base field.}
+  C := ComplexField(pr);
+  if pr gt s`precision then
+    vprint GaloisGroup_Doris: "complex precision =", pr;
+    s`complex_roots := ComplexRoots(s`pol_model, ComplexEmbeddings(s`base_field_model, [map<Q -> C | x :-> C!x>]));
+    s`precision := pr;
+  end if;
+  return PowerSequence(PowerSequence(C)) ! s`complex_roots;
+end intrinsic;
+
+intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, I, U :: GrpPerm) -> RngUPolElt
+  {The resolvent associated to the invariant I.}
+  W := Overgroup(s);
+  assert U subset W;
+  ntries := 0;
+  while true do
+    ntries +:= 1;
+    trans := tschirnhaus_transformation(ntries, Index(W, U));
+    rss0 := ComplexRoots(s, 30);
+    trss0 := [[Evaluate(trans, r) : r in rs] : rs in rss0];
+    rbound := Max([Abs(r) : r in rs, rs in trss0]);
+    pr := Ceiling(Log(10, slpol_bound(I, rbound)) * Index(W, U) * 2 + 30);
+    rss := ComplexRoots(s, pr);
+    trss := [[Evaluate(trans, r) : r in rs] : rs in rss];
+    Rxrss := [[Evaluate(I, permute_seq(g, rs)) : g in left_coset_representatives(W, U)] : rs in trss];
+    Rxs := [polynomial_with_roots(rs) : rs in Rxrss];
+    if #Rxs eq 1 then
+      R := Polynomial([Round(Real(c)) : c in Coefficients(Rxs[1])]);
+      err := Max([Abs(c) : c in Coefficients(R - Rxs[1])] cat [0]);
+      assert err lt 1e-20;
+      if IsSquarefree(R) then
+        return ChangeRing(R, BaseField(s`conjugacy));
+      end if;
+    else
+      not_implemented("only implemented over Q");
+    end if;
+  end while;
+end intrinsic;
+
+intrinsic PGGAlg_Conjugacy_Symmetric_Make( : GaloisGroupAlg:=false) -> PGGAlg_Conjugacy_Symmetric
+  {The "Symmetric" conjugacy algorithm.}
+  alg := New(PGGAlg_Conjugacy_Symmetric);
+  if GaloisGroupAlg cmpne false then
+    alg`galois_group_alg := GaloisGroupAlg;
+  end if;
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_Conjugacy_Factors_Make(:Next:=false) -> PGGAlg_Conjugacy_Factors
+  {The "Factors" conjugacy algorithm.}
+  a := New(PGGAlg_Conjugacy_Factors);
+  a`next := Next cmpne false select Next else PGGAlg_Conjugacy_Symmetric_Make();
+  return a;
+end intrinsic;
+
+intrinsic PGGAlg_Conjugacy_RamTower_Make(:Next:=false) -> PGGAlg_Conjugacy_RamTower
+  {The "RamTower" conjugacy algorithm.}
+  a := New(PGGAlg_Conjugacy_RamTower);
+  a`next := Next cmpne false select Next else PGGAlg_Conjugacy_Symmetric_Make();
+  return a;
+end intrinsic;
+
+intrinsic Conjugacy(alg :: PGGAlg_Conjugacy_Symmetric, f :: RngUPolElt[FldPad] : TopField:=false, IsTransitive:=false, KnownGroup:=false) -> PGGConj
+  {Gets the conjugacy.}
+  c := New(PGGConj_Symmetric);
+  c`group := SymmetricGroup(Degree(f));
+  c`base_field := BaseRing(f);
+  c`pol := f;
+  if TopField cmpne false then
+    c`top_field := TopField;
+  end if;
+  if KnownGroup cmpne false then
+    assert KnownGroup subset c`group;
+    c`is_known := [* true, KnownGroup *];
+  elif Degree(c) eq 1 then
+    c`is_known := [* true, c`group *];
+  elif assigned alg`galois_group_alg then
+    c`is_known := [* true, GaloisGroup(alg`galois_group_alg, f) *];
+  else
+    c`is_known := [* false *];
+  end if;
+  c`is_transitive := IsTransitive or Degree(c) eq 1;
+  return c;
+end intrinsic;
+
+intrinsic Conjugacy(alg :: PGGAlg_Conjugacy_Factors, f :: RngUPolElt[FldPad] : IsTransitive:=false) -> PGGConj
+  {"}
+  facs := factorization(f);
+  assert #facs le 1 or not IsTransitive;
+  c := New(PGGConj_Factors);
+  c`factors := [Conjugacy(alg`next, fac : IsTransitive) : fac in facs];
+  c`group := DirectProduct([cc`group : cc in c`factors]);
+  c`base_field := BaseRing(f);
+  offset := 0;
+  for i in [1..#c`factors] do
+    cc := c`factors[i];
+    d := Degree(cc);
+    cc`parent_subgroup := c`group;
+    cc`parent_quotient := OrbitAction(c`group, [offset+1..offset+d]);
+    offset +:= d;
+  end for;
+  assert Degree(c) eq offset;
+  return c;
+end intrinsic;
+
+intrinsic Conjugacy(alg :: PGGAlg_Conjugacy_RamTower, f :: RngUPolElt[FldPad] : IsTransitive:=false) -> PGGConj
+  {"}
+  facs, certs := factorization(f : Extensions);
+  assert #facs eq 1;
+  t := ramification_tower(certs[1]`Extension, BaseRing(f));
+  c := New(PGGConj_Tower);
+  c`tower := [Conjugacy(alg`next, DefiningPolynomial(t[i]) : IsTransitive, TopField:=t[i]) : i in [2..#t]];
+  c`group := WreathProduct([cc`group : cc in Reverse(c`tower)]);
+  c`base_field := BaseRing(f);
+  degree := 1;
+  for i in [#c`tower..1 by -1] do
+    cc := c`tower[i];
+    d := Degree(cc);
+    cc`parent_subgroup := Stabilizer(c`group, {1..degree*d});
+    oact := OrbitAction(cc`parent_subgroup, [1..degree*d]);
+    bact := BlocksAction(Codomain(oact), [{(i-1)*degree+j : j in [1..degree]} : i in [1..d]]);
+    cc`parent_quotient := oact * bact;
+    degree *:= d;
+  end for;
+  assert Degree(c) eq degree;
+  return c;
+end intrinsic;
+
+intrinsic Print(conj :: PGGConj)
+  {"}
+  _Print(conj);
+  ok, G := IsKnown(conj);
+  if ok then
+    if G eq Group(conj) then
+      printf " exactly";
+    else
+      printf " actually %o", GroupName(G);
+    end if;
+  else
+    if IsTransitive(conj) then
+      printf " transitive";
+    end if;
+    if Overgroup(conj) ne Group(conj) then
+      printf " subgroup of %o", GroupName(Overgroup(conj));
+    end if;
+  end if;
+end intrinsic;
+
+intrinsic _Print(conj :: PGGConj_Symmetric)
+  {"}
+  printf "Symmetric(%o)", Degree(conj);
+end intrinsic;
+
+intrinsic _Print(conj :: PGGConj_Factors)
+  {"}
+  printf "Factors(%o)", Join([Sprintf("%o", c) : c in conj`factors], ", ");
+end intrinsic;
+
+intrinsic _Print(conj :: PGGConj_Tower)
+  {"}
+  printf "Tower(%o)", Join([Sprintf("%o", c) : c in conj`tower], ", ");
+end intrinsic;
+
+intrinsic Group(conj :: PGGConj) -> GrpPerm
+  {The group.}
+  return conj`group;
+end intrinsic;
+
+intrinsic BaseField(conj :: PGGConj) -> FldPad
+  {The base field.}
+  return conj`base_field;
+end intrinsic;
+
+intrinsic Degree(conj :: PGGConj) -> RngIntElt
+  {The degree of the group.}
+  return Degree(conj`group);
+end intrinsic;
+
+intrinsic Overgroup(conj :: PGGConj) -> GrpPerm
+  {An overgroup of the Galois group.}
+  if not assigned conj`overgroup then
+    ok, G := IsKnown(conj);
+    if not ok then
+      G := _Overgroup(conj);
+    end if;
+    assert G subset conj`group;
+    conj`overgroup := G;
+  end if;
+  return conj`overgroup;
+end intrinsic;
+
+intrinsic _Overgroup(conj :: PGGConj_Symmetric) -> GrpPerm
+  {"}
+  return Group(conj);
+end intrinsic;
+
+intrinsic _Overgroup(conj :: PGGConj_Factors) -> GrpPerm
+  {"}
+  return DirectProduct([Overgroup(c) : c in conj`factors]);
+end intrinsic;
+
+intrinsic _Overgroup(conj :: PGGConj_Tower) -> GrpPerm
+  {"}
+  return WreathProduct([Overgroup(c) : c in Reverse(conj`tower)]);
+end intrinsic;
+
+intrinsic IsTransitive(conj :: PGGConj) -> BoolElt
+  {True if the Galois group is known to be transitive on this part of the group.}
+  if not assigned conj`is_transitive then
+    conj`is_transitive := _IsTransitive(conj);
+  end if;
+  return conj`is_transitive;
+end intrinsic;
+
+intrinsic _IsTransitive(conj :: PGGConj_Factors) -> BoolElt
+  {"}
+  return #conj`factors le 1 and forall{c : c in conj`factors | IsTransitive(conj`factors[1])};
+end intrinsic;
+
+intrinsic _IsTransitive(conj :: PGGConj_Tower) -> BoolElt
+  {"}
+  assert forall{c : c in conj`tower | IsTransitive(c)};
+  return true;
+end intrinsic;
+
+intrinsic IsConsistent(conj :: PGGConj, G :: GrpPerm) -> BoolElt
+  {True if G could be the Galois group.}
+  ok, G2 := IsKnown(conj);
+  if ok then
+    return IsConjugate(conj`group, G, G2);
+  else
+    return _IsConsistent(conj, G);
+  end if;
+end intrinsic;
+
+intrinsic _IsConsistent(conj :: PGGConj_Symmetric, G :: GrpPerm) -> BoolElt
+  {True if G could be the Galois group.}
+  return (not IsTransitive(conj)) or IsTransitive(G);
+end intrinsic;
+
+intrinsic _IsConsistent(conj :: PGGConj_Factors, G :: GrpPerm) -> BoolElt
+  {"}
+  return forall{c : c in conj`factors | IsConsistent(c, c`parent_quotient(G meet c`parent_subgroup))};
+end intrinsic;
+
+intrinsic _IsConsistent(conj :: PGGConj_Tower, G :: GrpPerm) -> BoolElt
+  {"}
+  return forall{c : c in conj`tower | IsConsistent(c, c`parent_quotient(G meet c`parent_subgroup))};
+end intrinsic;
+
+intrinsic IsKnown(conj :: PGGConj) -> BoolElt, GrpPerm
+  {True if the Galois group is known exactly, and the group.}
+  if not assigned conj`is_known then
+    ok, G := _IsKnown(conj);
+    if ok then
+      assert G subset conj`group;
+      conj`is_known := [* true, G *];
+    else
+      conj`is_known := [* false *];
+    end if;
+  end if;
+  if conj`is_known[1] then
+    return true, conj`is_known[2];
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic _IsKnown(conj :: PGGConj_Factors) -> BoolElt, GrpPerm
+  {"}
+  if #[c : c in conj`factors | Degree(c) gt 1] le 1 then
+    Gs := [];
+    for c in conj`factors do
+      ok, G := IsKnown(c);
+      if ok then
+        Append(~Gs, G);
+      else
+        return false, _;
+      end if;
+    end for;
+    return true, DirectProduct(Gs);
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic _IsKnown(conj :: PGGConj_Tower) -> BoolElt, GrpPerm
+  {"}
+  if #[c : c in conj`tower | Degree(c) gt 1] le 1 then
+    Gs := [];
+    for c in conj`tower do
+      ok, G := IsKnown(c);
+      if ok then
+        Append(~Gs, G);
+      else
+        return false, _;
+      end if;
+    end for;
+    return true, WreathProduct(Reverse(Gs));
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic PGGAlg_ResGroups_All_Make(:Statistic:=false, SubgroupTranche:=false, SubgroupOrder:=false, SubgroupScore:=false, SubgroupChoice:=false) -> PGGAlg_ResGroups_All
+  {The "All" resolvent groups algorithm.}
+  alg := New(PGGAlg_ResGroups_All);
+  alg`statistic := Statistic cmpne false select Statistic else "FactorDegrees";
+  alg`subgroup_tranche := SubgroupTranche cmpne false select SubgroupTranche else "Index";
+  alg`subgroup_order := SubgroupOrder cmpne false select SubgroupOrder else "Index";
+  alg`subgroup_score := SubgroupScore cmpne false select SubgroupScore else "Information";
+  alg`subgroup_choice := SubgroupChoice cmpne false select SubgroupChoice else "Best";
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_ResEval_Global_Make() -> PGGAlg_ResEval_Global
+  {The "Absolute" resolvent evaluation algorithm.}
+  alg := New(PGGAlg_ResEval_Global);
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_GaloisGroup_ResolventMethod_Make( : GroupsAlg:=false, ResolventAlg:=false, ConjugacyAlg:=false) -> PGGAlg_GaloisGroup_ResolventMethod
+  {The resolvent method algorithm for computing Galois groups.}
+  alg := New(PGGAlg_GaloisGroup_ResolventMethod);
+  alg`groups_alg := GroupsAlg cmpne false select GroupsAlg else PGGAlg_ResGroups_All_Make();
+  alg`resolvent_alg := ResolventAlg cmpne false select ResolventAlg else PGGAlg_ResEval_Global_Make();
+  alg`conjugacy_alg := ConjugacyAlg cmpne false select ConjugacyAlg else PGGAlg_Conjugacy_Factors_Make(:Next:=PGGAlg_Conjugacy_RamTower_Make());
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_GaloisGroup_Builtin_Make() -> PGGAlg_GaloisGroup_Builtin
+  {Calls Magma's builtin GaloisGroup intrinsic.}
+  alg := New(PGGAlg_GaloisGroup_Builtin);
+  return alg;
+end intrinsic;
+
+intrinsic GaloisGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt[FldPad]) -> GrpPerm
+  {The Galois group of f.}
+  vprint GaloisGroup_Doris: "ResolventMethod...";
+  t := PGG_Timer();
+  Push(t, "conjugacy");
+  conj := Conjugacy(Alg`conjugacy_alg, f);
+  vprint GaloisGroup_Doris: "conjugacy =", conj;
+  Swap(t, "start resolvent");
+  rst := Start(Alg`resolvent_alg, conj);
+  Swap(t, "overgroup");
+  W := Overgroup(rst);
+  vprint GaloisGroup_Doris: "overgroup =", W;
+  Swap(t, "start groups");
+  gst := Start(Alg`groups_alg, conj, W);
+  vprint GaloisGroup_Doris: "main loop...";
+  while not IsDone(gst) do
+    Swap(t, "subgroup");
+    U := Subgroup(gst);
+    vprint GaloisGroup_Doris: "subgroup =", U;
+    vprint GaloisGroup_Doris: "subgroup index =", Index(W, U);
+    Swap(t, "invariant");
+    I := RelativeInvariant(W, U);
+    vprint GaloisGroup_Doris: "invariant =", I;
+    Swap(t, "resolvent");
+    R := Resolvent(rst, I, U);
+    vprint GaloisGroup_Doris: "resolvent =", R;
+    Swap(t, "process resolvent");
+    ProcessResolvent(gst, R, U);
+  end while;
+  vprint GaloisGroup_Doris: "success";
+  Pop(t);
+  if GetVerbose("GaloisGroup_Doris") gt 0 then
+    PrintTree(t);
+  end if;
+  return TheGroup(gst);
+end intrinsic;
+
+intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: RngUPolElt[FldPad]) -> GrpPerm
+  {"}
+  G := GaloisGroup(f);
+  return G;
+end intrinsic;
+
+declare type PGGArgSpec;
+declare attributes PGGArgSpec: is_valid;
+
+intrinsic PGG_Parsable(A :: PGGArgSpec, x) -> BoolElt, .
+  {Tries to parse x according to A.}
+  return A`is_valid(x);
+end intrinsic;
+
+intrinsic PGG_Parse(A :: PGGArgSpec, x) -> .
+  {Parses x according to A}
+  ok, y := PGG_Parsable(A, x);
+  error if not ok, "could not parse", x;
+  return y;
+end intrinsic;
+
+intrinsic PGG_ArgSpec(is_valid :: UserProgram) -> PGGArgSpec
+  {The argspec with the given is_valid function.}
+  A := New(PGGArgSpec);
+  A`is_valid := is_valid;
+  return A;
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Union(choices :: [PGGArgSpec]) -> PGGArgSpec
+  {The argspec for the union of the given choices.}
+  return PGG_ArgSpec(function (x)
+    for A in choices do
+      ok, y := PGG_Parsable(A, x);
+      if ok then
+        return true, y;
+      end if;
+    end for;
+    return false, _;
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_ISA(C) -> PGGArgSpec
+  {The argspec testing if the input has the given category.}
+  return PGG_ArgSpec(function (x)
+    if ISA(ExtendedType(x), C) then
+      return true, x;
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Literal(X) -> PGGArgSpec
+  {The argspec matching only X exactly.}
+  return PGG_ArgSpec(function (x)
+    if X cmpeq x then
+      return true, x;
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Attr(name :: MonStgElt) -> PGGArgSpec
+  {The argspec matching the PGGAttr with the given name and no args.}
+  return PGG_ArgSpec_Attr(name, [], func<args | name>);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Attr(name :: MonStgElt, args, transform) -> PGGArgSpec
+  {The argspec matching the PGGAttr with the given name and args.}
+  return PGG_ArgSpec(function (x)
+    // coerce to a PGGAttr
+    ok, a := PGG_Attribute_IsCoercible(x);
+    if not ok then
+      return false, _;
+    end if;
+    // check the name
+    if Trim(Name(a)) ne name then
+      return false, _;
+    end if;
+    // check the args
+    pargs := [* arg[3] : arg in args *];
+    pos := 1;
+    for aa in Arguments(a) do
+      // try to parse a positional argument
+      for i in [pos..#args] do
+        ok, parg := PGG_Parsable(args[i][1], aa);
+        if ok then
+          pargs[i] := parg;
+          pos := i+1;
+          continue aa;
+        end if;
+      end for;
+      // try to parse keyword argument
+      for i in [1..#args] do
+        ok, rest := startswith(Name(aa), args[i][2] cat ":");
+        if ok then
+          ok, parg := PGG_Parsable(args[i][1], PGG_Attribute(rest, Arguments(aa)));
+          if ok then
+            pargs[i] := parg;
+            continue aa;
+          else
+            return false, _;
+          end if;
+        end if;
+      end for;
+      // failed parsing
+      return false, _;
+    end for;
+    // apply the transform
+    return true, transform(pargs);
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Recursive(mk :: UserProgram) -> PGGArgSpec
+  {Allows the creation of a PGGArgSpec recursively.}
+  A := New(PGGArgSpec);
+  B := mk(A);
+  A`is_valid := B`is_valid;
+  return A;
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Recursive(n :: RngIntElt, mk :: UserProgram) -> []
+  {Allows the creation of n PGGArgSpecs recursively.}
+  As := [New(PGGArgSpec) : i in [1..n]];
+  Bs := mk(As);
+  require #Bs eq n: "mk must return n PGGArgSpecs";
+  for i in [1..n] do
+    As[i]`is_valid := Bs[i]`is_valid;
+  end for;
+  return As;
+end intrinsic;
+
+intrinsic PGG_ArgSpec_ManyRecursive(mk :: UserProgram) -> Map
+  {Allows the creation of many PGGArgSpecs.}
+  store := NewStore();
+  function set(name, A)
+    ok, B := StoreIsDefined(store, name);
+    if ok then
+      B`is_valid := A`is_valid;
+      return B;
+    else
+      StoreSet(store, name, A);
+      return A;
+    end if;
+  end function;
+  function get(name)
+    ok, A := StoreIsDefined(store, name);
+    if ok then
+      return A;
+    else
+      A := New(PGGArgSpec);
+      StoreSet(store, name, A);
+      return A;
+    end if;
+  end function;
+  mk(set, get);
+  return func<name | StoreGet(store, name)>;
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Predicate(test :: UserProgram) -> PGGArgSpec
+  {The PGGArgSpec passing with the given test.}
+  return PGG_ArgSpec(function (x)
+    if test(x) then
+      return true, x;
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+
+function parse_algorithm(alg)
+
+  specs := PGG_ArgSpec_ManyRecursive(procedure (set, get)
+    CONJUGACY := set("CONJUGACY", PGG_ArgSpec_Union([
+      PGG_ArgSpec_Predicate(func<x | ISA(Type(x), PGGAlg_Conjugacy)>),
+      PGG_ArgSpec_Attr(
+        "Symmetric",
+        [<get("GALOISGROUP"),"GG",false>],
+        func<args | PGGAlg_Conjugacy_Symmetric_Make(:GaloisGroupAlg:=args[1])>
+      ),
+      PGG_ArgSpec_Attr(
+        "Factors",
+        [<get("CONJUGACY"),"Next",false>],
+        func<args | PGGAlg_Conjugacy_Factors_Make(:Next:=args[1])>
+      ),
+      PGG_ArgSpec_Attr(
+        "RamTower",
+        [<get("CONJUGACY"),"Next",false>],
+        func<args | PGGAlg_Conjugacy_RamTower_Make(:Next:=args[1])>
+      )
+    ]));
+
+    STATISTIC := PGG_ArgSpec_Union([PGG_ArgSpec_Attr(x) : x in ["HasRoot", "NumRoots", "FactorDegrees"]]);
+    SUBGROUP_TRANCHE := PGG_ArgSpec_Union([PGG_ArgSpec_Attr(x) : x in ["All","Index","MostUseful"]]);
+    SUBGROUP_ORDER := PGG_ArgSpec_Union([PGG_ArgSpec_Attr(x) : x in ["None", "Random", "Index"]]);
+    SUBGROUP_SCORE := PGG_ArgSpec_Union([PGG_ArgSpec_Attr(x) : x in ["IsUseful", "Diversity", "Information"]]);
+    SUBGROUP_CHOICE := PGG_ArgSpec_Union([PGG_ArgSpec_Attr(x) : x in ["First", "Best"]]);
+
+    RESGROUPS := PGG_ArgSpec_Union([
+      PGG_ArgSpec_ISA(PGGAlg_ResGroups),
+      PGG_ArgSpec_Attr(
+        "All",
+        [ <STATISTIC,"Stat",false>
+        , <SUBGROUP_TRANCHE,"Tranche",false>
+        , <SUBGROUP_ORDER,"Order",false>
+        , <SUBGROUP_SCORE,"Score",false>
+        , <SUBGROUP_CHOICE,"Choice",false>
+        ],
+        func<args | PGGAlg_ResGroups_All_Make(:Statistic:=args[1], SubgroupTranche:=args[2], SubgroupOrder:=args[3], SubgroupScore:=args[4], SubgroupChoice:=args[5])>
+      )
+    ]);
+
+    RESEVAL := PGG_ArgSpec_Union([
+      PGG_ArgSpec_ISA(PGGAlg_ResEval),
+      PGG_ArgSpec_Attr(
+        "Global",
+        [],
+        func<args | PGGAlg_ResEval_Global_Make()>
+      )
+    ]);
+
+    GALOISGROUP := set("GALOISGROUP", PGG_ArgSpec_Union([
+      PGG_ArgSpec_ISA(PGGAlg_GaloisGroup),
+      PGG_ArgSpec_Attr(
+        "ARM",
+        [ <RESGROUPS,"Groups",false>
+        , <RESEVAL,"Eval",false>
+        , <CONJUGACY,"Conj",false>
+        ],
+        func<args | PGGAlg_GaloisGroup_ResolventMethod_Make(:GroupsAlg:=args[1], ResolventAlg:=args[2], ConjugacyAlg:=args[3])>
+      ),
+      PGG_ArgSpec_Attr(
+        "Builtin",
+        [],
+        func<args | PGGAlg_GaloisGroup_Builtin_Make()>
+      )
+    ]));
+  end procedure);
+
+  return PGG_Parse(specs("GALOISGROUP"), alg);
+end function;
+
+intrinsic PGG_GaloisGroup(f :: RngUPolElt[FldPad] : Alg:="ARM") -> GrpPerm
+  {The Galois group of f.}
+  alg := parse_algorithm(Alg);
+  return GaloisGroup(alg, f);
+end intrinsic;
