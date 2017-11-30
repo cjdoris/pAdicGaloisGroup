@@ -1042,10 +1042,11 @@ intrinsic GlobalModel(conj :: PGGConj_Symmetric, bm :: PGGGloMod) -> PGGGloMod
       end if;
       glopol2 := Polynomial([reduce_coefficients(c, Prime(K)^pr) : c in Coefficients(glopol)]);
       locpol2 := Polynomial([change_apr(c@e, Precision(K)) : c in Coefficients(glopol2)]);
-      locext2 := ext<K | locpol2>;
-      ok1, root := has_root(ChangeRing(locpol, locext2));
+      locext2new := ext<K | locpol2>;
+      ok1, root := has_root(ChangeRing(locpol, locext2new));
       ok2, root2 := has_root(ChangeRing(locpol2, locext));
       if ok1 and ok2 then
+        locext2 := locext2new;
         isom := map<locext -> locext2 | x :-> &+[cs[i] * root^(i-1) : i in [1..#cs]] where cs:=Eltseq(x), y :-> &+[cs[i] * root2^(i-1) : i in [1..#cs]] where cs:=Eltseq(y)>;
         glopol := glopol2;
       else
