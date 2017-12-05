@@ -18,280 +18,6 @@ declare verbose PGG_GaloisGroup, 1;
 Z := IntegerRing();
 Q := RationalField();
 
-declare type PGGSetConjCls[PGGConjCls];
-declare attributes PGGSetConjCls: overgroup, class_function;
-declare attributes PGGConjCls: subgroup, parent, hash;
-
-intrinsic PGG_ConjugacyClasses(G :: GrpPerm) -> PGGSetConjCls
-  {The conjugacy classes of subgroups of G.}
-  X := New(PGGSetConjCls);
-  X`overgroup := G;
-  X`class_function := func<H | <#H, Hash(H), {*cf(x[3])^^x[2] : x in Classes(H)*}>>
-    where cf := ClassMap(G);
-  return X;
-end intrinsic;
-
-intrinsic 'eq'(X :: PGGSetConjCls, Y :: PGGSetConjCls) -> BoolElt
-  {Equality.}
-  return IsIdentical(X, Y);
-end intrinsic;
-
-intrinsic IsCoercible(X :: PGGSetConjCls, H) -> BoolElt, .
-  {IsCoercible.}
-  return false, "wrong type";
-end intrinsic;
-
-intrinsic IsCoercible(X :: PGGSetConjCls, H :: GrpPerm) -> BoolElt, .
-  {"}
-  if H subset X`overgroup then
-    x := New(PGGConjCls);
-    x`subgroup := H;
-    x`parent := X;
-    x`class_function_value := x`parent`class_function(H);
-    x`hash := Hash(x`class_function_value);
-    return true, x;
-  else
-    return false, "not a subgroup of the right group";
-  end if;
-end intrinsic;
-
-intrinsic IsCoercible(X :: PGGSetConjCls, H :: PGGConjCls) -> BoolElt, .
-  {"}
-  if Parent(H) eq X then
-    return true, H;
-  elif Parent(H)`overgroup subset X`overgroup then
-    return true, X ! Rep(H);
-  else
-    return false, _;
-  end if;
-end intrinsic;
-
-intrinsic Parent(x :: PGGConjCls) -> PGGSetConjCls
-  {The parent set.}
-  return x`parent;
-end intrinsic;
-
-intrinsic Hash(x :: PGGConjCls) -> RngIntElt
-  {Hash.}
-  return x`hash;
-end intrinsic;
-
-intrinsic Rep(x :: PGGConjCls) -> GrpPerm
-  {A representative.}
-  return x`subgroup;
-end intrinsic;
-
-intrinsic 'eq'(x :: PGGConjCls, y :: PGGConjCls) -> BoolElt
-  {Equality.}
-  assert Parent(x) eq Parent(y);
-  return (x`class_function_value eq y`class_function_value) and IsConjugate(Parent(x)`overgroup, x`subgroup, y`subgroup);
-end intrinsic;
-
-declare type PGGTimer;
-declare attributes PGGTimer: last_time, times, labels, current_label, idxs;
-
-intrinsic PGG_Timer() -> PGGTimer
-  {A new timer.}
-  t := New(PGGTimer);
-  t`last_time := Cputime();
-  t`times := [RealField()|];
-  t`labels := [PowerSequence(Strings())|];
-  t`current_label := [Strings()|];
-  t`idxs := AssociativeArray(PowerSequence(Strings()));
-  return t;
-end intrinsic;
-
-intrinsic FindIndex(t :: PGGTimer, label :: [MonStgElt]) -> RngIntElt
-  {The index of the given label. If it doesn't exist, creates it first.}
-  ok, i := IsDefined(t`idxs, label);
-  if ok then
-    return i;
-  end if;
-  Append(~t`times, 0);
-  Append(~t`labels, label);
-  t`idxs[label] := #t`labels;
-  return #t`labels;
-end intrinsic;
-
-intrinsic Update(t :: PGGTimer, label :: [MonStgElt])
-  {Assigns the accumulated time to the given label.}
-  i := FindIndex(t, label);
-  now := Cputime();
-  t`times[i] +:= now - t`last_time;
-  t`last_time := now;
-end intrinsic;
-
-intrinsic Push(t :: PGGTimer, x :: MonStgElt)
-  {Assings time to the current label, then appends x to the label.}
-  Update(t, t`current_label);
-  Append(~t`current_label, x);
-end intrinsic;
-
-intrinsic Pop(t :: PGGTimer, n :: RngIntElt)
-  {Assigns time to the current label, then pops n items from the label.}
-  error if #t`current_label lt n, "n greater than label length";
-  Update(t, t`current_label);
-  t`current_label := t`current_label[1..#t`current_label-n];
-end intrinsic;
-
-intrinsic Pop(t :: PGGTimer, n :: RngIntElt, x :: MonStgElt)
-  {Assigns time to the current label, then pops n items from the label, the nth being x.}
-  error if #t`current_label lt n, "n greater than label length";
-  error if t`current_label[#t`current_label-n+1] ne x, "incorrect label entry";
-  Update(t, t`current_label);
-  t`current_label := t`current_label[1..#t`current_label-n];
-end intrinsic;
-
-intrinsic Pop(t :: PGGTimer, x :: MonStgElt)
-  {Assigns time to the current label, then pops the last item from the label, which must be x.}
-  Pop(t, 1, x);
-end intrinsic;
-
-intrinsic Pop(t :: PGGTimer)
-  {Assigns time to the current label, then pops the last item from the label.}
-  Pop(t, 1);
-end intrinsic;
-
-intrinsic Swap(t :: PGGTimer, x :: MonStgElt)
-  {Assigns time to the current label, then swaps the last item from the label to x.}
-  error if #t`current_label lt 1, "label too short";
-  Update(t, t`current_label);
-  t`current_label[#t`current_label] := x;
-end intrinsic;
-
-intrinsic Log(t :: PGGTimer, x :: MonStgElt)
-  {Assigns time to the current label with x appended.}
-  Update(t, Append(t`current_label, x));
-end intrinsic;
-
-intrinsic Tree(t :: PGGTimer) -> Tup
-  {A tree representation of t.}
-  procedure insert(~node, label, tm)
-    node[2] +:= tm;
-    if #label gt 0 then
-      for i in [1..#node[3]] do
-        if node[3][i][1] eq label[1] then
-          insert(~node[3][i], label[2..#label], tm);
-          return;
-        end if;
-      end for;
-      Append(~node[3], <label[1], 0.0, [**]>);
-      insert(~node[3][#node[3]], label[2..#label], tm);
-    end if;
-  end procedure;
-  root := <"TOTAL", 0.0, [**]>;
-  for i in [1..#t`labels] do
-    insert(~root, t`labels[i], t`times[i]);
-  end for;
-  return root;
-end intrinsic;
-
-intrinsic PrintTree(t :: PGGTimer)
-  {Prints t as a tree.}
-  procedure pr(node, depth)
-    printf "%o%6.2o %o\n", &cat[Strings() | "  " : i in [1..depth]], node[2], node[1];
-    for n in node[3] do
-      pr(n, depth+1);
-    end for;
-  end procedure;
-  pr(Tree(t), 0);
-end intrinsic;
-
-declare type PGGAttr;
-declare attributes PGGAttr: name, arguments;
-
-intrinsic Print(x :: PGGAttr, lvl :: MonStgElt)
-  {Print.}
-  case lvl:
-  when "Magma":
-    printf "PGG_Attribute(%m, %m)", Name(x), Arguments(x);
-  else
-    printf "%o", Name(x);
-    if #Arguments(x) gt 0 then
-      printf "(%o)", Join([Sprintf("%o",a) : a in Arguments(x)], ",");
-    end if;
-  end case;
-end intrinsic;
-
-intrinsic Name(a :: PGGAttr) -> MonStgElt
-  {The name.}
-  return a`name;
-end intrinsic;
-
-intrinsic Arguments(a :: PGGAttr) -> []
-  {The arguments.}
-  return a`arguments;
-end intrinsic;
-
-intrinsic PGG_Attribute(name :: MonStgElt, arguments :: [PGGAttr]) -> PGGAttr
-  {An attribute.}
-  a := New(PGGAttr);
-  a`name := name;
-  a`arguments := arguments;
-  return a;
-end intrinsic;
-
-intrinsic PGG_Attribute(name :: MonStgElt) -> PGGAttr
-  {"}
-  a := New(PGGAttr);
-  a`name := name;
-  a`arguments := [];
-  return a;
-end intrinsic;
-
-intrinsic PGG_Attribute() -> PGGAttr
-  {"}
-  a := New(PGGAttr);
-  a`name := "";
-  a`arguments := [];
-  return a;
-end intrinsic;
-
-intrinsic PGG_Attribute_IsCoercible(x) -> BoolElt, .
-  {True if x is coercible to a PGGAttr.}
-  return false, "wrong type";
-end intrinsic;
-
-intrinsic PGG_Attribute_IsCoercible(x :: PGGAttr) -> BoolElt, .
-  {"}
-  return true, x;
-end intrinsic;
-
-intrinsic PGG_Attribute_IsCoercible(x :: MonStgElt) -> BoolElt, .
-  {"}
-  // process each character in turn
-  stack := [PGG_Attribute()];
-  i := 0;
-  for i in [1..#x] do
-    c := x[i];
-    assert #stack ge 1;
-    case c:
-    when ",":
-      if #stack lt 2 then
-        return false, Sprintf("parse error: %o: illegal ','", i);
-      end if;
-      Append(~stack[#stack-1]`arguments, stack[#stack]);
-      stack[#stack] := PGG_Attribute();
-    when "[":
-      Append(~stack, PGG_Attribute());
-    when "]":
-      if #stack lt 2 then
-        return false, Sprintf("parse error: %o: illegal ')'");
-      end if;
-      Append(~stack[#stack-1]`arguments, stack[#stack]);
-      stack := stack[1..#stack-1];
-    else
-      stack[#stack]`name cat:= c;
-    end case;
-  end for;
-  assert #stack ge 1;
-  if #stack gt 1 then
-    return false, Sprintf("parse error: end of input: too few ')'");
-  end if;
-  // done
-  return true, stack[1];
-end intrinsic;
-
 function not_implemented(msg, ...)
   error "not implemented: " cat Join([Sprintf("%o", x) : x in msg], " ");  
 end function;
@@ -392,7 +118,9 @@ function multiplicities_to_information(mults)
     return 0.0;
   end if;
   total := &+mults;
-  return &+[-p*Log(2,p) where p:=m/total : m in mults];
+  ans := &+[-p*Log(2,p) where p:=m/total : m in mults];
+  assert ans gt 0;
+  return ans;
 end function;
 
 function largest_coefficient(x)
@@ -689,6 +417,450 @@ function dflt(what, d)
   return (what cmpne false) select what else d;
 end function;
 
+function dedupe_conjugage_subgroups(G, Hs)
+  CG := PGG_ConjugacyClasses(G);
+  return [Rep(c) : c in {CG ! H : H in Hs}];
+end function;
+
+declare type PGGArgSpec;
+declare attributes PGGArgSpec: is_valid;
+
+intrinsic PGG_Parsable(A :: PGGArgSpec, x) -> BoolElt, .
+  {Tries to parse x according to A.}
+  return A`is_valid(x);
+end intrinsic;
+
+intrinsic PGG_Parse(A :: PGGArgSpec, x) -> .
+  {Parses x according to A}
+  ok, y := PGG_Parsable(A, x);
+  error if not ok, "could not parse", x;
+  return y;
+end intrinsic;
+
+intrinsic PGG_ArgSpec(is_valid :: UserProgram) -> PGGArgSpec
+  {The argspec with the given is_valid function.}
+  A := New(PGGArgSpec);
+  A`is_valid := is_valid;
+  return A;
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Union(choices :: [PGGArgSpec]) -> PGGArgSpec
+  {The argspec for the union of the given choices.}
+  return PGG_ArgSpec(function (x)
+    for A in choices do
+      ok, y := PGG_Parsable(A, x);
+      if ok then
+        return true, y;
+      end if;
+    end for;
+    return false, _;
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_ISA(C) -> PGGArgSpec
+  {The argspec testing if the input has the given category.}
+  return PGG_ArgSpec(function (x)
+    if ISA(ExtendedType(x), C) then
+      return true, x;
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Literal(X) -> PGGArgSpec
+  {The argspec matching only X exactly.}
+  return PGG_ArgSpec(function (x)
+    if X cmpeq x then
+      return true, x;
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Attr(name :: MonStgElt) -> PGGArgSpec
+  {The argspec matching the PGGAttr with the given name and no args.}
+  return PGG_ArgSpec_Attr(name, [], func<args | name>);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Attr(name :: MonStgElt, args, transform) -> PGGArgSpec
+  {The argspec matching the PGGAttr with the given name and args.}
+  return PGG_ArgSpec(function (x)
+    // coerce to a PGGAttr
+    ok, a := PGG_Attribute_IsCoercible(x);
+    if not ok then
+      return false, _;
+    end if;
+    // check the name
+    if Trim(Name(a)) ne name then
+      return false, _;
+    end if;
+    // check the args
+    pargs := [* arg[3] : arg in args *];
+    pos := 1;
+    for aa in Arguments(a) do
+      // try to parse a positional argument
+      for i in [pos..#args] do
+        ok, parg := PGG_Parsable(args[i][1], aa);
+        if ok then
+          pargs[i] := parg;
+          pos := i+1;
+          continue aa;
+        end if;
+      end for;
+      // try to parse keyword argument
+      for i in [1..#args] do
+        ok, rest := startswith(Name(aa), args[i][2] cat ":");
+        if ok then
+          ok, parg := PGG_Parsable(args[i][1], PGG_Attribute(rest, Arguments(aa)));
+          if ok then
+            pargs[i] := parg;
+            continue aa;
+          else
+            return false, _;
+          end if;
+        end if;
+      end for;
+      // failed parsing
+      return false, _;
+    end for;
+    // apply the transform
+    return true, transform(pargs);
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Recursive(mk :: UserProgram) -> PGGArgSpec
+  {Allows the creation of a PGGArgSpec recursively.}
+  A := New(PGGArgSpec);
+  B := mk(A);
+  A`is_valid := B`is_valid;
+  return A;
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Recursive(n :: RngIntElt, mk :: UserProgram) -> []
+  {Allows the creation of n PGGArgSpecs recursively.}
+  As := [New(PGGArgSpec) : i in [1..n]];
+  Bs := mk(As);
+  require #Bs eq n: "mk must return n PGGArgSpecs";
+  for i in [1..n] do
+    As[i]`is_valid := Bs[i]`is_valid;
+  end for;
+  return As;
+end intrinsic;
+
+intrinsic PGG_ArgSpec_ManyRecursive(mk :: UserProgram) -> Map
+  {Allows the creation of many PGGArgSpecs.}
+  store := NewStore();
+  function set(name, A)
+    ok, B := StoreIsDefined(store, name);
+    if ok then
+      B`is_valid := A`is_valid;
+      return B;
+    else
+      StoreSet(store, name, A);
+      return A;
+    end if;
+  end function;
+  function get(name)
+    ok, A := StoreIsDefined(store, name);
+    if ok then
+      return A;
+    else
+      A := New(PGGArgSpec);
+      StoreSet(store, name, A);
+      return A;
+    end if;
+  end function;
+  mk(set, get);
+  return func<name | StoreGet(store, name)>;
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Predicate(test :: UserProgram) -> PGGArgSpec
+  {The PGGArgSpec passing with the given test.}
+  return PGG_ArgSpec(function (x)
+    if test(x) then
+      return true, x;
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+
+declare type PGGSetConjCls[PGGConjCls];
+declare attributes PGGSetConjCls: overgroup, class_function;
+declare attributes PGGConjCls: subgroup, parent, class_function_value, hash;
+
+intrinsic PGG_ConjugacyClasses(G :: GrpPerm) -> PGGSetConjCls
+  {The conjugacy classes of subgroups of G.}
+  X := New(PGGSetConjCls);
+  X`overgroup := G;
+  X`class_function := func<H | <#H, Hash(H), {*cf(x[3])^^x[2] : x in Classes(H)*}>>
+    where cf := ClassMap(G);
+  return X;
+end intrinsic;
+
+intrinsic 'eq'(X :: PGGSetConjCls, Y :: PGGSetConjCls) -> BoolElt
+  {Equality.}
+  return IsIdentical(X, Y);
+end intrinsic;
+
+intrinsic IsCoercible(X :: PGGSetConjCls, H) -> BoolElt, .
+  {IsCoercible.}
+  return false, "wrong type";
+end intrinsic;
+
+intrinsic IsCoercible(X :: PGGSetConjCls, H :: GrpPerm) -> BoolElt, .
+  {"}
+  if H subset X`overgroup then
+    x := New(PGGConjCls);
+    x`subgroup := H;
+    x`parent := X;
+    x`class_function_value := x`parent`class_function(H);
+    x`hash := Hash(x`class_function_value);
+    return true, x;
+  else
+    return false, "not a subgroup of the right group";
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(X :: PGGSetConjCls, H :: PGGConjCls) -> BoolElt, .
+  {"}
+  if Parent(H) eq X then
+    return true, H;
+  elif Parent(H)`overgroup subset X`overgroup then
+    return true, X ! Rep(H);
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic Parent(x :: PGGConjCls) -> PGGSetConjCls
+  {The parent set.}
+  return x`parent;
+end intrinsic;
+
+intrinsic Hash(x :: PGGConjCls) -> RngIntElt
+  {Hash.}
+  return x`hash;
+end intrinsic;
+
+intrinsic Rep(x :: PGGConjCls) -> GrpPerm
+  {A representative.}
+  return x`subgroup;
+end intrinsic;
+
+intrinsic 'eq'(x :: PGGConjCls, y :: PGGConjCls) -> BoolElt
+  {Equality.}
+  assert Parent(x) eq Parent(y);
+  return (x`class_function_value eq y`class_function_value) and IsConjugate(Parent(x)`overgroup, x`subgroup, y`subgroup);
+end intrinsic;
+
+declare type PGGTimer;
+declare attributes PGGTimer: last_time, times, labels, current_label, idxs;
+
+intrinsic PGG_Timer() -> PGGTimer
+  {A new timer.}
+  t := New(PGGTimer);
+  t`last_time := Cputime();
+  t`times := [RealField()|];
+  t`labels := [PowerSequence(Strings())|];
+  t`current_label := [Strings()|];
+  t`idxs := AssociativeArray(PowerSequence(Strings()));
+  return t;
+end intrinsic;
+
+intrinsic FindIndex(t :: PGGTimer, label :: [MonStgElt]) -> RngIntElt
+  {The index of the given label. If it doesn't exist, creates it first.}
+  ok, i := IsDefined(t`idxs, label);
+  if ok then
+    return i;
+  end if;
+  Append(~t`times, 0);
+  Append(~t`labels, label);
+  t`idxs[label] := #t`labels;
+  return #t`labels;
+end intrinsic;
+
+intrinsic Update(t :: PGGTimer, label :: [MonStgElt])
+  {Assigns the accumulated time to the given label.}
+  i := FindIndex(t, label);
+  now := Cputime();
+  t`times[i] +:= now - t`last_time;
+  t`last_time := now;
+end intrinsic;
+
+intrinsic Push(t :: PGGTimer, x :: MonStgElt)
+  {Assings time to the current label, then appends x to the label.}
+  Update(t, t`current_label);
+  Append(~t`current_label, x);
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimer, n :: RngIntElt)
+  {Assigns time to the current label, then pops n items from the label.}
+  error if #t`current_label lt n, "n greater than label length";
+  Update(t, t`current_label);
+  t`current_label := t`current_label[1..#t`current_label-n];
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimer, n :: RngIntElt, x :: MonStgElt)
+  {Assigns time to the current label, then pops n items from the label, the nth being x.}
+  error if #t`current_label lt n, "n greater than label length";
+  error if t`current_label[#t`current_label-n+1] ne x, "incorrect label entry";
+  Update(t, t`current_label);
+  t`current_label := t`current_label[1..#t`current_label-n];
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimer, x :: MonStgElt)
+  {Assigns time to the current label, then pops the last item from the label, which must be x.}
+  Pop(t, 1, x);
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimer)
+  {Assigns time to the current label, then pops the last item from the label.}
+  Pop(t, 1);
+end intrinsic;
+
+intrinsic Swap(t :: PGGTimer, x :: MonStgElt)
+  {Assigns time to the current label, then swaps the last item from the label to x.}
+  error if #t`current_label lt 1, "label too short";
+  Update(t, t`current_label);
+  t`current_label[#t`current_label] := x;
+end intrinsic;
+
+intrinsic Log(t :: PGGTimer, x :: MonStgElt)
+  {Assigns time to the current label with x appended.}
+  Update(t, Append(t`current_label, x));
+end intrinsic;
+
+intrinsic Tree(t :: PGGTimer) -> Tup
+  {A tree representation of t.}
+  procedure insert(~node, label, tm)
+    node[2] +:= tm;
+    if #label gt 0 then
+      for i in [1..#node[3]] do
+        if node[3][i][1] eq label[1] then
+          insert(~node[3][i], label[2..#label], tm);
+          return;
+        end if;
+      end for;
+      Append(~node[3], <label[1], 0.0, [**]>);
+      insert(~node[3][#node[3]], label[2..#label], tm);
+    end if;
+  end procedure;
+  root := <"TOTAL", 0.0, [**]>;
+  for i in [1..#t`labels] do
+    insert(~root, t`labels[i], t`times[i]);
+  end for;
+  return root;
+end intrinsic;
+
+intrinsic PrintTree(t :: PGGTimer)
+  {Prints t as a tree.}
+  procedure pr(node, depth)
+    printf "%o%6.2o %o\n", &cat[Strings() | "  " : i in [1..depth]], node[2], node[1];
+    for n in node[3] do
+      pr(n, depth+1);
+    end for;
+  end procedure;
+  pr(Tree(t), 0);
+end intrinsic;
+
+declare type PGGAttr;
+declare attributes PGGAttr: name, arguments;
+
+intrinsic Print(x :: PGGAttr, lvl :: MonStgElt)
+  {Print.}
+  case lvl:
+  when "Magma":
+    printf "PGG_Attribute(%m, %m)", Name(x), Arguments(x);
+  else
+    printf "%o", Name(x);
+    if #Arguments(x) gt 0 then
+      printf "(%o)", Join([Sprintf("%o",a) : a in Arguments(x)], ",");
+    end if;
+  end case;
+end intrinsic;
+
+intrinsic Name(a :: PGGAttr) -> MonStgElt
+  {The name.}
+  return a`name;
+end intrinsic;
+
+intrinsic Arguments(a :: PGGAttr) -> []
+  {The arguments.}
+  return a`arguments;
+end intrinsic;
+
+intrinsic PGG_Attribute(name :: MonStgElt, arguments :: [PGGAttr]) -> PGGAttr
+  {An attribute.}
+  a := New(PGGAttr);
+  a`name := name;
+  a`arguments := arguments;
+  return a;
+end intrinsic;
+
+intrinsic PGG_Attribute(name :: MonStgElt) -> PGGAttr
+  {"}
+  a := New(PGGAttr);
+  a`name := name;
+  a`arguments := [];
+  return a;
+end intrinsic;
+
+intrinsic PGG_Attribute() -> PGGAttr
+  {"}
+  a := New(PGGAttr);
+  a`name := "";
+  a`arguments := [];
+  return a;
+end intrinsic;
+
+intrinsic PGG_Attribute_IsCoercible(x) -> BoolElt, .
+  {True if x is coercible to a PGGAttr.}
+  return false, "wrong type";
+end intrinsic;
+
+intrinsic PGG_Attribute_IsCoercible(x :: PGGAttr) -> BoolElt, .
+  {"}
+  return true, x;
+end intrinsic;
+
+intrinsic PGG_Attribute_IsCoercible(x :: MonStgElt) -> BoolElt, .
+  {"}
+  // process each character in turn
+  stack := [PGG_Attribute()];
+  i := 0;
+  for i in [1..#x] do
+    c := x[i];
+    assert #stack ge 1;
+    case c:
+    when ",":
+      if #stack lt 2 then
+        return false, Sprintf("parse error: %o: illegal ','", i);
+      end if;
+      Append(~stack[#stack-1]`arguments, stack[#stack]);
+      stack[#stack] := PGG_Attribute();
+    when "[":
+      Append(~stack, PGG_Attribute());
+    when "]":
+      if #stack lt 2 then
+        return false, Sprintf("parse error: %o: illegal ')'");
+      end if;
+      Append(~stack[#stack-1]`arguments, stack[#stack]);
+      stack := stack[1..#stack-1];
+    else
+      stack[#stack]`name cat:= c;
+    end case;
+  end for;
+  assert #stack ge 1;
+  if #stack gt 1 then
+    return false, Sprintf("parse error: end of input: too few ')'");
+  end if;
+  // done
+  return true, stack[1];
+end intrinsic;
+
 
 
 
@@ -700,6 +872,8 @@ declare attributes PGGAlgState: algorithm;
 declare type PGGAlg_GaloisGroup: PGGAlg;
 
 declare type PGGAlg_GaloisGroup_Builtin: PGGAlg_GaloisGroup;
+
+declare type PGGAlg_GaloisGroup_SinglyRamified: PGGAlg_GaloisGroup;
 
 declare type PGGAlg_GaloisGroup_ResolventMethod: PGGAlg_GaloisGroup;
 declare attributes PGGAlg_GaloisGroup_ResolventMethod: groups_alg, resolvent_alg, conjugacy_alg;
@@ -777,7 +951,7 @@ intrinsic Start(alg :: PGGAlg_ResGroups_All, conj :: PGGConj, overgroup :: GrpPe
   s`conjugacy := conj;
   s`overgroup := overgroup;
   // get a list of possible groups
-  s`possible_groups := (known select [G] else [G : x in Subgroups(Overgroup(conj) : IsSolvable, IsTransitive:=IsTransitive(conj)) | IsConsistent(conj, G) where G:=x`subgroup]) where known,G:=IsKnown(conj);
+  s`possible_groups := (known select [G] else dedupe_conjugage_subgroups(conj`group, [G : x in Subgroups(Overgroup(conj) : IsSolvable, IsTransitive:=IsTransitive(conj)) | IsConsistent(conj, G) where G:=x`subgroup])) where known,G:=IsKnown(conj);
   vprint PGG_GaloisGroup: "#possible groups =", #s`possible_groups;
   return s;
 end intrinsic;
@@ -813,6 +987,7 @@ intrinsic SubgroupTranche(s :: PGGAlgState_ResGroups_All) -> []
     end if;
     while #s`possible_subgroups`cur_groups eq 0 do
       n := 1+#s`possible_subgroups`all_groups;
+      error if n gt #s`possible_subgroups`indices, "ran out of possible distinguishing subgroups";
       index := s`possible_subgroups`indices[n];
       vprint PGG_GaloisGroup: "index =", index;
       Append(~s`possible_subgroups`all_groups, [x`subgroup : x in Subgroups(s`overgroup : IndexEqual:=index)]);
@@ -1475,8 +1650,14 @@ intrinsic PGGAlg_GaloisGroup_ResolventMethod_Make( : GroupsAlg:=false, Resolvent
 end intrinsic;
 
 intrinsic PGGAlg_GaloisGroup_Builtin_Make() -> PGGAlg_GaloisGroup_Builtin
-  {Calls Magma's builtin GaloisGroup intrinsic.}
+  {Calls Magma's builtin GaloisGroup intrinsic, which currently computes a splitting field explicitly.}
   alg := New(PGGAlg_GaloisGroup_Builtin);
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_GaloisGroup_SinglyRamified_Make() -> PGGAlg_GaloisGroup_SinglyRamified
+  {A direct algorithm for singly ramified extensions.}
+  alg := New(PGGAlg_GaloisGroup_SinglyRamified);
   return alg;
 end intrinsic;
 
@@ -1523,169 +1704,130 @@ intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: RngUPolElt[FldPad]
   return G;
 end intrinsic;
 
-declare type PGGArgSpec;
-declare attributes PGGArgSpec: is_valid;
+// some example polynomials to try this on:
+// Example 9.* from Greve, Pauli "On ramification polygons..."
+// Example 3.24 from Milstead "Computing Galois groups..." (thesis)
+intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: RngUPolElt[FldPad]) -> GrpPerm
+  {"}
+  // check f is irreducible and find the extension it defines
+  d := Degree(f);
+  facs, certs := factorization(f : Extensions);
+  error if #facs ne 1, "only implemented for irreducible f";
+  K := BaseRing(f);
+  cert := certs[1];
+  L := cert`Extension;
+  assert Degree(L, K) eq d;
+  assert cert`E * cert`F eq d;
 
-intrinsic PGG_Parsable(A :: PGGArgSpec, x) -> BoolElt, .
-  {Tries to parse x according to A.}
-  return A`is_valid(x);
-end intrinsic;
+  // special case: unramified
+  if cert`E eq 1 then
+    return CyclicGroup(GrpPerm, cert`F);
+  elif cert`F ne 1 then
+    error "f must define a singly ramified extension";
+  end if;
 
-intrinsic PGG_Parse(A :: PGGArgSpec, x) -> .
-  {Parses x according to A}
-  ok, y := PGG_Parsable(A, x);
-  error if not ok, "could not parse", x;
-  return y;
-end intrinsic;
+  // special case: totally tamely ramified
+  p := Prime(K);
+  Qp := PrimeField(K);
+  q := p^InertiaDegree(K, Qp);
+  if not IsDivisibleBy(d, p) then
+    // the inertia degree of the Galois closure, i.e. the degree of K(zeta_d)/K
+    F := Min([F : F in [1..d] | IsDivisibleBy(q^F-1, d)]);
+    S := SymmetricGroup(d);
+    gen1 := S![(i mod d)+1 : i in [1..d]];
+    gen2 := S![(((i-1)*q) mod d) + 1 : i in [1..d]];
+    return sub<S | gen1, gen2>;
+  end if;
 
-intrinsic PGG_ArgSpec(is_valid :: UserProgram) -> PGGArgSpec
-  {The argspec with the given is_valid function.}
-  A := New(PGGArgSpec);
-  A`is_valid := is_valid;
-  return A;
-end intrinsic;
-
-intrinsic PGG_ArgSpec_Union(choices :: [PGGArgSpec]) -> PGGArgSpec
-  {The argspec for the union of the given choices.}
-  return PGG_ArgSpec(function (x)
-    for A in choices do
-      ok, y := PGG_Parsable(A, x);
-      if ok then
-        return true, y;
-      end if;
-    end for;
-    return false, _;
-  end function);
-end intrinsic;
-
-intrinsic PGG_ArgSpec_ISA(C) -> PGGArgSpec
-  {The argspec testing if the input has the given category.}
-  return PGG_ArgSpec(function (x)
-    if ISA(ExtendedType(x), C) then
-      return true, x;
-    else
-      return false, _;
-    end if;
-  end function);
-end intrinsic;
-
-intrinsic PGG_ArgSpec_Literal(X) -> PGGArgSpec
-  {The argspec matching only X exactly.}
-  return PGG_ArgSpec(function (x)
-    if X cmpeq x then
-      return true, x;
-    else
-      return false, _;
-    end if;
-  end function);
-end intrinsic;
-
-intrinsic PGG_ArgSpec_Attr(name :: MonStgElt) -> PGGArgSpec
-  {The argspec matching the PGGAttr with the given name and no args.}
-  return PGG_ArgSpec_Attr(name, [], func<args | name>);
-end intrinsic;
-
-intrinsic PGG_ArgSpec_Attr(name :: MonStgElt, args, transform) -> PGGArgSpec
-  {The argspec matching the PGGAttr with the given name and args.}
-  return PGG_ArgSpec(function (x)
-    // coerce to a PGGAttr
-    ok, a := PGG_Attribute_IsCoercible(x);
-    if not ok then
-      return false, _;
-    end if;
-    // check the name
-    if Trim(Name(a)) ne name then
-      return false, _;
-    end if;
-    // check the args
-    pargs := [* arg[3] : arg in args *];
-    pos := 1;
-    for aa in Arguments(a) do
-      // try to parse a positional argument
-      for i in [pos..#args] do
-        ok, parg := PGG_Parsable(args[i][1], aa);
-        if ok then
-          pargs[i] := parg;
-          pos := i+1;
-          continue aa;
-        end if;
-      end for;
-      // try to parse keyword argument
-      for i in [1..#args] do
-        ok, rest := startswith(Name(aa), args[i][2] cat ":");
-        if ok then
-          ok, parg := PGG_Parsable(args[i][1], PGG_Attribute(rest, Arguments(aa)));
-          if ok then
-            pargs[i] := parg;
-            continue aa;
-          else
-            return false, _;
-          end if;
-        end if;
-      end for;
-      // failed parsing
-      return false, _;
-    end for;
-    // apply the transform
-    return true, transform(pargs);
-  end function);
-end intrinsic;
-
-intrinsic PGG_ArgSpec_Recursive(mk :: UserProgram) -> PGGArgSpec
-  {Allows the creation of a PGGArgSpec recursively.}
-  A := New(PGGArgSpec);
-  B := mk(A);
-  A`is_valid := B`is_valid;
-  return A;
-end intrinsic;
-
-intrinsic PGG_ArgSpec_Recursive(n :: RngIntElt, mk :: UserProgram) -> []
-  {Allows the creation of n PGGArgSpecs recursively.}
-  As := [New(PGGArgSpec) : i in [1..n]];
-  Bs := mk(As);
-  require #Bs eq n: "mk must return n PGGArgSpecs";
-  for i in [1..n] do
-    As[i]`is_valid := Bs[i]`is_valid;
+  // check we are totally wildly ramified
+  ok, m := IsPowerOf(d, p);
+  error if not ok, "f must define a singly ramified extension";
+  // compute the ramification polynomial and polygon
+  phi := DefiningPolynomial(L);
+  assert BaseRing(phi) eq K;
+  assert is_eisenstein(phi);
+  x := PolynomialRing(L).1;
+  pi := L.1;
+  assert IsWeaklyZero(Evaluate(phi, pi));
+  r := Evaluate(phi, x+pi) div x;
+  assert Degree(r) eq d-1;
+  rp := NewtonPolygon([<i,Valuation(Coefficient(r, i))> : i in [0..d-1]] : Faces:="Lower");
+  vs := ChangeUniverse(Vertices(rp), car<Z,Z>);
+  assert vs[1][1] eq 0;
+  assert vs[#vs][1] eq d-1;
+  assert forall{v : v in vs | not IsWeaklyZero(Coefficient(r, v[1]))};
+  assert forall{v : v in vs | IsPowerOf(v[1]+1, p)};
+  error if #vs ne 2, "f must define a singly ramified extension";
+  // now compute the galois group
+  // this is an implementation of Algorithm 3.23 of Milstead's thesis.
+  // we try to keep the notation and step numbers of the description
+  // step 1
+  slope := (vs[2][2] - vs[1][2])/(vs[2][1] - vs[1][1]);
+  h := Numerator(-slope);
+  e := Denominator(-slope);
+  ok, d0 := IsDivisibleBy(d-1, e);
+  assert ok;
+  // step 2
+  Fq, LtoFq:=ResidueClassField(Integers(L));
+  assert #Fq eq q;
+  A := Polynomial([ShiftValuation(Coefficient(r, i*e), i*h - vs[1][2]) @ LtoFq : i in [0..d0]]);
+  assert Degree(A) eq d0;
+  assert Coefficient(A, 0) ne 0;
+  assert Coefficient(A, d0) ne 0;
+  // steps 3 and 4 and 6
+  FqF := SplittingField(A * (Parent(A).1^e - 1));
+  zeta := PrimitiveElement(FqF);
+  F := Degree(FqF, Fq);
+  assert #FqF eq q^F;
+  // step 5
+  g, a, a2 := XGCD(e, -p^m);
+  assert g eq 1;
+  g, b, b2 := XGCD(h, -e);
+  assert g eq 1;
+  // step 7
+  us := [x[1] : x in Roots(ChangeRing(A, FqF))];
+  assert #us eq d0;
+  // steps 8 and 9
+  r := Log(zeta, us[1]^b) mod e;
+  // steps 10 and 11 (V is the additive group of FqF)
+  V, FqFtoV := VectorSpace(FqF, GF(p));
+  generators := [V | FqFtoV(0)];
+  M := sub<V | generators>;
+  assert #M eq 1;
+  assert Dimension(M) eq 0;
+  for i in [1..d0] do
+    roots := [x[1] : x in Roots(PolynomialRing(FqF).1^e - us[i]/zeta^(r*h))];
+    assert #roots eq e;
+    generators cat:= [V | FqFtoV(a*x) : x in roots];
+    M := sub<V | generators>;
+    assert #M eq p^Dimension(M);
+    // if #M eq p^m then
+    //   break;
+    // end if;
   end for;
-  return As;
-end intrinsic;
-
-intrinsic PGG_ArgSpec_ManyRecursive(mk :: UserProgram) -> Map
-  {Allows the creation of many PGGArgSpecs.}
-  store := NewStore();
-  function set(name, A)
-    ok, B := StoreIsDefined(store, name);
-    if ok then
-      B`is_valid := A`is_valid;
-      return B;
-    else
-      StoreSet(store, name, A);
-      return A;
-    end if;
-  end function;
-  function get(name)
-    ok, A := StoreIsDefined(store, name);
-    if ok then
-      return A;
-    else
-      A := New(PGGArgSpec);
-      StoreSet(store, name, A);
-      return A;
-    end if;
-  end function;
-  mk(set, get);
-  return func<name | StoreGet(store, name)>;
-end intrinsic;
-
-intrinsic PGG_ArgSpec_Predicate(test :: UserProgram) -> PGGArgSpec
-  {The PGGArgSpec passing with the given test.}
-  return PGG_ArgSpec(function (x)
-    if test(x) then
-      return true, x;
-    else
-      return false, _;
-    end if;
-  end function);
+  assert #M eq p^m;
+  assert Dimension(M) eq m;
+  // step 12
+  assert BaseField(M) eq GF(p);
+  B := Basis(M);
+  assert #B eq m;
+  assert Universe(B) eq M;
+  // step 13
+  ok, ell := IsDivisibleBy(q^F-1, e);
+  assert ok;
+  ok, k := IsDivisibleBy(r*(q-1), e);
+  assert ok;
+  // steps 14, 15, 16, 17
+  // the following line works around a bug in Magma: it refuses to compute AGL(GrpMat,1,GF(p))
+  AGLmp := m eq 1 select sub<G | [G| [[M[1,1], 0],[0,1]] : M in Generators(GL(1,GF(p)))] cat [G![[1,0],[1,1]]]> where G:=GL(2,GF(p)) else AGL(GrpMat, m, GF(p));
+  S := AGLmp ! ([Coordinates(M, b2) cat [0] where b2 := M ! ((zeta^j2) @ FqFtoV) where j2 := ell*h+j where j := Log(zeta, (V ! b) @@ FqFtoV) : b in B] cat [[i eq m+1 select 1 else 0 : i in [1..m+1]]]);
+  T := AGLmp ! ([Coordinates(M, b2) cat [0] where b2 := M ! ((zeta^j2) @ FqFtoV) where j2 := k*h+q*j where j := Log(zeta, (V ! b) @@ FqFtoV) : b in B] cat [[i eq m+1 select 1 else 0 : i in [1..m+1]]]);
+  // print S, T, GroupName(sub<AGLmp | [S, T]>);
+  // step 18
+  G := sub<AGLmp | [S, T] cat [AGLmp | [[i eq j select 1 else i eq m+1 and j eq a select 1 else 0 : j in [1..m+1]] : i in [1..m+1]] : a in [1..m]]>;
+  // convert G to a permutation group
+  Gperm := OrbitImage(G, {@ Vector([x : x in v]) : v in CartesianProduct([[x : x in GF(p)] : i in [1..m]] cat [[GF(p) ! 1]]) @});
+  return Gperm;
 end intrinsic;
 
 function parse_algorithm(alg)
@@ -1753,6 +1895,11 @@ function parse_algorithm(alg)
         "Builtin",
         [],
         func<args | PGGAlg_GaloisGroup_Builtin_Make()>
+      ),
+      PGG_ArgSpec_Attr(
+        "SinglyRamified",
+        [],
+        func<args | PGGAlg_GaloisGroup_SinglyRamified_Make()>
       )
     ]));
   end procedure);
