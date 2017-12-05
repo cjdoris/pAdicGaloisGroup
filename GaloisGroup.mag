@@ -1,18 +1,5 @@
 // implementation of a general galois-group finding algorithm, general in the sense that the algorithms involved are written in a modular fashion so that each piece can be changed independently of the rest, as far as possible
 
-// TODO:
-// - factor out the code to evaluate invariants from the resolvent method code
-// - add local-only code for evaluating invariants (e.g. Sn-relative can be evaluated directly from polynomial coefficients)
-// - implement a relative resolvent method (i.e. a chain of subgroups, with a root for each, and evaluate the resolvent by evaluating at the known roots to make invariant in the top group)
-// - is conjugacy a parameter to galois group, not to resolvent method?
-// - to cut down on the group theory in the absolute resolvent algorithm, try only using maximal subgroups of groups which were previously useful? how do we limit this to only consider each group once?
-// - a variant of the absolute resolvent method which works down the tree of possible galois groups one level at a time; unlike the relative resolvent method which specifically looks for roots of resolvents, we can still use more information coming from each resolvent to see if it provides any cut-down
-// - we know that for a W-relative U-invariant I (where Gal(f/K) subset W) that Gal(f/K) subset U iff R_I(t) has a root in K. More generally, for an extension L/K we have that Gal(f/L) subset U iff R has a root in L. In particular if L is defined by a factor of R, then this holds. This seems to give some information about the Galois group. If we can combine information about these resolvent fields somehow, then we could work out the Galois group.
-// - Spl(R) subset Spl(f) so the ramification breaks of a factor of R is a subset of that of Spl(f), so with enough resolvents we can get the ramification breaks of Spl(f). Once we know this, then the previous point allows us to figure out the ramification filtratation of Gal(f) precisely.
-// - Is it possible to get a global model for R in a manner compatible with f? That way we could recover the relative resolvent method?
-// - Allow for using some smallish unramified ell-adic field instead of the complexes? It may be easier to control precision this way. What does rounding mean in this context?
-// - since Spl(R) subset Spl(f), then Spl(fR) = Spl(f) so Gal(fR) isom Gal(f) (and the isomorphism is explicit in terms of the coset action of W on U); hence in the resolvent method, we could (conceptually if not literally) keep multiplying f by each resolvent that we find. We can then find more resolvents in terms of the roots of both f and previous resolvents, which may give us deeper information. The main downside would be that the group theory may become unwieldy, lots of potential subgroups U will give the same information, but we may be able to overcome this. This is a bit like the relative resolvent method, where the overgroup W gets extended by Gal(R) which has a direct factor of C_1, with the additional information that this is a certain image of Gal(f). This is kind of a more subtle way of setting the resolvent statistic to "compute the Galois group recursively".
-
 declare verbose PGG_GaloisGroup, 1;
 
 Z := IntegerRing();

@@ -44,6 +44,7 @@ GALOISGROUP
   , RESEVAL_ALG            The algorithm used to evaluate resolvents
   , CONJUGACY              Specifies up to what conjugacy the Galois group will be defined
   ]
+| "SinglyRamified"       The algorithm due to Greve for singly ramified extensions
 | "Builtin"              Use Magma's builtin GaloisGroup intrinsic
 
 GROUP_ALG
