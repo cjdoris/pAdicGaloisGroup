@@ -1,6 +1,6 @@
 # pAdicGaloisGroup
 
-Experimental code for computing Galois groups over p-adic fields. Written in Magma.
+Experimental code for computing Galois groups over p-adic fields. Written in [Magma](http://magma.maths.usyd.edu.au/magma).
 
 ## Getting started
 * [Download from GitHub](https://github.com/cjdoris/pAdicGaloisGroup).
