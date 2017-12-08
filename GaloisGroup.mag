@@ -13,6 +13,21 @@ function precision_error()
   error "precision error";
 end function;
 
+procedure isort_by(~xs, key)
+  keys := [key(xs[i]) : i in [1..#xs]];
+  Sort(~keys, ~permutation);
+  xs := [xs[i^permutation] : i in [1..#xs]];
+end procedure;
+
+function sort_by(xs, key)
+  isort_by(~xs, key);
+  return xs;
+end function;
+
+function enumerate(xs)
+  return [<xs[i], i> : i in [1..#xs] | IsDefined(xs, i)];
+end function;
+
 function is_any_coercible(coercers, x)
   for i in [1..#coercers] do
     ok, y := coercers[i](x);
@@ -397,7 +412,7 @@ function tschirnhaus_transformation(ntries, degree)
       return t;
     end if;
   end if;
-  return PolynomialRing(Z) ! [Random(ntries) : i in [1..degree]];
+  return PolynomialRing(Z) ! [Random(1,ntries) : i in [1..degree]];
 end function;
 
 function dflt(what, d)
@@ -469,6 +484,33 @@ end intrinsic;
 intrinsic PGG_ArgSpec_Attr(name :: MonStgElt) -> PGGArgSpec
   {The argspec matching the PGGAttr with the given name and no args.}
   return PGG_ArgSpec_Attr(name, [], func<args | name>);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_AttrList(name :: MonStgElt, arg, transform) -> PGGArgSpec
+  {The argspec matching the PGGAttr with the given name and multiple args matching arg.}
+  return PGG_ArgSpec(function (x)
+    // coerce to a PGGAttr
+    ok, a := PGG_Attribute_IsCoercible(x);
+    if not ok then
+      return false, _;
+    end if;
+    // check the name
+    if Trim(Name(a)) ne name then
+      return false, _;
+    end if;
+    // check the args
+    xs := [**];
+    for aa in Arguments(a) do
+      ok, x := PGG_Parsable(arg, aa);
+      if ok then
+        Append(~xs, x);
+      else
+        return false, _;
+      end if;
+    end for;
+    // apply the transform
+    return true, transform(xs);
+  end function);
 end intrinsic;
 
 intrinsic PGG_ArgSpec_Attr(name :: MonStgElt, args, transform) -> PGGArgSpec
@@ -925,6 +967,19 @@ declare attributes PGGGloMod_Factors: factors;
 declare type PGGGloMod_Tower: PGGGloMod;
 declare attributes PGGGloMod_Tower: tower, global_pol, global_pol_root;
 
+declare type PGGStat;
+declare type PGGStat_HasRoot: PGGStat;
+declare type PGGStat_NumRoots: PGGStat;
+declare type PGGStat_FactorDegrees: PGGStat;
+declare type PGGStat_Degree: PGGStat;
+declare type PGGStat_Tup: PGGStat;
+declare attributes PGGStat_Tup: stats;
+declare type PGGStat_Factors: PGGStat;
+declare attributes PGGStat_Factors: stat;
+
+declare type PGGStatVal;
+declare attributes PGGStatVal: stat, value, hash;
+
 intrinsic PGG_AllGroups() -> PGGAlg_ResGroups_All
   {The "AllGroups" group theory algorithm for the resolvent method.}
   return New(PGGAlg_ResGroups_All);
@@ -965,9 +1020,9 @@ intrinsic SubgroupTranche(s :: PGGAlgState_ResGroups_All) -> []
   case s`algorithm`subgroup_tranche:
   when "All":
     if not assigned s`possible_subgroups then
-      s`possible_subgroups := [x`subgroup : x in Subgroups(s`overgroup)];
+      s`possible_subgroups := enumerate([x`subgroup : x in Subgroups(s`overgroup)]);
     end if;
-    return s`possible_subgroups;
+    return [x : x in s`possible_subgroups];
   when "Index":
     if not assigned s`possible_subgroups then
       s`possible_subgroups := rec<recformat<i, indices, all_groups, cur_groups> | indices:=Sort(Divisors(Order(s`overgroup))), all_groups:=[], cur_groups:=[]>;
@@ -978,67 +1033,173 @@ intrinsic SubgroupTranche(s :: PGGAlgState_ResGroups_All) -> []
       index := s`possible_subgroups`indices[n];
       vprint PGG_GaloisGroup: "index =", index;
       Append(~s`possible_subgroups`all_groups, [x`subgroup : x in Subgroups(s`overgroup : IndexEqual:=index)]);
-      s`possible_subgroups`cur_groups := s`possible_subgroups`all_groups[n];
+      s`possible_subgroups`cur_groups := enumerate(s`possible_subgroups`all_groups[n]);
     end while;
-    return s`possible_subgroups`cur_groups;
+    return [x : x in s`possible_subgroups`cur_groups];
   when "MostUseful":
+    W := s`overgroup;
     if not assigned s`possible_subgroups then
-      s`possible_subgroups := rec<recformat<others, useful, cur_groups> | others:=[], useful:=[s`overgroup], cur_groups:=[]>;
+      CW := PGG_ConjugacyClasses(W);
+      s`possible_subgroups := rec<recformat<queue, queue_changed, cur_groups, usefulness, ignore_groups, classes> | queue:=[<CW!W, <1, 1>>], queue_changed:=false, cur_groups:=[], usefulness:=AssociativeArray(), classes:=CW>;
+    else
+      CW := s`possible_subgroups`classes;
     end if;
     while #s`possible_subgroups`cur_groups eq 0 do
-      if #s`possible_subgroups`useful ne 0 then
-        pop_start(~U, ~s`possible_subgroups`useful);
-        vprint PGG_GaloisGroup: "maximal subgroups of useful group", U;
-      elif #s`possible_subgroups`others ne 0 then
-        pop_start(~U, ~s`possible_subgroups`others);
-        vprint PGG_GaloisGroup: "maximal subgroups of useless group", U;
-      else
-        assert false;
+      // ensure the queue is sorted
+      if s`possible_subgroups`queue_changed then
+        s`possible_subgroups`queue_changed := false;
+        isort_by(~s`possible_subgroups`queue, func<x | x[2]>);
       end if;
-      s`possible_subgroups`cur_groups := [x`subgroup : x in MaximalSubgroups(U)];
+      // pop a group class from the queue
+      pop_start(~item, ~s`possible_subgroups`queue);
+      class, usefulness := Explode(item);
+      vprint PGG_GaloisGroup: "usefulness =", usefulness;
+      // find its maximal subgroups
+      subclasses := {CW ! x`subgroup : x in MaximalSubgroups(Rep(class))};
+      // throw out the ones which have been used already, and so have an assigned usefulness
+      subclasses := [c : c in subclasses | not IsDefined(s`possible_subgroups`usefulness, c)];
+      s`possible_subgroups`cur_groups := [<Rep(c), i, c, usefulness[1]*Index(Rep(class), Rep(c))> where c:=subclasses[i] : i in [1..#subclasses]];
     end while;
-    return s`possible_subgroups`cur_groups;
+    return [x : x in s`possible_subgroups`cur_groups];
   else
     assert false;
   end case;
 end intrinsic;
 
-intrinsic GroupStat(s :: PGGAlgState_ResGroups_All, G :: GrpPerm) -> .
-  {The statistic for the Galois group G.}
-  case s`algorithm`statistic:
-  when "HasRoot":
-    return exists{o : o in Orbits(G) | #o eq 1};
-  when "NumRoots":
-    return #[o : o in Orbits(G) | #o eq 1];
-  when "FactorDegrees":
-    return {* #o : o in Orbits(G) *};
-  else
-    assert false;
-  end case;
+intrinsic MakeValue(S :: PGGStat, value) -> PGGStatVal
+  {A value for the statistic S.}
+  x := New(PGGStatVal);
+  x`stat := S;
+  x`value := value;
+  return x;
 end intrinsic;
 
-intrinsic ResStat(s :: PGGAlgState_ResGroups_All, R :: RngUPolElt[FldPad]) -> .
-  {The statistic for the resolvent R.}
-  case s`algorithm`statistic:
-  when "HasRoot":
-    return has_root(R);
-  when "NumRoots":
-    return #roots(R);
-  when "FactorDegrees":
-    return {* Degree(fac) : fac in factorization(R) *};
-  else
-    assert false;
-  end case;
+intrinsic Hash(v :: PGGStatVal) -> .
+  {Hash of v.}
+  if not assigned v`hash then
+    v`hash := Hash(v`stat, v);
+  end if;
+  return v`hash;
 end intrinsic;
 
-intrinsic StatEq(s :: PGGAlgState_ResGroups_All, a, b) -> BoolElt
-  {True if a and b are equal statistics.}
-  case s`algorithm`statistic:
-  when "HasRoot", "NumRoots", "FactorDegrees":
-    return a eq b;
-  else
-    assert false;
-  end case;
+intrinsic 'eq'(S1 :: PGGStat, S2 :: PGGStat) -> BoolElt
+  {Equality.}
+  return IsIdentical(S1, S2);
+end intrinsic;
+
+intrinsic 'eq'(v1 :: PGGStatVal, v2 :: PGGStatVal) -> BoolElt
+  {Equality.}
+  require v1`stat eq v2`stat: "must be values of the same statistic";
+  return 'eq'(v1`stat, v1, v2);
+end intrinsic;
+
+intrinsic PGGStat_HasRoot_Make() -> PGGStat_HasRoot
+  {Makes a new PGGStat.}
+  return New(PGGStat_HasRoot);
+end intrinsic;
+
+intrinsic PGGStat_NumRoots_Make() -> PGGStat_NumRoots
+  {Makes a new PGGStat.}
+  return New(PGGStat_NumRoots);
+end intrinsic;
+
+intrinsic PGGStat_FactorDegrees_Make() -> PGGStat_FactorDegrees
+  {Makes a new PGGStat.}
+  return New(PGGStat_FactorDegrees);
+end intrinsic;
+
+intrinsic PGGStat_Degree_Make() -> PGGStat_Degree
+  {Makes a new PGGStat.}
+  return New(PGGStat_Degree);
+end intrinsic;
+
+intrinsic PGGStat_Factors_Make(:Stat:=false) -> PGGStat_Factors
+  {Makes a new PGGStat.}
+  S := New(PGGStat_Factors);
+  S`stat := Stat cmpne false select Stat else PGGStat_Degree_Make();
+  return S;
+end intrinsic;
+
+intrinsic PGGStat_Tup_Make(args) -> PGGStat_Tup
+  {Makes a new PGGStat.}
+  S := New(PGGStat_Tup);
+  S`stats := args;
+  return S;
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_HasRoot, G :: GrpPerm) -> PGGStatVal
+  {The value of the statistic on the group.}
+  return MakeValue(S, exists{o : o in Orbits(G) | #o eq 1});
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_NumRoots, G :: GrpPerm) -> PGGStatVal
+  {The value of the statistic on the group.}
+  return MakeValue(S, #[o : o in Orbits(G) | #o eq 1]);
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_FactorDegrees, G :: GrpPerm) -> PGGStatVal
+  {The value of the statistic on the group.}
+  return MakeValue(S, {* #o : o in Orbits(G) *});
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_Degree, G :: GrpPerm) -> PGGStatVal
+  {The value of the statistic on the group.}
+  return MakeValue(S, Degree(G));
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_Tup, G :: GrpPerm) -> PGGStatVal
+  {The value of the statistic on the group.}
+  return MakeValue(S, <GroupStat(S2, G) : S2 in S`stats>);
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_Factors, G :: GrpPerm) -> PGGStatVal
+  {The value of the statistic on the group.}
+  return MakeValue(S, {* GroupStat(S`stat, OrbitImage(G, o)) : o in Orbits(G) *});
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_HasRoot, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {The value of the statistic on the resolvent.}
+  return MakeValue(S, has_root(R));
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_NumRoots, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {The value of the statistic on the resolvent.}
+  return MakeValue(S, #roots(R));
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_FactorDegrees, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {The value of the statistic on the resolvent.}
+  return MakeValue(S, {* Degree(fac) : fac in factorization(R) *});
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_Degree, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {The value of the statistic on the resolvent.}
+  return MakeValue(S, Degree(R));
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_Tup, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {The value of the statistic on the resolvent.}
+  return MakeValue(S, <ResolventStat(S2, R) : S2 in S`stats>);
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_Factors, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {The value of the statistic on the resolvent.}
+  return MakeValue(S, {* ResolventStat(S`stat, fac) : fac in factorization(R) *});
+end intrinsic;
+
+intrinsic 'eq'(S :: PGGStat, v1, v2) -> BoolElt
+  {Equality.}
+  return v1`value eq v2`value;
+end intrinsic;
+
+intrinsic Hash(S :: PGGStat, v) -> .
+  {Hash.}
+  return Hash(v`value);
+end intrinsic;
+
+intrinsic Print(v :: PGGStatVal)
+  {Prints.}
+  printf "%o", v`value;
 end intrinsic;
 
 intrinsic ScoreSubgroup(s :: PGGAlgState_ResGroups_All, subgroup :: GrpPerm) -> FldReElt
@@ -1046,27 +1207,26 @@ intrinsic ScoreSubgroup(s :: PGGAlgState_ResGroups_All, subgroup :: GrpPerm) -> 
   assert #s`possible_groups gt 0;
   stats := [**];
   h := CosetAction(s`overgroup, subgroup);
+  A := AssociativeArray();
   for G in s`possible_groups do
-    stat := GroupStat(s, h(G));
-    for i in [1..#stats] do
-      if StatEq(s, stats[i][1], stat) then
-        Append(~stats[i][2], G);
-        continue G;
+    stat := GroupStat(s`algorithm`statistic, h(G));
+    if IsDefined(A, stat) then
+      Append(~A[stat], G);
+    else
+      A[stat] := [G];
+      if (s`algorithm`subgroup_score eq "IsUseful") and (#A gt 1) then
+        return 1;
       end if;
-    end for;
-    Append(~stats, <stat, [G]>);
-    if (s`algorithm`subgroup_score eq "IsUseful") and (#stats gt 1) then
-      return 1;
     end if;
   end for;
   case s`algorithm`subgroup_score:
   when "IsUseful":
-    assert #stats le 1;
+    assert #A le 1;
     return -1;
   when "Diversity":
-    return #stats le 1 select -1 else #stats;
+    return #A le 1 select -1 else #A;
   when "Information":
-    return #stats le 1 select -1 else multiplicities_to_information([#x[2] : x in stats]);
+    return #A le 1 select -1 else multiplicities_to_information([#A[k] : k in Keys(A)]);
   else
     assert false;
   end case;
@@ -1084,7 +1244,7 @@ intrinsic TerminateScoring(s :: PGGAlgState_ResGroups_All, scores :: []) -> Bool
   end case;
 end intrinsic;
 
-intrinsic OrderSubgroups(s :: PGGAlgState_ResGroups_All, groups :: [GrpPerm]) -> []
+intrinsic OrderSubgroups(s :: PGGAlgState_ResGroups_All, groups :: [Tup]) -> []
   {Orders the subgroups.}
   case s`algorithm`subgroup_order:
   when "None":
@@ -1092,35 +1252,47 @@ intrinsic OrderSubgroups(s :: PGGAlgState_ResGroups_All, groups :: [GrpPerm]) ->
   when "Random":
     return [groups[i^r] : i in [1..#groups]] where r:=Random(SymmetricGroup(#groups));
   when "Index":
-    return Sort(groups, func<A,B| #A-#B>);
+    return Sort(groups, func<A,B| #A[1]-#B[1]>);
   else
     assert false;
   end case;
 end intrinsic;
 
-intrinsic UselessSubgroups(s :: PGGAlgState_ResGroups_All, subgroups :: [GrpPerm])
+intrinsic UselessSubgroups(s :: PGGAlgState_ResGroups_All, subgroups :: [Tup])
   {Declares we are done considering these groups.}
   case s`algorithm`subgroup_tranche:
   when "All":
-    seq_idiff(~s`possible_subgroups, subgroups);
+    for x in subgroups do
+      Undefine(~s`possible_subgroups, x[2]);
+    end for;
   when "Index":
-    seq_idiff(~s`possible_subgroups`cur_groups, subgroups);
+    for x in subgroups do
+      Undefine(~s`possible_subgroups`cur_groups, x[2]);
+    end for;
   when "MostUseful":
-    seq_idiff(~s`possible_subgroups`cur_groups, subgroups);
-    s`possible_subgroups`others cat:= subgroups;
+    for x in subgroups do
+      _, i, c, u := Explode(x);
+      Undefine(~s`possible_subgroups`cur_groups, i);
+      s`possible_subgroups`usefulness[c] := u;
+      Append(~s`possible_subgroups`queue, <c, <u, Index(s`overgroup, Rep(c))>>);
+      s`possible_subgroups`queue_changed := true;
+    end for;
   else
     assert false;
   end case;
 end intrinsic;
 
-intrinsic UsefulSubgroup(s :: PGGAlgState_ResGroups_All, subgroup :: GrpPerm)
+intrinsic UsefulSubgroup(s :: PGGAlgState_ResGroups_All, subgroup :: Tup)
   {Declare that we are using the given subgroup.}
   case s`algorithm`subgroup_tranche:
   when "All", "Index":
     UselessSubgroups(s, [subgroup]);
   when "MostUseful":
-    Append(~s`possible_subgroups`useful, subgroup);
-    seq_idiff(~s`possible_subgroups`cur_groups, [subgroup]);
+    _, i, c, _ := Explode(subgroup);
+    Undefine(~s`possible_subgroups`cur_groups, i);
+    s`possible_subgroups`usefulness[c] := 1;
+    Append(~s`possible_subgroups`queue, <c, <1, Index(s`overgroup, Rep(c))>>);
+    s`possible_subgroups`queue_changed := true;
   else
     assert false;
   end case;
@@ -1137,7 +1309,7 @@ intrinsic Subgroup(s :: PGGAlgState_ResGroups_All) -> GrpPerm
     scores := [car<Universe(groups), RealField()>| ];
     useless := [Universe(groups)| ];
     for U in groups do
-      score := ScoreSubgroup(s, U);
+      score := ScoreSubgroup(s, U[1]);
       if score ge 0 then
         Append(~scores, <U, score>);
         if TerminateScoring(s, scores) then
@@ -1148,21 +1320,22 @@ intrinsic Subgroup(s :: PGGAlgState_ResGroups_All) -> GrpPerm
       end if;
     end for;
     // ignore the useless subgroups
+    vprint PGG_GaloisGroup: "#useless =", #useless, "of", #groups;
     UselessSubgroups(s, useless);
     // get the best scoring
     if #scores gt 0 then
       U := Sort(scores, func<a,b | b[2]-a[2]>)[1][1];
       UsefulSubgroup(s, U);
-      return U;
+      return U[1];
     end if;
   end while;
 end intrinsic;
 
 intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_All, resolvent :: RngUPolElt[FldPad], subgroup :: GrpPerm)
   {Use the resolvent to get information about the Galois group.}
-  rstat := ResStat(s, resolvent);
+  rstat := ResolventStat(s`algorithm`statistic, resolvent);
   h := CosetAction(s`overgroup, subgroup);
-  s`possible_groups := [G : G in s`possible_groups | StatEq(s, gstat, rstat) where gstat := GroupStat(s, h(G))];
+  s`possible_groups := [G : G in s`possible_groups | gstat eq rstat where gstat := GroupStat(s`algorithm`statistic, h(G))];
   vprint PGG_GaloisGroup: "#possible groups =", #s`possible_groups;
 end intrinsic;
 
@@ -1613,7 +1786,7 @@ end intrinsic;
 intrinsic PGGAlg_ResGroups_All_Make(:Statistic:=false, SubgroupTranche:=false, SubgroupOrder:=false, SubgroupScore:=false, SubgroupChoice:=false) -> PGGAlg_ResGroups_All
   {The "All" resolvent groups algorithm.}
   alg := New(PGGAlg_ResGroups_All);
-  alg`statistic := Statistic cmpne false select Statistic else "FactorDegrees";
+  alg`statistic := Statistic cmpne false select Statistic else PGGStat_FactorDegrees_Make();
   alg`subgroup_tranche := SubgroupTranche cmpne false select SubgroupTranche else "Index";
   alg`subgroup_order := SubgroupOrder cmpne false select SubgroupOrder else "Index";
   alg`subgroup_score := SubgroupScore cmpne false select SubgroupScore else "Information";
@@ -1821,7 +1994,8 @@ function parse_algorithm(alg)
 
   specs := PGG_ArgSpec_ManyRecursive(procedure (set, get)
     CONJUGACY := set("CONJUGACY", PGG_ArgSpec_Union([
-      PGG_ArgSpec_Predicate(func<x | ISA(Type(x), PGGAlg_Conjugacy)>),
+      PGG_ArgSpec_ISA(PGGAlg_Conjugacy),
+      PGG_ArgSpec_Literal(false),
       PGG_ArgSpec_Attr(
         "Symmetric",
         [<get("GALOISGROUP"),"GG",false>],
@@ -1839,14 +2013,47 @@ function parse_algorithm(alg)
       )
     ]));
 
-    STATISTIC := PGG_ArgSpec_Union([PGG_ArgSpec_Attr(x) : x in ["HasRoot", "NumRoots", "FactorDegrees"]]);
-    SUBGROUP_TRANCHE := PGG_ArgSpec_Union([PGG_ArgSpec_Attr(x) : x in ["All","Index","MostUseful"]]);
-    SUBGROUP_ORDER := PGG_ArgSpec_Union([PGG_ArgSpec_Attr(x) : x in ["None", "Random", "Index"]]);
-    SUBGROUP_SCORE := PGG_ArgSpec_Union([PGG_ArgSpec_Attr(x) : x in ["IsUseful", "Diversity", "Information"]]);
-    SUBGROUP_CHOICE := PGG_ArgSpec_Union([PGG_ArgSpec_Attr(x) : x in ["First", "Best"]]);
+    STATISTIC := set("STATISTIC", PGG_ArgSpec_Union([
+      PGG_ArgSpec_ISA(PGGStat),
+      PGG_ArgSpec_Literal(false),
+      PGG_ArgSpec_Attr("HasRoot", [], func<args | PGGStat_HasRoot_Make()>),
+      PGG_ArgSpec_Attr("NumRoots", [], func<args | PGGStat_NumRoots_Make()>),
+      PGG_ArgSpec_Attr("FactorDegrees", [], func<args | PGGStat_FactorDegrees_Make()>),
+      PGG_ArgSpec_Attr("Degree", [], func<args | PGGStat_Degree_Make()>),
+      PGG_ArgSpec_AttrList("Tup", get("STATISTIC"), func<args | PGGStat_Tup_Make(args)>),
+      PGG_ArgSpec_Attr("Factors", [<get("STATISTIC"), "Stat", false>], func<args | PGGStat_Factors_Make(:Stat:=args[1])>)
+    ]));
+
+    SUBGROUP_TRANCHE := PGG_ArgSpec_Union([
+      PGG_ArgSpec_Literal(false),
+      PGG_ArgSpec_Attr("All"),
+      PGG_ArgSpec_Attr("Index"),
+      PGG_ArgSpec_Attr("MostUseful")
+    ]);
+
+    SUBGROUP_ORDER := PGG_ArgSpec_Union([
+      PGG_ArgSpec_Literal(false),
+      PGG_ArgSpec_Attr("None"),
+      PGG_ArgSpec_Attr("Random"),
+      PGG_ArgSpec_Attr("Index")
+    ]);
+
+    SUBGROUP_SCORE := PGG_ArgSpec_Union([
+      PGG_ArgSpec_Literal(false),
+      PGG_ArgSpec_Attr("IsUseful"),
+      PGG_ArgSpec_Attr("Diversity"),
+      PGG_ArgSpec_Attr("Information")
+    ]);
+
+    SUBGROUP_CHOICE := PGG_ArgSpec_Union([
+      PGG_ArgSpec_Literal(false),
+      PGG_ArgSpec_Attr("First"),
+      PGG_ArgSpec_Attr("Best")
+    ]);
 
     RESGROUPS := PGG_ArgSpec_Union([
       PGG_ArgSpec_ISA(PGGAlg_ResGroups),
+      PGG_ArgSpec_Literal(false),
       PGG_ArgSpec_Attr(
         "All",
         [ <STATISTIC,"Stat",false>
@@ -1861,6 +2068,7 @@ function parse_algorithm(alg)
 
     RESEVAL := PGG_ArgSpec_Union([
       PGG_ArgSpec_ISA(PGGAlg_ResEval),
+      PGG_ArgSpec_Literal(false),
       PGG_ArgSpec_Attr(
         "Global",
         [],
@@ -1870,6 +2078,7 @@ function parse_algorithm(alg)
 
     GALOISGROUP := set("GALOISGROUP", PGG_ArgSpec_Union([
       PGG_ArgSpec_ISA(PGGAlg_GaloisGroup),
+      PGG_ArgSpec_Literal(false),
       PGG_ArgSpec_Attr(
         "ARM",
         [ <RESGROUPS,"Groups",false>
