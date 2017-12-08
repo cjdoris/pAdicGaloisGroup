@@ -73,7 +73,16 @@ CONJUGACY
 STATISTIC
 = "HasRoot"             True or false depending on whether the resolvent has a root (i.e. the group has a fixed point)
 | "NumRoots"            The number of roots of the resolvent (i.e. the number of fixed points in the group)
-| "FactorDegrees"       The multiset of degrees of irreducible factors (i.e. the sizes of the orbits)
+| "FactorDegrees"       The multiset of degrees of irreducible factors (i.e. the sizes of the orbits); equivalent to
+                          but more efficient than Factors[Degree]
+| "Factors"             A multiset of statistics corresponding to the irreducible factors
+  [ STATISTIC              The statistic to use on each factor
+  ]
+| "Degree"              The degree.
+| "Tup"                 A tuple of statistics.
+  [ STATISTIC             The list of statistics to use for each component.
+  , ...
+  ]
 
 SUBGROUP_TRANCHE
 = "All"                 Get all subgroups. Only practical for low degrees.
