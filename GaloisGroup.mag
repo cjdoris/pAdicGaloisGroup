@@ -90,6 +90,12 @@ function factorization(f : Extensions:=false)
   return [Parent(g)![ShiftValuation(Coefficient(g,i), (i-d)*slope-vlc) : i in [0..d]] where vlc:=Valuation(Coefficient(g,d)) where d:=Degree(g) where g:=fac[1] : fac in facs], certs;
 end function;
 
+function extension(f)
+  facs, certs := factorization(f : Extensions);
+  error if #facs gt 1, "expecting at most 1 factor";
+  return certs[1]`Extension;
+end function;
+
 // the factorization of f into pieces corresponding to the slopes of its newton polygon as a sequence
 function newton_polygon_factorization(f : alg:="Cheat")
   case alg:
@@ -526,14 +532,15 @@ intrinsic PGG_ArgSpec_Attr(name :: MonStgElt, args, transform) -> PGGArgSpec
       return false, _;
     end if;
     // check the args
-    pargs := [* arg[3] : arg in args *];
+    // pargs := [* arg[3] : arg in args *];
+    pargs := [* #arg ge 3 select <true, arg[3]> else <false> : arg in args *];
     pos := 1;
     for aa in Arguments(a) do
       // try to parse a positional argument
       for i in [pos..#args] do
         ok, parg := PGG_Parsable(args[i][1], aa);
         if ok then
-          pargs[i] := parg;
+          pargs[i] := <true, parg>;
           pos := i+1;
           continue aa;
         end if;
@@ -544,7 +551,7 @@ intrinsic PGG_ArgSpec_Attr(name :: MonStgElt, args, transform) -> PGGArgSpec
         if ok then
           ok, parg := PGG_Parsable(args[i][1], PGG_Attribute(rest, Arguments(aa)));
           if ok then
-            pargs[i] := parg;
+            pargs[i] := <true, parg>;
             continue aa;
           else
             return false, _;
@@ -554,8 +561,12 @@ intrinsic PGG_ArgSpec_Attr(name :: MonStgElt, args, transform) -> PGGArgSpec
       // failed parsing
       return false, _;
     end for;
+    // check all the arguments are defined
+    if exists{p : p in pargs | not p[1]} then
+      return false, _;
+    end if;
     // apply the transform
-    return true, transform(pargs);
+    return true, transform([* p[2] : p in pargs *]);
   end function);
 end intrinsic;
 
@@ -905,7 +916,7 @@ declare type PGGAlg_GaloisGroup_Builtin: PGGAlg_GaloisGroup;
 declare type PGGAlg_GaloisGroup_SinglyRamified: PGGAlg_GaloisGroup;
 
 declare type PGGAlg_GaloisGroup_ResolventMethod: PGGAlg_GaloisGroup;
-declare attributes PGGAlg_GaloisGroup_ResolventMethod: groups_alg, resolvent_alg, conjugacy_alg;
+declare attributes PGGAlg_GaloisGroup_ResolventMethod: groups_alg, resolvent_alg, conjugacy_alg, use_easy_resolvents;
 
 declare type PGGAlg_ResGroups: PGGAlg;
 
@@ -951,7 +962,7 @@ declare type PGGConj_Factors: PGGConj;
 declare attributes PGGConj_Factors: factors;
 
 declare type PGGConj_Tower: PGGConj;
-declare attributes PGGConj_Tower: tower, top_field;
+declare attributes PGGConj_Tower: tower, top_field, pol;
 
 declare type PGGGloMod;
 
@@ -971,7 +982,10 @@ declare type PGGStat;
 declare type PGGStat_HasRoot: PGGStat;
 declare type PGGStat_NumRoots: PGGStat;
 declare type PGGStat_FactorDegrees: PGGStat;
+declare type PGGStat_FactorDegrees2: PGGStat;
 declare type PGGStat_Degree: PGGStat;
+declare type PGGStat_AutGroup: PGGStat;
+declare attributes PGGStat_AutGroup: conjugacy_classes;
 declare type PGGStat_Tup: PGGStat;
 declare attributes PGGStat_Tup: stats;
 declare type PGGStat_Factors: PGGStat;
@@ -979,6 +993,14 @@ declare attributes PGGStat_Factors: stat;
 
 declare type PGGStatVal;
 declare attributes PGGStatVal: stat, value, hash;
+
+declare type PGGOrder;
+declare type PGGOrder_None: PGGOrder;
+declare type PGGOrder_Random: PGGOrder;
+declare type PGGOrder_Reverse: PGGOrder;
+declare attributes PGGOrder_Reverse: order;
+declare type PGGOrder_Key: PGGOrder;
+declare attributes PGGOrder_Key: key;
 
 intrinsic PGG_AllGroups() -> PGGAlg_ResGroups_All
   {The "AllGroups" group theory algorithm for the resolvent method.}
@@ -1093,6 +1115,11 @@ intrinsic 'eq'(v1 :: PGGStatVal, v2 :: PGGStatVal) -> BoolElt
   return 'eq'(v1`stat, v1, v2);
 end intrinsic;
 
+intrinsic Print(v :: PGGStatVal)
+  {Prints.}
+  Print(v`stat, v);
+end intrinsic;
+
 intrinsic PGGStat_HasRoot_Make() -> PGGStat_HasRoot
   {Makes a new PGGStat.}
   return New(PGGStat_HasRoot);
@@ -1106,6 +1133,16 @@ end intrinsic;
 intrinsic PGGStat_FactorDegrees_Make() -> PGGStat_FactorDegrees
   {Makes a new PGGStat.}
   return New(PGGStat_FactorDegrees);
+end intrinsic;
+
+intrinsic PGGStat_FactorDegrees2_Make() -> PGGStat_FactorDegrees2
+  {"}
+  return New(PGGStat_FactorDegrees2);
+end intrinsic;
+
+intrinsic PGGStat_AutGroup_Make() -> PGGStat_AutGroup
+  {"}
+  return New(PGGStat_AutGroup);
 end intrinsic;
 
 intrinsic PGGStat_Degree_Make() -> PGGStat_Degree
@@ -1127,6 +1164,17 @@ intrinsic PGGStat_Tup_Make(args) -> PGGStat_Tup
   return S;
 end intrinsic;
 
+intrinsic ConjugacyClasses(S :: PGGStat_AutGroup, d :: RngIntElt) -> PGGSetConjCls
+  {The conjugacy classes of Sym(d).}
+  if not assigned S`conjugacy_classes then
+    S`conjugacy_classes := AssociativeArray();
+  end if;
+  if not IsDefined(S`conjugacy_classes, d) then
+    S`conjugacy_classes[d] := PGG_ConjugacyClasses(SymmetricGroup(d));
+  end if;
+  return S`conjugacy_classes[d];
+end intrinsic;
+
 intrinsic GroupStat(S :: PGGStat_HasRoot, G :: GrpPerm) -> PGGStatVal
   {The value of the statistic on the group.}
   return MakeValue(S, exists{o : o in Orbits(G) | #o eq 1});
@@ -1142,9 +1190,23 @@ intrinsic GroupStat(S :: PGGStat_FactorDegrees, G :: GrpPerm) -> PGGStatVal
   return MakeValue(S, {* #o : o in Orbits(G) *});
 end intrinsic;
 
+intrinsic GroupStat(S :: PGGStat_FactorDegrees2, G :: GrpPerm) -> PGGStatVal
+  {"}
+  return MakeValue(S, {* <#o, {*#o : o in Orbits(S)*}> where S:=Stabilizer(G, Rep(o)) : o in Orbits(G)*});
+end intrinsic;
+
 intrinsic GroupStat(S :: PGGStat_Degree, G :: GrpPerm) -> PGGStatVal
   {The value of the statistic on the group.}
   return MakeValue(S, Degree(G));
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_AutGroup, G :: GrpPerm) -> PGGStatVal
+  {"}
+  assert IsTransitive(G);
+  stab := Stabilizer(G, 1);
+  norm := Normalizer(G, stab);
+  aut := CosetImage(norm, stab);
+  return MakeValue(S, ConjugacyClasses(S, Degree(aut)) ! aut);
 end intrinsic;
 
 intrinsic GroupStat(S :: PGGStat_Tup, G :: GrpPerm) -> PGGStatVal
@@ -1172,9 +1234,22 @@ intrinsic ResolventStat(S :: PGGStat_FactorDegrees, R :: RngUPolElt[FldPad]) -> 
   return MakeValue(S, {* Degree(fac) : fac in factorization(R) *});
 end intrinsic;
 
+intrinsic ResolventStat(S :: PGGStat_FactorDegrees2, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {"}
+  return MakeValue(S, {* <Degree(fac), {* Degree(fac) : fac in factorization(ChangeRing(R, L)) *}> where L:=certs[i]`Extension where fac:=facs[i] : i in [1..#facs] *} where facs,certs:=factorization(R : Extensions));
+end intrinsic;
+
 intrinsic ResolventStat(S :: PGGStat_Degree, R :: RngUPolElt[FldPad]) -> PGGStatVal
   {The value of the statistic on the resolvent.}
   return MakeValue(S, Degree(R));
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_AutGroup, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {"}
+  K := BaseRing(R);
+  L := extension(R);
+  aut := AutomorphismGroup(L, K);
+  return MakeValue(S, ConjugacyClasses(S, Degree(aut)) ! aut);
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_Tup, R :: RngUPolElt[FldPad]) -> PGGStatVal
@@ -1192,14 +1267,29 @@ intrinsic 'eq'(S :: PGGStat, v1, v2) -> BoolElt
   return v1`value eq v2`value;
 end intrinsic;
 
+intrinsic 'eq'(S :: PGGStat_AutGroup, v1, v2) -> BoolElt
+  {"}
+  return Degree(Rep(v1`value)) eq Degree(Rep(v2`value)) and v1`value eq v2`value;
+end intrinsic;
+
 intrinsic Hash(S :: PGGStat, v) -> .
   {Hash.}
   return Hash(v`value);
 end intrinsic;
 
-intrinsic Print(v :: PGGStatVal)
-  {Prints.}
+intrinsic Hash(S :: PGGStat_AutGroup, v) -> .
+  {"}
+  return Hash(<Degree(Rep(v`value)), v`value>);
+end intrinsic;
+
+intrinsic Print(S :: PGGStat, v)
+  {"}
   printf "%o", v`value;
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_AutGroup, v)
+  {"}
+  printf "%o", GroupName(Rep(v`value));
 end intrinsic;
 
 intrinsic ScoreSubgroup(s :: PGGAlgState_ResGroups_All, subgroup :: GrpPerm) -> FldReElt
@@ -1244,19 +1334,77 @@ intrinsic TerminateScoring(s :: PGGAlgState_ResGroups_All, scores :: []) -> Bool
   end case;
 end intrinsic;
 
-intrinsic OrderSubgroups(s :: PGGAlgState_ResGroups_All, groups :: [Tup]) -> []
-  {Orders the subgroups.}
-  case s`algorithm`subgroup_order:
-  when "None":
-    return groups;
-  when "Random":
-    return [groups[i^r] : i in [1..#groups]] where r:=Random(SymmetricGroup(#groups));
-  when "Index":
-    return Sort(groups, func<A,B| #A[1]-#B[1]>);
-  else
-    assert false;
-  end case;
+intrinsic PGGOrder_None_Make() -> PGGOrder_None
+  {Makes an ordering.}
+  return New(PGGOrder_None);
 end intrinsic;
+
+intrinsic PGGOrder_Random_Make() -> PGGOrder_Random
+  {"}
+  return New(PGGOrder_Random);
+end intrinsic;
+
+intrinsic PGGOrder_Reverse_Make(order :: PGGOrder) -> PGGOrder_Reverse
+  {"}
+  o := New(PGGOrder_Reverse);
+  o`order := order;
+  return o;
+end intrinsic;
+
+intrinsic PGGOrder_Key_Make(key :: UserProgram) -> PGGOrder_Key
+  {"}
+  o := New(PGGOrder_Key);
+  o`key := key;
+  return o;
+end intrinsic;
+
+intrinsic PGGOrder_Key_Index_Make() -> PGGOrder_Key
+  {"}
+  return PGGOrder_Key_Make(func<x,s | Index(s`overgroup, x[1])>);
+end intrinsic;
+
+intrinsic PGGOrder_Key_OrbitIndex_Make() -> PGGOrder_Key
+  {"}
+  return PGGOrder_Key_Make(func<x,s | Index(s`overgroup, &meet[Stabilizer(s`overgroup, o) : o in Orbits(x[1])])>);
+end intrinsic;
+
+intrinsic Sort(xs :: [], order :: PGGOrder_None : Data:=false) -> []
+  {Sorts xs according to the given ordering.}
+  return xs;
+end intrinsic;
+
+intrinsic Sort(xs :: [], order :: PGGOrder_Random : Data:=false) -> []
+  {"}
+  return [xs[i^r] : i in [1..#xs]] where r:=Random(SymmetricGroup(#xs));
+end intrinsic;
+
+intrinsic Sort(xs :: [], order :: PGGOrder_Reverse : Data:=false) -> []
+  {"}
+  return Reverse(Sort(xs, order`order : Data:=Data));
+end intrinsic;
+
+intrinsic Sort(xs :: [], order :: PGGOrder_Key : Data:=false) -> []
+  {"}
+  keys := [order`key(x, Data) : x in xs];
+  Sort(~keys, ~permut);
+  return [xs[i^permut] : i in [1..#xs]];
+end intrinsic;
+
+// intrinsic OrderSubgroups(s :: PGGAlgState_ResGroups_All, groups :: [Tup]) -> []
+//   {Orders the subgroups.}
+//   case s`algorithm`subgroup_order:
+//   when "None":
+//     return groups;
+//   when "Random":
+//     return [groups[i^r] : i in [1..#groups]] where r:=Random(SymmetricGroup(#groups));
+//   when "Index":
+//     return sort_by(groups, func<G | -#G[1]>);
+//   when "OrbitIndex":
+//     return sort_by(groups, func<G | -#&meet[Stabilizer(s`overgroup, o) : o in Orbits(G[1])]>);
+//   else
+//     assert false;
+//   end case;
+// end intrinsic;
 
 intrinsic UselessSubgroups(s :: PGGAlgState_ResGroups_All, subgroups :: [Tup])
   {Declares we are done considering these groups.}
@@ -1304,7 +1452,7 @@ intrinsic Subgroup(s :: PGGAlgState_ResGroups_All) -> GrpPerm
     // get the next tranche of groups
     groups := SubgroupTranche(s);
     // reorder them
-    groups := OrderSubgroups(s, groups);
+    groups := Sort(groups, s`algorithm`subgroup_order : Data:=s);
     // score them
     scores := [car<Universe(groups), RealField()>| ];
     useless := [Universe(groups)| ];
@@ -1334,7 +1482,9 @@ end intrinsic;
 intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_All, resolvent :: RngUPolElt[FldPad], subgroup :: GrpPerm)
   {Use the resolvent to get information about the Galois group.}
   rstat := ResolventStat(s`algorithm`statistic, resolvent);
+  vprint PGG_GaloisGroup: "resolvent statistic =", rstat;
   h := CosetAction(s`overgroup, subgroup);
+  vprint PGG_GaloisGroup: "group statistics =", {* GroupStat(s`algorithm`statistic, h(G)) : G in s`possible_groups *};
   s`possible_groups := [G : G in s`possible_groups | gstat eq rstat where gstat := GroupStat(s`algorithm`statistic, h(G))];
   vprint PGG_GaloisGroup: "#possible groups =", #s`possible_groups;
 end intrinsic;
@@ -1590,6 +1740,7 @@ intrinsic Conjugacy(alg :: PGGAlg_Conjugacy_RamTower, f :: RngUPolElt[FldPad] : 
   assert #facs eq 1;
   t := ramification_tower(certs[1]`Extension, BaseRing(f));
   c := New(PGGConj_Tower);
+  c`pol := f;
   c`tower := [Conjugacy(alg`next, DefiningPolynomial(t[i]) : IsTransitive, TopField:=t[i]) : i in [2..#t]];
   c`group := WreathProduct([cc`group : cc in Reverse(c`tower)]);
   c`base_field := BaseRing(f);
@@ -1605,6 +1756,23 @@ intrinsic Conjugacy(alg :: PGGAlg_Conjugacy_RamTower, f :: RngUPolElt[FldPad] : 
   end for;
   assert Degree(c) eq degree;
   return c;
+end intrinsic;
+
+intrinsic EasyResolvents(conj :: PGGConj_Symmetric) -> []
+  {Some trivial resolvents based on the initial presentation of the problem.}
+  return [<conj`pol, Stabilizer(conj`group, 1)>];
+end intrinsic;
+
+intrinsic EasyResolvents(conj :: PGGConj_Factors) -> []
+  {Some trivial resolvents based on the initial presentation of the problem.}
+  // TODO: resolvents corresponding to each factor, and the whole polynomial?
+  not_implemented("easy resolvents: factors");
+end intrinsic;
+
+intrinsic EasyResolvents(conj :: PGGConj_Tower) -> []
+  {Some trivial resolvents based on the initial presentation of the problem.}
+  // TODO: more resolvents corresponding to pieces of the tower?
+  return [<conj`pol, Stabilizer(conj`group, 1)>];
 end intrinsic;
 
 intrinsic Print(conj :: PGGConj)
@@ -1788,7 +1956,7 @@ intrinsic PGGAlg_ResGroups_All_Make(:Statistic:=false, SubgroupTranche:=false, S
   alg := New(PGGAlg_ResGroups_All);
   alg`statistic := Statistic cmpne false select Statistic else PGGStat_FactorDegrees_Make();
   alg`subgroup_tranche := SubgroupTranche cmpne false select SubgroupTranche else "Index";
-  alg`subgroup_order := SubgroupOrder cmpne false select SubgroupOrder else "Index";
+  alg`subgroup_order := SubgroupOrder cmpne false select SubgroupOrder else PGGOrder_Key_Index_Make();
   alg`subgroup_score := SubgroupScore cmpne false select SubgroupScore else "Information";
   alg`subgroup_choice := SubgroupChoice cmpne false select SubgroupChoice else "Best";
   return alg;
@@ -1800,12 +1968,13 @@ intrinsic PGGAlg_ResEval_Global_Make() -> PGGAlg_ResEval_Global
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_GaloisGroup_ResolventMethod_Make( : GroupsAlg:=false, ResolventAlg:=false, ConjugacyAlg:=false) -> PGGAlg_GaloisGroup_ResolventMethod
+intrinsic PGGAlg_GaloisGroup_ResolventMethod_Make( : GroupsAlg:=false, ResolventAlg:=false, ConjugacyAlg:=false, UseEasyResolvents:=false) -> PGGAlg_GaloisGroup_ResolventMethod
   {The resolvent method algorithm for computing Galois groups.}
   alg := New(PGGAlg_GaloisGroup_ResolventMethod);
   alg`groups_alg := GroupsAlg cmpne false select GroupsAlg else PGGAlg_ResGroups_All_Make();
   alg`resolvent_alg := ResolventAlg cmpne false select ResolventAlg else PGGAlg_ResEval_Global_Make();
   alg`conjugacy_alg := ConjugacyAlg cmpne false select ConjugacyAlg else PGGAlg_Conjugacy_Factors_Make(:Next:=PGGAlg_Conjugacy_RamTower_Make());
+  alg`use_easy_resolvents := UseEasyResolvents;
   return alg;
 end intrinsic;
 
@@ -1835,21 +2004,37 @@ intrinsic GaloisGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt
   vprint PGG_GaloisGroup: "overgroup =", W;
   Swap(t, "start groups");
   gst := Start(Alg`groups_alg, conj, W);
-  vprint PGG_GaloisGroup: "main loop...";
-  while not IsDone(gst) do
-    Swap(t, "subgroup");
-    U := Subgroup(gst);
-    vprint PGG_GaloisGroup: "subgroup =", U;
-    vprint PGG_GaloisGroup: "subgroup index =", Index(W, U);
-    Swap(t, "invariant");
-    I := RelativeInvariant(W, U);
-    vprint PGG_GaloisGroup: "invariant =", I;
-    Swap(t, "resolvent");
-    R := Resolvent(rst, I, U);
-    vprint PGG_GaloisGroup: "resolvent =", R;
-    Swap(t, "process resolvent");
-    ProcessResolvent(gst, R, U);
-  end while;
+  if Alg`use_easy_resolvents then
+    vprint PGG_GaloisGroup: "easy resolvents...";
+    Swap(t, "easy resolvents");
+    RUs := EasyResolvents(conj);
+    for RU in RUs do
+      if IsDone(gst) then
+        break;
+      end if;
+      R, U := Explode(RU);
+      Swap(t, "process resolvent");
+      ProcessResolvent(gst, R, U);
+    end for;
+  end if;
+  if not IsDone(gst) then
+    vprint PGG_GaloisGroup: "main loop...";
+    repeat
+      Swap(t, "subgroup");
+      U := Subgroup(gst);
+      vprint PGG_GaloisGroup: "subgroup =", U;
+      vprint PGG_GaloisGroup: "orbits =", Orbits(U);
+      vprint PGG_GaloisGroup: "subgroup index =", Index(W, U);
+      Swap(t, "invariant");
+      I := RelativeInvariant(W, U);
+      vprint PGG_GaloisGroup: "invariant =", I;
+      Swap(t, "resolvent");
+      R := Resolvent(rst, I, U);
+      vprint PGG_GaloisGroup: "resolvent =", R;
+      Swap(t, "process resolvent");
+      ProcessResolvent(gst, R, U);
+    until IsDone(gst);
+  end if;
   vprint PGG_GaloisGroup: "success";
   Pop(t);
   if GetVerbose("PGG_GaloisGroup") gt 0 then
@@ -1993,6 +2178,12 @@ end intrinsic;
 function parse_algorithm(alg)
 
   specs := PGG_ArgSpec_ManyRecursive(procedure (set, get)
+
+    BOOL := PGG_ArgSpec_Union([
+      PGG_ArgSpec_Attr("True", [], func<args | true>),
+      PGG_ArgSpec_Attr("False", [], func<args | false>)
+    ]);
+
     CONJUGACY := set("CONJUGACY", PGG_ArgSpec_Union([
       PGG_ArgSpec_ISA(PGGAlg_Conjugacy),
       PGG_ArgSpec_Literal(false),
@@ -2019,7 +2210,9 @@ function parse_algorithm(alg)
       PGG_ArgSpec_Attr("HasRoot", [], func<args | PGGStat_HasRoot_Make()>),
       PGG_ArgSpec_Attr("NumRoots", [], func<args | PGGStat_NumRoots_Make()>),
       PGG_ArgSpec_Attr("FactorDegrees", [], func<args | PGGStat_FactorDegrees_Make()>),
+      PGG_ArgSpec_Attr("FactorDegrees2", [], func<args | PGGStat_FactorDegrees2_Make()>),
       PGG_ArgSpec_Attr("Degree", [], func<args | PGGStat_Degree_Make()>),
+      PGG_ArgSpec_Attr("AutGroup", [], func<args | PGGStat_AutGroup_Make()>),
       PGG_ArgSpec_AttrList("Tup", get("STATISTIC"), func<args | PGGStat_Tup_Make(args)>),
       PGG_ArgSpec_Attr("Factors", [<get("STATISTIC"), "Stat", false>], func<args | PGGStat_Factors_Make(:Stat:=args[1])>)
     ]));
@@ -2031,12 +2224,15 @@ function parse_algorithm(alg)
       PGG_ArgSpec_Attr("MostUseful")
     ]);
 
-    SUBGROUP_ORDER := PGG_ArgSpec_Union([
+    SUBGROUP_ORDER := set("SUBGROUP_ORDER", PGG_ArgSpec_Union([
+      PGG_ArgSpec_ISA(PGGOrder),
       PGG_ArgSpec_Literal(false),
-      PGG_ArgSpec_Attr("None"),
-      PGG_ArgSpec_Attr("Random"),
-      PGG_ArgSpec_Attr("Index")
-    ]);
+      PGG_ArgSpec_Attr("None", [], func<args | PGGOrder_None_Make()>),
+      PGG_ArgSpec_Attr("Random", [], func<args | PGGOrder_Random_Make()>),
+      PGG_ArgSpec_Attr("Reverse", [<get("SUBGROUP_ORDER"), "Order">], func<args | PGGOrder_Reverse_Make(args[1])>),
+      PGG_ArgSpec_Attr("Index", [], func<args | PGGOrder_Key_Index_Make()>),
+      PGG_ArgSpec_Attr("OrbitIndex", [], func<args | PGGOrder_Key_OrbitIndex_Make()>)
+    ]));
 
     SUBGROUP_SCORE := PGG_ArgSpec_Union([
       PGG_ArgSpec_Literal(false),
@@ -2084,8 +2280,9 @@ function parse_algorithm(alg)
         [ <RESGROUPS,"Groups",false>
         , <RESEVAL,"Eval",false>
         , <CONJUGACY,"Conj",false>
+        , <BOOL,"UseEasyResolvents",false>
         ],
-        func<args | PGGAlg_GaloisGroup_ResolventMethod_Make(:GroupsAlg:=args[1], ResolventAlg:=args[2], ConjugacyAlg:=args[3])>
+        func<args | PGGAlg_GaloisGroup_ResolventMethod_Make(:GroupsAlg:=args[1], ResolventAlg:=args[2], ConjugacyAlg:=args[3], UseEasyResolvents:=args[4])>
       ),
       PGG_ArgSpec_Attr(
         "Builtin",
