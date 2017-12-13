@@ -75,10 +75,14 @@ STATISTIC
 | "NumRoots"            The number of roots of the resolvent (i.e. the number of fixed points in the group)
 | "FactorDegrees"       The multiset of degrees of irreducible factors (i.e. the sizes of the orbits); equivalent to
                           but more efficient than Factors[Degree]
+| "FactorDegrees2"      Like FactorDegrees, but also looks at the factors of the factors over the fields defined by
+                          the factors.
 | "Factors"             A multiset of statistics corresponding to the irreducible factors
   [ STATISTIC              The statistic to use on each factor
   ]
 | "Degree"              The degree.
+| "AutGroup"            The automorphism group (assuming f is irreducible); i.e. N_G(S)/S where S=Stab_G(1)
+                          up to S_d conjugacy, where d is the order of the group.
 | "Tup"                 A tuple of statistics.
   [ STATISTIC             The list of statistics to use for each component.
   , ...
@@ -93,6 +97,10 @@ SUBGROUP_ORDER
 = "None"                No reordering.
 | "Random"              Shuffle the groups randomly.
 | "Index"               Sort by index, lowest first.
+| "OrbitIndex"          Sort by the index of the stablizer of the orbits.
+| "Reverse"             The reverse of...
+  [ SUBGROUP_ORDER        ... this ordering.
+  ]
 
 SUBGROUP_SCORE
 = "IsUseful"            1 if useful, -1 if not.
