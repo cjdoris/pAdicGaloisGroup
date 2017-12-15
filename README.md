@@ -50,10 +50,7 @@ GALOISGROUP
 GROUP_ALG
 = "All"                  Enumerate all possible Galois groups, then try to eliminate possibilities
   [ STATISTIC              The statistic used to distinguish between groups
-  , SUBGROUP_TRANCHE       How we choose sets (tranches) of possible subsets to form resolvents from
-  , SUBGROUP_ORDER         How we then sort those subgroups
-  , SUBGROUP_SCORE         How we then score the subgroups
-  , SUBGROUP_CHOICE        How we then choose a subgroup
+  , SUBGROUP_CHOICE        How we choose which subgroups to form resolvents from
   ]
 
 RESEVAL_ALG
@@ -87,6 +84,36 @@ STATISTIC
   [ STATISTIC             The list of statistics to use for each component.
   , ...
   ]
+
+SUBGROUP_CHOICE
+= "All"                 Consider all subgroups
+  [ SUBGROUP_PRIORITY     How we select among these
+  ]
+| "Index"               Consider subgroups by index
+  [ SUBGROUP_PRIORITY     How we select among these
+  , INDEX_PRIORITY        How we select indices
+  ]
+| "OrbitIndex"          Consider subgroups by orbit index and index
+  [ SUBGROUP_PRIORITY     How we select among these
+  , OINDEX_PRIORITY       How we select indices
+  ]
+| "MostUseful"          Maximal subgroups of subgroups which were previously useful. (Very experimental!)
+  [ SUBGROUP_PRIORITY     How we select among these
+  ]
+
+SUBGROUP_PRIORITY       Takes a sequence of possible subgroups and returns it in priority order
+= "Null"                  Does nothing
+| "Random"                Random ordering
+| "Reverse"               Reverse of...
+  [ SUBGROUP_PRIORITY       ... this
+  ]
+| EXPRESSION              An expression in: "Index", "OrbitIndex", "Diversity", "Information"
+| "Filter"                Only keeps items satisfying...
+  [ EXPRESSION               ... this expression
+  , SUBGROUP_PRIORITY        Then prioritize in this manner
+  ]
+
+
 
 SUBGROUP_TRANCHE
 = "All"                 Get all subgroups. Only practical for low degrees.
