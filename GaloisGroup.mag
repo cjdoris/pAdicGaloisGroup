@@ -1071,6 +1071,34 @@ intrinsic SubgroupTranche(s :: PGGAlgState_ResGroups_All) -> []
       s`possible_subgroups`cur_groups := enumerate(s`possible_subgroups`all_groups[n]);
     end while;
     return [x : x in s`possible_subgroups`cur_groups];
+  when "OrbitIndex":
+    if not assigned s`possible_subgroups then
+      s`possible_subgroups := rec<recformat<indices, ii, all_stabilizers, cur_stabilizers, si, all_groups, cur_groups> | indices:=Sort([<d,e> : e in Divisors(d), d in Divisors(Order(s`overgroup))]), ii:=0, all_stabilizers:=AssociativeArray(), si:=0, all_groups:=AssociativeArray(), cur_stabilizers:=[], cur_groups:=[]>;
+    end if;
+    while #s`possible_subgroups`cur_groups eq 0 do
+      while s`possible_subgroups`si ge #s`possible_subgroups`cur_stabilizers do
+        s`possible_subgroups`ii +:= 1;
+        s`possible_subgroups`si := 0;
+        idx, ridx := Explode(s`possible_subgroups`indices[s`possible_subgroups`ii]);
+        oidx := xdiv(idx, ridx);
+        vprint PGG_GaloisGroup: "idx, oidx, ridx =", idx, oidx, ridx;
+        if not IsDefined(s`possible_subgroups`all_stabilizers, oidx) then
+          s`possible_subgroups`all_stabilizers[oidx] := [Stabilizer(s`overgroup, os) : os in OrbitsOfSubgroups(s`conjugacy, oidx)];
+        end if;
+        s`possible_subgroups`cur_stabilizers := s`possible_subgroups`all_stabilizers[oidx];
+        assert forall{S : S in s`possible_subgroups`cur_stabilizers | Index(s`overgroup, S) eq oidx};
+      end while;
+      s`possible_subgroups`si +:= 1;
+      vprint PGG_GaloisGroup: "stabilizer", s`possible_subgroups`si, "of", #s`possible_subgroups`cur_stabilizers;
+      idx, ridx := Explode(s`possible_subgroups`indices[s`possible_subgroups`ii]);
+      if not IsDefined(s`possible_subgroups`all_groups, <idx, ridx, s`possible_subgroups`si>) then
+        s`possible_subgroups`all_groups[<idx, ridx, s`possible_subgroups`si>] := [x`subgroup : x in Subgroups(S : IndexEqual:=ridx)]
+          where S := s`possible_subgroups`cur_stabilizers[s`possible_subgroups`si];
+      end if;
+      s`possible_subgroups`cur_groups := enumerate(s`possible_subgroups`all_groups[<idx, ridx, s`possible_subgroups`si>]);
+      assert forall{U : U in s`possible_subgroups`cur_groups | Index(s`overgroup, U[1]) eq idx};
+    end while;
+    return [x : x in s`possible_subgroups`cur_groups];
   when "MostUseful":
     W := s`overgroup;
     if not assigned s`possible_subgroups then
@@ -1426,7 +1454,7 @@ intrinsic UselessSubgroups(s :: PGGAlgState_ResGroups_All, subgroups :: [Tup])
     for x in subgroups do
       Undefine(~s`possible_subgroups, x[2]);
     end for;
-  when "Index":
+  when "Index", "OrbitIndex":
     for x in subgroups do
       Undefine(~s`possible_subgroups`cur_groups, x[2]);
     end for;
@@ -1446,7 +1474,7 @@ end intrinsic;
 intrinsic UsefulSubgroup(s :: PGGAlgState_ResGroups_All, subgroup :: Tup)
   {Declare that we are using the given subgroup.}
   case s`algorithm`subgroup_tranche:
-  when "All", "Index":
+  when "All", "Index", "OrbitIndex":
     UselessSubgroups(s, [subgroup]);
   when "MostUseful":
     _, i, c, _ := Explode(subgroup);
@@ -2206,10 +2234,8 @@ intrinsic GaloisGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt
     repeat
       Swap(t, "subgroup");
       U := Subgroup(gst);
-      vprint PGG_GaloisGroup: "subgroup =", U;
-      vprint PGG_GaloisGroup: "orbits =", Orbits(U);
-      vprint PGG_GaloisGroup: "partitions =", [<o, AllPartitions(Uo) where Uo:=OrbitImage(U,o)> : o in Orbits(U)];
       vprint PGG_GaloisGroup: "subgroup index =", Index(W, U);
+      vprint PGG_GaloisGroup: "orbit-relative index =", Index(Stabilizer(W, Orbits(U)), U);
       Swap(t, "invariant");
       I := RelativeInvariant(W, U);
       vprint PGG_GaloisGroup: "invariant =", I;
@@ -2406,6 +2432,7 @@ function parse_algorithm(alg)
       PGG_ArgSpec_Literal(false),
       PGG_ArgSpec_Attr("All"),
       PGG_ArgSpec_Attr("Index"),
+      PGG_ArgSpec_Attr("OrbitIndex"),
       PGG_ArgSpec_Attr("MostUseful")
     ]);
 
