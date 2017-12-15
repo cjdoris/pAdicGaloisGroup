@@ -24,6 +24,18 @@ function sort_by(xs, key)
   return xs;
 end function;
 
+function group_by(xs, key)
+  A := AssociativeArray();
+  for x in xs do
+    k := key(x);
+    if IsDefined(A, k) then
+      Append(~A[k], x);
+    else
+      A[k] := [x];
+    end if;
+  end for;
+end function;
+
 function enumerate(xs)
   return [<xs[i], i> : i in [1..#xs] | IsDefined(xs, i)];
 end function;
@@ -953,6 +965,7 @@ declare attributes PGGConj
   , is_known        // [* false *] or [* true, G *] where G is the actual Galois group
   , is_transitive   // true if the actual Galois group is known to be transitive
   , overgroup       // an overgroup of the actual Galois group (a subgroup of `group`)
+  , orbits_of_subgroups // for cacheing OrbitsOfSubgroups
   ;
 
 declare type PGGConj_Symmetric: PGGConj;
@@ -962,7 +975,7 @@ declare type PGGConj_Factors: PGGConj;
 declare attributes PGGConj_Factors: factors;
 
 declare type PGGConj_Tower: PGGConj;
-declare attributes PGGConj_Tower: tower, top_field, pol;
+declare attributes PGGConj_Tower: tower, top_field, pol, orbits_of_subgroups_above;
 
 declare type PGGGloMod;
 
@@ -1775,6 +1788,177 @@ intrinsic EasyResolvents(conj :: PGGConj_Tower) -> []
   return [<conj`pol, Stabilizer(conj`group, 1)>];
 end intrinsic;
 
+intrinsic OrbitsOfSubgroups(conj :: PGGConj, n :: RngIntElt) -> []
+  {All possible orbit systems of subgroups of conj`overgroup of index n, up to conjugacy.}
+  require n ge 1: "n must be positive";
+  if not IsDivisibleBy(#conj`group, n) then
+    return [];
+  end if;
+  if not assigned conj`orbits_of_subgroups then
+    conj`orbits_of_subgroups := AssociativeArray();
+  end if;
+  if not IsDefined(conj`orbits_of_subgroups, n) then
+    conj`orbits_of_subgroups[n] := _OrbitsOfSubgroups(conj, n);
+  end if;
+  return conj`orbits_of_subgroups[n];
+end intrinsic;
+
+intrinsic _OrbitsOfSubgroups(conj :: PGGConj_Symmetric, n :: RngIntElt) -> []
+  {"}
+  // absolutely any partition of d corresponds to an orbit system for S_d: for such a partition, consider an element whose cycles are this partition, its orbits are precisely the partition.
+  // what is the index of a partition? given partition P=[X_1,...,X_k] with |X_i|=d_i (so sum_i d_i = d) then Stab(P) = prod_i S_(d_i) has order prod_i d_i!, so index d!/prod_i d_i! = multinomial(d; d_1,...,d_k).
+  todo := [<[Z|], Degree(conj), Degree(conj), n>];
+  ret := [];
+  while #todo gt 0 do
+    // get an item from the todo list
+    pop_start(~item, ~todo);
+    partial, degree, limit, index := Explode(item);
+    // are we done?
+    if degree eq 0 then
+      // are we valid?
+      if index eq 1 then
+        Append(~ret, [{d+1..d+partial[i]} where d:=&+partial[1..i-1] : i in [1..#partial]]);
+      end if;
+      continue;
+    end if;
+    // if not, choose a new element to add to the partition
+    // we consider d and degree-d and the same time
+    for d in [0..degree div 2] do
+      if d gt limit then
+        break;
+      end if;
+      x := Binomial(degree, d);
+      if x gt index then
+        break;
+      end if;
+      ok, y := IsDivisibleBy(index, x);
+      if ok then
+        dd := degree - d;
+        if d gt 0 then
+          Append(~todo, <Append(partial, d), dd, d, y>);
+        end if;
+        if dd le limit and dd ne d then
+          Append(~todo, <Append(partial, dd), d, dd, y>);
+        end if;
+      end if;
+    end for;
+  end while;
+  return ret;
+end intrinsic;
+
+intrinsic _OrbitsOfSubgroups(conj :: PGGConj_Tower, n :: RngIntElt) -> []
+  {"}
+  return _OrbitsOfSubgroups(conj, n, 1);
+end intrinsic;
+
+// given a sequence ns of integers and an integer m, finds all the sequences of integers cs so that sum_i cs_i * ns_i = m
+function dot_product_inverse(ns, m)
+  todo := [<[Z|], m>];
+  ret := [PowerSequence(Z)|];
+  while #todo gt 0 do
+    pop_start(~item, ~todo);
+    partial, target := Explode(item);
+    // done?
+    if #partial eq #ns then
+      if target eq 0 then
+        Append(~ret, partial);
+      end if;
+      continue;
+    end if;
+    // loop over possible next coefficients
+    n := ns[#partial+1];
+    for c in [0..target div n] do
+      Append(~todo, <Append(partial, c), target - c*n>);
+    end for;
+  end while;
+  return ret;
+end function;
+
+function factorizations_of_length(N, n : Max:=N)
+  if n eq 0 then
+    error if N ne 1, "impossible";
+    return [];
+  elif n eq 1 then
+    return N le Max select [[N]] else [];
+  else
+    assert n gt 1;
+    return &cat[PowerSequence(PowerSequence(Z))| [Append(facs, d) : facs in factorizations_of_length(xdiv(N, d), n-1 : Max:=d)] : d in Divisors(N) | d le Max];
+  end if;
+end function;
+
+intrinsic _OrbitsOfSubgroups(conj :: PGGConj_Tower, n :: RngIntElt, m :: RngIntElt) -> []
+  {"}
+  assert m ge 1 and m le #conj`tower;
+  if not assigned conj`orbits_of_subgroups_above then
+    conj`orbits_of_subgroups_above := AssociativeArray();
+  end if;
+  if not IsDefined(conj`orbits_of_subgroups_above, <n,m>) then
+    if m eq #conj`tower then
+      ans := OrbitsOfSubgroups(conj`tower[m], n);
+    elif Degree(conj`tower[m]) eq 1 then
+      ans := _OrbitsOfSubgroups(conj, n, m+1);
+    elif Degree(conj`tower[m]) eq 2 then
+      upper_deg := &*[Z| Degree(conj`tower[i]) : i in [m+1..#conj`tower]];
+      ans := [];
+      case #conj`tower[m]`group:
+      when 1:
+        for n1 in Divisors(n) do
+          n2 := xdiv(n, n1);
+          if n2 lt n1 then 
+            break;
+          elif n2 eq n1 then
+            oss := _OrbitsOfSubgroups(conj, n1, m+1);
+            ans cat:= [[{x : x in o} : o in os1] cat [{x+upper_deg : x in o} : o in os2] where os1:=oss[i] where os2:=oss[j] : j in [i+1..#oss], i in [1..#oss]];
+          else
+            oss1 := _OrbitsOfSubgroups(conj, n1, m+1);
+            oss2 := _OrbitsOfSubgroups(conj, n2, m+1);
+            ans cat:= [[{x : x in o} : o in os1] cat [{x+upper_deg : x in o} : o in os2] : os1 in oss1, os2 in oss2];
+          end if;
+        end for;
+      when 2:
+        ok, nrest := IsDivisibleBy(n, 2);
+        if ok then
+          for n1 in Divisors(nrest) do
+            n2 := xdiv(nrest, n1);
+            if n2 lt n1 then
+              break;
+            elif n2 eq n1 then
+              oss := _OrbitsOfSubgroups(conj, n1, m+1);
+              ans cat:= [[{x : x in o} : o in os1] cat [{x+upper_deg : x in o} : o in os2] where os1:=oss[i] where os2:=oss[j] : j in [i..#oss], i in [1..#oss]];
+            else
+              oss1 := _OrbitsOfSubgroups(conj, n1, m+1);
+              oss2 := _OrbitsOfSubgroups(conj, n2, m+1);
+              ans cat:= [[{x : x in o} : o in os1] cat [{x+upper_deg : x in o} : o in os2] : os1 in oss1, os2 in oss2];
+            end if;
+          end for;
+        end if;
+        ok, nrest := IsSquare(n);
+        if ok then
+          oss := _OrbitsOfSubgroups(conj, nrest, m+1);
+          ans cat:= [[{x : x in o} join {x+upper_deg : x in o} : o in os] : os in oss];
+        end if;
+      else
+        assert false;
+      end case;
+    else
+      // TODO: implement this in general
+      //       this is quite tricky if we want to avoid conjugate answers:
+      //       - first find orbits for the base group
+      //       - group these by conjugacy
+      //       - distribute a factorization of the remaining index over the conjugacy classes
+      //       - then distribute over each orbit in each class, but with an ordering enforced
+      //       - group orbits in each class further by the index they just received
+      //       - find orbits for each of these indices
+      //       - distribute these over each class, but with an ordering enforced
+      //       - take the product of all these choices
+      //       maybe it's worth changing the return value of OrbitsOfSubgroups to group the orbits by conjugacy
+      not_implemented("OrbitsOfSubgroups");
+    end if;
+    conj`orbits_of_subgroups_above[<n,m>] := ans;
+  end if;
+  return conj`orbits_of_subgroups_above[<n,m>];
+end intrinsic;
+
 intrinsic Print(conj :: PGGConj)
   {"}
   _Print(conj);
@@ -2024,6 +2208,7 @@ intrinsic GaloisGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt
       U := Subgroup(gst);
       vprint PGG_GaloisGroup: "subgroup =", U;
       vprint PGG_GaloisGroup: "orbits =", Orbits(U);
+      vprint PGG_GaloisGroup: "partitions =", [<o, AllPartitions(Uo) where Uo:=OrbitImage(U,o)> : o in Orbits(U)];
       vprint PGG_GaloisGroup: "subgroup index =", Index(W, U);
       Swap(t, "invariant");
       I := RelativeInvariant(W, U);
