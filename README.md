@@ -33,24 +33,29 @@ Call `SetVerbose("PGG_GaloisGroup", 1);` to print out information as the algorit
 
 ## Algorithm parameter
 
-Our implementation is modular, meaning that different algorithms are used in various places. An algorithm is specified by a string of the form `NAME[ARG1,ARG2,...]` where the part in brackets is optional. The arguments have an order, but in general they have defaults and can be skipped over, so `ARM[All,Global]`, `ARM[All]`, `ARM[Global]` and `ARM` might all be interpreted the same, assuming the arguments to `ARM` have defaults `All` and `Global`.
+Our implementation is modular, meaning that different algorithms are used in various places. An algorithm is specified by a string of the form `NAME[ARG1,ARG2,...]` where the part in brackets is optional.
+
+The arguments have an order, but in general they have defaults and can be skipped over, so `ARM[All,Global]`, `ARM[All]`, `ARM[Global]` and `ARM` might all be interpreted the same, assuming the arguments to `ARM` have defaults `All` and `Global`.
+
+Arguments can be given by their name instead of by their order, so `ARM[Eval:Global,All]` is interpreted the same as `ARM[All,Global]`.
 
 Here we notate the current options for the algorithms. The `Alg` parameter to `PGG_GaloisGroup` must be a `GALOISGROUP` algorithm.
 
 ```
 GALOISGROUP
 = "ARM"                  The absolute resolvent method
-  [ GROUP_ALG              The algorithm used for the group theory parts
-  , RESEVAL_ALG            The algorithm used to evaluate resolvents
-  , CONJUGACY              Specifies up to what conjugacy the Galois group will be defined
+  [ Groups: GROUP_ALG        The algorithm used for the group theory parts
+  , Eval: RESEVAL_ALG        The algorithm used to evaluate resolvents
+  , Conj: CONJUGACY          Specifies up to what conjugacy the Galois group will be defined
+  , UseEasyResolvents: BOOL  When true, start by using cheap resolvents
   ]
 | "SinglyRamified"       The algorithm due to Greve for singly ramified extensions
 | "Builtin"              Use Magma's builtin GaloisGroup intrinsic
 
 GROUP_ALG
 = "All"                  Enumerate all possible Galois groups, then try to eliminate possibilities
-  [ STATISTIC              The statistic used to distinguish between groups
-  , SUBGROUP_CHOICE        How we choose which subgroups to form resolvents from
+  [ Stat: STATISTIC          The statistic used to distinguish between groups
+  , Choice: SUBGROUP_CHOICE  How we choose which subgroups to form resolvents from
   ]
 
 RESEVAL_ALG
@@ -58,13 +63,13 @@ RESEVAL_ALG
 
 CONJUGACY
 = "Symmetric"           The symmetric group
-  [ GALOISGROUP           Use this algorithm to compute the actual Galois group
+  [ GALOISGROUP             Use this algorithm to compute the actual Galois group
   ]
 | "Factors"             Factorize the polynomial then...
-  [ CONJUGACY             ... apply this conjugacy to each factor
+  [ CONJUGACY               ... apply this conjugacy to each factor
   ]
 | "RamTower"            Get the ramification filtration of the extension defined by the polynomial, then...
-  [ CONJUGACY             ... apply this conjugacy to each sub-extension
+  [ CONJUGACY               ... apply this conjugacy to each sub-extension
   ]
 
 STATISTIC
@@ -75,7 +80,7 @@ STATISTIC
 | "FactorDegrees2"      Like FactorDegrees, but also looks at the factors of the factors over the fields defined by
                           the factors.
 | "Factors"             A multiset of statistics corresponding to the irreducible factors
-  [ STATISTIC              The statistic to use on each factor
+  [ STATISTIC               The statistic to use on each factor
   ]
 | "Degree"              The degree.
 | "AutGroup"            The automorphism group (assuming f is irreducible); i.e. N_G(S)/S where S=Stab_G(1)
@@ -90,15 +95,14 @@ SUBGROUP_CHOICE
   [ SUBGROUP_PRIORITY     How we select among these
   ]
 | "Index"               Consider subgroups by index
-  [ SUBGROUP_PRIORITY     How we select among these
-  , INDEX_PRIORITY        How we select indices
+  [ SUBGROUP_PRIORITY       How we select among these
+  , If: EXPRESSION          A filter on the indices to use, with free variable "idx"
+  , Sort: EXPRESSION        Sort indices by this expression in "idx"
   ]
 | "OrbitIndex"          Consider subgroups by orbit index and index
-  [ SUBGROUP_PRIORITY     How we select among these
-  , OINDEX_PRIORITY       How we select indices
-  ]
-| "MostUseful"          Maximal subgroups of subgroups which were previously useful. (Very experimental!)
-  [ SUBGROUP_PRIORITY     How we select among these
+  [ SUBGROUP_PRIORITY       How we select among these
+  , If: EXPRESSION          A filter on the indices to use, with free variables "idx", "oidx", "ridx"
+  , Sort: EXPRESSION        Sort by this expression in "idx", "oidx", "ridx"
   ]
 
 SUBGROUP_PRIORITY       Takes a sequence of possible subgroups and returns it in priority order
@@ -107,34 +111,22 @@ SUBGROUP_PRIORITY       Takes a sequence of possible subgroups and returns it in
 | "Reverse"               Reverse of...
   [ SUBGROUP_PRIORITY       ... this
   ]
-| EXPRESSION              An expression in: "Index", "OrbitIndex", "Diversity", "Information"
-| "Filter"                Only keeps items satisfying...
-  [ EXPRESSION               ... this expression
-  , SUBGROUP_PRIORITY        Then prioritize in this manner
+| EXPRESSION              Sort by this expression, which may have these free variables:
+                            "Index", "OrbitIndex", "Diversity", "Information"
+
+EXPRESSION              An expression with some free variables
+= <free variable>         A free variable; the possibilities depend on context
+| <integer>               A constant
+| ("eq"|"ne"|"le"|"lt"|"ge"|"gt") Comparisons
+  [ EXPRESSION
+  , EXPRESSION
+  ]
+| ("and"|"or")            True if all/any of the arguments are true
+  [ EXPRESSION
+  , ...
   ]
 
-
-
-SUBGROUP_TRANCHE
-= "All"                 Get all subgroups. Only practical for low degrees.
-| "Index"               All subgroups of each index from 1 up to the degree.
-| "MostUseful"          Maximal subgroups of subgroups which were previously useful. (Very experimental!)
-
-SUBGROUP_ORDER
-= "None"                No reordering.
-| "Random"              Shuffle the groups randomly.
-| "Index"               Sort by index, lowest first.
-| "OrbitIndex"          Sort by the index of the stablizer of the orbits.
-| "Reverse"             The reverse of...
-  [ SUBGROUP_ORDER        ... this ordering.
-  ]
-
-SUBGROUP_SCORE
-= "IsUseful"            1 if useful, -1 if not.
-| "Diversity"           The number of different statistics which appear.
-| "Information"         The entropy in the statistics, assuming the Galois group is uniform among possibilities.
-
-SUBGROUP_CHOICE
-= "First"               The first.
-| "Best"                The highest scoring.
+BOOL                    A boolean value
+= "True"
+| "False"
 ```

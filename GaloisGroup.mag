@@ -420,6 +420,37 @@ function change_apr(x, apr)
   end if;
 end function;
 
+function residually_primitive_element(K)
+  F, m := ResidueClassField(Integers(K));
+  return PrimitiveElement(F) @@ m;
+end function;
+
+function primitive_element(L, K)
+  if Degree(L, K) eq 1 then
+    return L!1;
+  elif RamificationDegree(L, K) eq 1 then
+    return residually_primitive_element(L);
+  elif InertiaDegree(L, K) eq 1 then
+    return UniformizingElement(L);
+  else
+    return UniformizingElement(L) + residually_primitive_element(L);
+  end if;
+end function;
+
+// the following works, but looks like it was fixed anyway in V2.23-6
+// function automorphism_group(L, K)
+//   ok, twr := is_extension_of(L, K);
+//   assert ok;
+//   if #twr eq 1 or Degree(L, K) eq 1 then
+//     return SymmetricGroup(1);
+//   end if;
+//   hs := Automorphisms(L, K);
+//   us := [h(u) : h in hs] where u:=primitive_element(L, K);
+//   huss := [[h(u) : u in us] : h in hs];
+//   perms := [[the([i : i in [1..#us] | IsWeaklyEqual(hu, us[i])]) : hu in hus] : hus in huss];
+//   return sub<SymmetricGroup(#us) | perms>;
+// end function;
+
 DEFAULT_TSCHIRNHAUS_TRANSFORMATIONS := [PolynomialRing(Z) | [0,1], [0,0,1], [0,-1,1], [0,1,1], [0,0,0,1], [0,1,0,1], [0,-1,0,1], [0,0,1,1], [0,0,-1,1], [0,1,1,1], [0,-1,-1,1]];
 
 function tschirnhaus_transformation(ntries, degree)
@@ -477,6 +508,18 @@ intrinsic PGG_ArgSpec_Union(choices :: [PGGArgSpec]) -> PGGArgSpec
   end function);
 end intrinsic;
 
+intrinsic PGG_ArgSpec_Transform(A :: PGGArgSpec, tr) -> PGGArgSpec
+  {The argspec A with its output modified by tr.}
+  return PGG_ArgSpec(function (x)
+    ok, y := PGG_Parsable(A, x);
+    if ok then
+      return true, tr(y);
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+
 intrinsic PGG_ArgSpec_ISA(C) -> PGGArgSpec
   {The argspec testing if the input has the given category.}
   return PGG_ArgSpec(function (x)
@@ -531,6 +574,29 @@ intrinsic PGG_ArgSpec_AttrList(name :: MonStgElt, arg, transform) -> PGGArgSpec
   end function);
 end intrinsic;
 
+intrinsic PGG_ArgSpec_AttrInt() -> PGGArgSpec
+  {The argspec matching the PGGAttr when it looks like an integer.}
+  return PGG_ArgSpec(function (x)
+    // coerce toa PGGAttr
+    ok, a := PGG_Attribute_IsCoercible(x);
+    if not ok then
+      return false, _;
+    end if;
+    // check it has no arguments
+    if #Arguments(a) ne 0 then
+      return false, _;
+    end if;
+    // check it looks like an integer
+    z := Trim(Name(a));
+    ok, _, groups := Regexp("^-?[0-9]+$", z);
+    if ok then
+      return true, StringToInteger(z);
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+
 intrinsic PGG_ArgSpec_Attr(name :: MonStgElt, args, transform) -> PGGArgSpec
   {The argspec matching the PGGAttr with the given name and args.}
   return PGG_ArgSpec(function (x)
@@ -559,14 +625,16 @@ intrinsic PGG_ArgSpec_Attr(name :: MonStgElt, args, transform) -> PGGArgSpec
       end for;
       // try to parse keyword argument
       for i in [1..#args] do
-        ok, rest := startswith(Name(aa), args[i][2] cat ":");
-        if ok then
-          ok, parg := PGG_Parsable(args[i][1], PGG_Attribute(rest, Arguments(aa)));
+        if #args[i] ge 2 then
+          ok, rest := startswith(Name(aa), args[i][2] cat ":");
           if ok then
-            pargs[i] := <true, parg>;
-            continue aa;
-          else
-            return false, _;
+            ok, parg := PGG_Parsable(args[i][1], PGG_Attribute(rest, Arguments(aa)));
+            if ok then
+              pargs[i] := <true, parg>;
+              continue aa;
+            else
+              return false, _;
+            end if;
           end if;
         end if;
       end for;
@@ -913,7 +981,248 @@ intrinsic PGG_Attribute_IsCoercible(x :: MonStgElt) -> BoolElt, .
   return true, stack[1];
 end intrinsic;
 
+declare type PGGIter;
+declare attributes PGGIter: cache;
 
+declare type PGGIter_List: PGGIter;
+declare attributes PGGIter_List: list, idx;
+
+declare type PGGIter_Filter: PGGIter;
+declare attributes PGGIter_Filter: iter, filter;
+
+intrinsic PGG_ToIter(xs :: []) -> PGGIter
+  {Makes an iterator.}
+  X := New(PGGIter_List);
+  X`list := SequenceToList(xs);
+  X`idx := 0;
+  return X;
+end intrinsic;
+
+intrinsic PGG_ToIter(xs :: List) -> PGGIter
+  {Makes an iterator.}
+  X := New(PGGIter_List);
+  X`list := xs;
+  X`idx := 0;
+  return X;
+end intrinsic;
+
+intrinsic HasNext(X :: PGGIter_List) -> BoolElt, .
+  {True if X has a next item.}
+  if X`idx lt #X`list then
+    X`idx +:= 1;
+    return true, X`list[X`idx];
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic ToList(X :: PGGIter) -> List
+  {Converts X to a list.}
+  ret := [];
+  while true do
+    ok, x := HasNext(X);
+    if ok then
+      Append(~ret, x);
+    else
+      return ret;
+    end if;
+  end while;
+end intrinsic;
+
+// we make a specialized version for the common case of just dealing with lists directly
+intrinsic ToList(X :: PGGIter_List) -> List
+  {"}
+  if X`idx eq 0 then
+    return X`list;
+  else
+    return X`list[X`idx+1..#X`list];
+  end if;
+end intrinsic;
+
+intrinsic ToSequence(X :: PGGIter) -> []
+  {Converts X to a sequence.}
+  return [x : x in ToList(X)];
+end intrinsic;
+
+intrinsic Filter(X :: PGGIter, f) -> PGGIter
+  {The x in X such that f(x) is true.}
+  Y := New(PGGIter_Filter);
+  Y`iter := X;
+  Y`filter := f;
+  return Y;
+end intrinsic;
+
+intrinsic HasNext(X :: PGGIter_Filter) -> BoolElt, .
+  {True if X has a next item.}
+  while true do
+    ok, x := HasNext(X`iter);
+    if ok then
+      if X`filter(x) then
+        return true, x;
+      end if;
+    else
+      return false, _;
+    end if;
+  end while;
+end intrinsic;
+
+intrinsic Reverse(X :: PGGIter) -> PGGIter
+  {The reverse.}
+  return PGG_ToIter(Reverse(ToList(X)));
+end intrinsic;
+
+intrinsic Shuffle(X :: PGGIter) -> PGGIter
+  {Randomize the order of X.}
+  xs := ToList(X);
+  if #xs eq 0 then
+    return X;
+  else
+    g := Random(SymmetricGroup(#xs));
+    return PGG_ToIter([* xs[i^g] : i in [1..#xs] *]);
+  end if;
+end intrinsic;
+
+intrinsic SortBy(X :: PGGIter, keyfunc :: UserProgram) -> PGGIter
+  {Sorts X so that keyfunc(x) are naturally sorted.}
+  xs := ToList(X);
+  keys := [keyfunc(x) : x in xs];
+  Sort(~keys, ~permut);
+  return PGG_ToIter([* xs[i^permut] : i in [1..#xs] *]);
+end intrinsic;
+
+declare type PGGExpr;
+declare attributes PGGExpr: free_vars;
+
+declare type PGGExpr_FreeVar: PGGExpr;
+declare attributes PGGExpr_FreeVar: name;
+
+declare type PGGExpr_Binop: PGGExpr;
+declare attributes PGGExpr_Binop: op, arg1, arg2;
+
+declare type PGGExpr_Seqop: PGGExpr;
+declare attributes PGGExpr_Seqop: op, args;
+
+declare type PGGExpr_Const: PGGExpr;
+declare attributes PGGExpr_Const: val;
+
+intrinsic FreeVariables(x :: PGGExpr) -> {}
+  {The free variables in the expression.}
+  if not assigned x`free_vars then
+    x`free_vars := PowerSet(Strings()) ! _FreeVariables(x);
+  end if;
+  return x`free_vars;
+end intrinsic;
+
+intrinsic PGG_Expression_FreeVariable(name :: MonStgElt) -> PGGExpr_FreeVar
+  {The free variable with the given name.}
+  x := New(PGGExpr_FreeVar);
+  x`name := name;
+  return x;
+end intrinsic;
+
+intrinsic PGG_Expression_BinOp(op, arg1 :: PGGExpr, arg2 :: PGGExpr) -> PGGExpr_Binop
+  {The binary operation op (a function or intrinsic) with arguments arg1 and arg2.}
+  x := New(PGGExpr_Binop);
+  x`op := op;
+  x`arg1 := arg1;
+  x`arg2 := arg2;
+  return x;
+end intrinsic;
+
+intrinsic PGG_Expression_SeqOp(op, args :: [PGGExpr]) -> PGGExpr_Seqop
+  {The operation op with one argument, the sequence args.}
+  x := New(PGGExpr_Seqop);
+  x`op := op;
+  x`args := args;
+  return x;
+end intrinsic;
+
+intrinsic PGG_Expression_Const(val) -> PGGExpr_Const
+  {The constant expression val.}
+  x := New(PGGExpr_Const);
+  x`val := val;
+  return x;
+end intrinsic;
+
+intrinsic _FreeVariables(x :: PGGExpr_FreeVar) -> {}
+  {"}
+  return {x`name};
+end intrinsic;
+
+intrinsic _FreeVariables(x :: PGGExpr_Binop) -> {}
+  {"}
+  return FreeVariables(x`arg1) join FreeVariables(x`arg2);
+end intrinsic;
+
+intrinsic _FreeVariables(x :: PGGExpr_Const) -> {}
+  {"}
+  return {};
+end intrinsic;
+
+intrinsic _FreeVariables(x :: PGGExpr_Seqop) -> {}
+  {"}
+  return #x`args eq 0 select {} else &join[FreeVariables(arg) : arg in x`args];
+end intrinsic;
+
+intrinsic Evaluate(x :: PGGExpr, vars :: UserProgram) -> .
+  {Evaluates x.}
+  return _Evaluate(x, vars);
+end intrinsic;
+
+intrinsic Evaluate(x :: PGGExpr, vars :: Assoc) -> .
+  {Evaluates x.}
+  return _Evaluate(x, func<n | vars[n]>);
+end intrinsic;
+
+intrinsic EvaluateLazy(x :: PGGExpr, lazy_vars :: Assoc) -> .
+  {Evaluates x.}
+  store := NewStore();
+  function vars(name)
+    ok, x := StoreIsDefined(store, name);
+    if ok then
+      return x;
+    end if;
+    x := lazy_vars[name]();
+    StoreSet(store, name, x);
+    return x;
+  end function;
+  return _Evaluate(x, vars);
+end intrinsic;
+
+intrinsic EvaluateLazy(x :: PGGExpr, lazy_vars :: UserProgram) -> .
+  {Evaluates x.}
+  store := NewStore();
+  function vars(name)
+    ok, x := StoreIsDefined(store, name);
+    if ok then
+      return x;
+    end if;
+    x := lazy_vars(name);
+    StoreSet(store, name, x);
+    return x;
+  end function;
+  return _Evaluate(x, vars);
+end intrinsic;
+
+intrinsic _Evaluate(x :: PGGExpr_FreeVar, vars) -> .
+  {Evaluates x.}
+  return vars(x`name);
+end intrinsic;
+
+intrinsic _Evaluate(x :: PGGExpr_Binop, vars) -> .
+  {"}
+  return x`op(Evaluate(x`arg1, vars), Evaluate(x`arg2, vars));
+end intrinsic;
+
+intrinsic _Evaluate(x :: PGGExpr_Const, vars) -> .
+  {"}
+  return x`val;
+end intrinsic;
+
+intrinsic _Evaluate(x :: PGGExpr_Seqop, vars) -> .
+  {"}
+  return x`op([Evaluate(arg, vars) : arg in x`args]);
+end intrinsic;
 
 
 declare type PGGAlg;
@@ -943,7 +1252,9 @@ declare type PGGAlg_ResGroups_All_Choice_Tranche: PGGAlg_ResGroups_All_Choice;
 declare attributes PGGAlg_ResGroups_All_Choice_Tranche: priority;
 declare type PGGAlg_ResGroups_All_Choice_All: PGGAlg_ResGroups_All_Choice_Tranche;
 declare type PGGAlg_ResGroups_All_Choice_Index: PGGAlg_ResGroups_All_Choice_Tranche;
+declare attributes PGGAlg_ResGroups_All_Choice_Index: filter, sort_key;
 declare type PGGAlg_ResGroups_All_Choice_OrbitIndex: PGGAlg_ResGroups_All_Choice_Tranche;
+declare attributes PGGAlg_ResGroups_All_Choice_OrbitIndex: filter, sort_key;
 declare type PGGAlg_ResGroups_All_Choice_MostUseful: PGGAlg_ResGroups_All_Choice_Tranche;
 
 declare type PGGAlgState_ResGroups_All_Choice_Tranche: PGGAlgState;
@@ -956,10 +1267,12 @@ declare type PGGAlgState_ResGroups_All_Choice_OrbitIndex: PGGAlgState_ResGroups_
 declare attributes PGGAlgState_ResGroups_All_Choice_OrbitIndex: indices, ii, si, all_groups, all_stabilizers, cur_stabilizers, tranche;
 
 declare type PGGAlg_ResGroups_All_Priority: PGGAlg;
-declare type PGGAlg_ResGroups_All_Priority_Random: PGGAlg_ResGroups_All_Priority;
 declare type PGGAlg_ResGroups_All_Priority_Null: PGGAlg_ResGroups_All_Priority;
+declare type PGGAlg_ResGroups_All_Priority_Random: PGGAlg_ResGroups_All_Priority;
 declare type PGGAlg_ResGroups_All_Priority_Reverse: PGGAlg_ResGroups_All_Priority;
+declare attributes PGGAlg_ResGroups_All_Priority_Reverse: priority;
 declare type PGGAlg_ResGroups_All_Priority_Key: PGGAlg_ResGroups_All_Priority;
+declare attributes PGGAlg_ResGroups_All_Priority_Key: key;
 
 declare type PGGAlgState_ResGroups_All_Choice_TrancheItem;
 declare attributes PGGAlgState_ResGroups_All_Choice_TrancheItem: state, idx, subgroup;
@@ -1316,7 +1629,7 @@ intrinsic ResolventStat(S :: PGGStat_AutGroup, R :: RngUPolElt[FldPad]) -> PGGSt
   {"}
   K := BaseRing(R);
   L := extension(R);
-  aut := AutomorphismGroup(L, K);
+  aut := automorphism_group(L, K);
   return MakeValue(S, ConjugacyClasses(S, Degree(aut)) ! aut);
 end intrinsic;
 
@@ -2196,14 +2509,53 @@ intrinsic PGGAlg_ResGroups_All_Priority_Null_Make() -> PGGAlg_ResGroups_All_Prio
   return alg;
 end intrinsic;
 
-intrinsic HasUsefulItem(p :: PGGAlg_ResGroups_All_Priority_Null, tranche :: []) -> BoolElt, GrpPerm
-  {True if there is a useful subgroup.}
-  for i in tranche do
-    if IsUseful(i) then
-      return true, i;
-    end if;
-  end for;
-  return false, _;
+intrinsic PGGAlg_ResGroups_All_Priority_Random_Make() -> PGGAlg_ResGroups_All_Priority_Random_Make
+  {The "Random" subgroups priority.}
+  alg := New(PGGAlg_ResGroups_All_Priority_Random);
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_ResGroups_All_Priority_Reverse_Make(:Priority:=false) -> PGGAlg_ResGroups_All_Priority_Reverse_Make
+  {The "Reverse" subgroups priority.}
+  alg := New(PGGAlg_ResGroups_All_Priority_Reverse);
+  alg`priority := Priority cmpne false select Priority else PGGAlg_ResGroups_All_Priority_Null_Make();
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_ResGroups_All_Priority_Key_Make(key :: PGGExpr) -> PGGAlg_ResGroups_All_Priority_Key
+  {The "Key" subgroups priority.}
+  alg := New(PGGAlg_ResGroups_All_Priority_Key);
+  assert FreeVariables(key) subset {"Index", "OrbitIndex", "Diversity", "Information"};
+  alg`key := key;
+  return alg;
+end intrinsic;
+
+intrinsic Prioritize(X, P :: PGGAlg_ResGroups_All_Priority_Null) -> .
+  {Prioritizes X.}
+  return X;
+end intrinsic;
+
+intrinsic Prioritize(X, P :: PGGAlg_ResGroups_All_Priority_Reverse) -> .
+  {Prioritizes X.}
+  return Reverse(Prioritize(X, P`priority));
+end intrinsic;
+
+intrinsic Prioritize(X, P :: PGGAlg_ResGroups_All_Priority_Random) -> .
+  {Prioritizes X.}
+  return Shuffle(X);
+end intrinsic;
+
+intrinsic Prioritize(X, P :: PGGAlg_ResGroups_All_Priority_Key) -> .
+  {"}
+  return SortBy(X, function (i)
+    return Evaluate(P`key, func<name | case<name |
+      "Index": Index(i`state`overgroup, i`subgroup),
+      "OrbitIndex": Index(i`state`overgroup, Stabilizer(i`state`overgroup, i`subgroup)),
+      "Diversity": Diversity(i),
+      "Information": Information(i),
+      default: not_implemented(name)
+    >>);
+  end function);
 end intrinsic;
 
 intrinsic PGGAlg_ResGroups_All_Choice_All_Make(:Priority:=false) -> PGGAlg_ResGroups_All_Choice_All
@@ -2213,17 +2565,21 @@ intrinsic PGGAlg_ResGroups_All_Choice_All_Make(:Priority:=false) -> PGGAlg_ResGr
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_All_Choice_Index_Make(:Priority:=false) -> PGGAlg_ResGroups_All_Choice_Index
+intrinsic PGGAlg_ResGroups_All_Choice_Index_Make(:Priority:=false, Filter:=false, SortKey:=false) -> PGGAlg_ResGroups_All_Choice_Index
   {The "Index" subgroups choice.}
   alg := New(PGGAlg_ResGroups_All_Choice_Index);
   alg`priority := Priority cmpne false select Priority else PGGAlg_ResGroups_All_Priority_Null_Make();
+  alg`filter := Filter;
+  alg`sort_key := SortKey;
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_All_Choice_OrbitIndex_Make(:Priority:=false) -> PGGAlg_ResGroups_All_Choice_OrbitIndex
+intrinsic PGGAlg_ResGroups_All_Choice_OrbitIndex_Make(:Priority:=false, Filter:=false, SortKey:=false) -> PGGAlg_ResGroups_All_Choice_OrbitIndex
   {The "Index" subgroups choice.}
   alg := New(PGGAlg_ResGroups_All_Choice_OrbitIndex);
   alg`priority := Priority cmpne false select Priority else PGGAlg_ResGroups_All_Priority_Null_Make();
+  alg`filter := Filter;
+  alg`sort_key := SortKey;
   return alg;
 end intrinsic;
 
@@ -2242,7 +2598,15 @@ intrinsic Start(alg :: PGGAlg_ResGroups_All_Choice_Index, parent :: PGGAlgState_
   s`parent := parent;
   s`overgroup := parent`overgroup;
   s`algorithm := alg;
-  s`indices := Sort(Divisors(Order(s`overgroup)));
+  s`indices := Divisors(Order(s`overgroup));
+  if alg`filter cmpne false then
+    s`indices := [n : n in s`indices | Evaluate(alg`filter, func<name | case<name | "idx": n, default: not_implemented()>>)];
+  end if;
+  if alg`sort_key cmpne false then
+    s`indices := sort_by(s`indices, func<n | Evaluate(alg`filter, func<name | case<name | "idx": n, default: not_implemented()>>)>);
+  else
+    s`indices := Sort(s`indices);
+  end if;
   s`ii := 0;
   s`tranche := [];
   s`all_groups := [];
@@ -2255,7 +2619,16 @@ intrinsic Start(alg :: PGGAlg_ResGroups_All_Choice_OrbitIndex, parent :: PGGAlgS
   s`parent := parent;
   s`overgroup := parent`overgroup;
   s`algorithm := alg;
-  s`indices := Sort([<idx,ridx> : ridx in Divisors(idx), idx in Divisors(Order(s`overgroup))]);
+  s`indices := [<idx,ridx> : ridx in Divisors(idx), idx in Divisors(Order(s`overgroup))];
+  if alg`filter cmpne false then
+    s`indices := [nr : nr in s`indices | Evaluate(alg`filter, func<name | case<name | "idx": nr[1], "ridx": nr[2], "oidx": nr[1] div nr[2], default: not_implemented()>>)];
+  end if;
+  if alg`sort_key cmpne false then
+    s`indices := sort_by(s`indices, func<nr | Evaluate(alg`filter, func<name | case<name | "idx": nr[1], "ridx": nr[2], "oidx": nr[1] div nr[2], default: not_implemented()>>)>);
+  else
+    s`indices := Sort(s`indices);
+  end if;
+  print "indices =", s`indices;
   s`ii := 0;
   s`si := 0;
   s`tranche := [];
@@ -2270,7 +2643,8 @@ intrinsic Subgroup(s :: PGGAlgState_ResGroups_All_Choice_Tranche) -> GrpPerm
   while true do
     tranche := Tranche(s);
     assert #tranche gt 0;
-    ok, i := HasUsefulItem(s`algorithm`priority, tranche);
+    tranche2 := Prioritize(Filter(PGG_ToIter(tranche), IsUseful), s`algorithm`priority);
+    ok, i := HasNext(tranche2);
     if ok then
       Forget(i);
       return Group(i);
@@ -2286,7 +2660,7 @@ intrinsic Tranche(s :: PGGAlgState_ResGroups_All_Choice_All) -> []
     end if;
     s`tranche := MakeTranche(s, s`all_groups);
   end if;
-  return s`tranche;
+  return [i : i in s`tranche];
 end intrinsic;
 
 intrinsic Tranche(s :: PGGAlgState_ResGroups_All_Choice_Index) -> []
@@ -2300,7 +2674,7 @@ intrinsic Tranche(s :: PGGAlgState_ResGroups_All_Choice_Index) -> []
     end if;
     s`tranche := MakeTranche(s, s`all_groups[s`ii]);
   end while;
-  return s`tranche;
+  return [i : i in s`tranche];
 end intrinsic;
 
 intrinsic Tranche(s :: PGGAlgState_ResGroups_All_Choice_OrbitIndex) -> []
@@ -2327,7 +2701,7 @@ intrinsic Tranche(s :: PGGAlgState_ResGroups_All_Choice_OrbitIndex) -> []
     end if;
     s`tranche := MakeTranche(s, s`all_groups[k]);
   end while;
-  return s`tranche;
+  return [i : i in s`tranche];
 end intrinsic;
 
 intrinsic MakeTranche(s :: PGGAlgState_ResGroups_All_Choice_Tranche, groups :: [GrpPerm]) -> .
@@ -2375,6 +2749,24 @@ intrinsic IsUseful(i :: PGGAlgState_ResGroups_All_Choice_TrancheItem) -> BoolElt
     Forget(i);
   end if;
   return is_useful;
+end intrinsic;
+
+intrinsic Information(i :: PGGAlgState_ResGroups_All_Choice_TrancheItem) -> FldReElt
+  {The information provided by this item.}
+  Gs := i`state`parent`possible_groups;
+  h := CosetAction(i`state`overgroup, i`subgroup);
+  statalg := i`state`parent`algorithm`statistic;
+  stats := {* GroupStat(statalg, h(G)) : G in Gs *};
+  return multiplicities_to_information(Multiplicities(stats));
+end intrinsic;
+
+intrinsic Diversity(i :: PGGAlgState_ResGroups_All_Choice_TrancheItem) -> RngIntElt
+  {The information provided by this item.}
+  Gs := i`state`parent`possible_groups;
+  h := CosetAction(i`state`overgroup, i`subgroup);
+  statalg := i`state`parent`algorithm`statistic;
+  stats := { GroupStat(statalg, h(G)) : G in Gs };
+  return #stats;
 end intrinsic;
 
 intrinsic Forget(i :: PGGAlgState_ResGroups_All_Choice_TrancheItem)
@@ -2682,6 +3074,23 @@ function parse_algorithm(alg)
 
     // SUBGROUP_PRIORITY_EXPRESSION := PGG_ArgSpec_AttrExpr(["Index","OrbitIndex","Diversity","Information"]);
 
+    EXPRESSION := func<vars | PGG_ArgSpec_Recursive(function (X)
+      return PGG_ArgSpec_Union([
+        PGG_ArgSpec_Attr(var, [], func<args | PGG_Expression_FreeVariable(var)>)
+        : var in vars
+      ] cat [
+        PGG_ArgSpec_Attr("le", [<X>,<X>], func<args | PGG_Expression_BinOp('le', args[1], args[2])>),
+        PGG_ArgSpec_Attr("lt", [<X>,<X>], func<args | PGG_Expression_BinOp('lt', args[1], args[2])>),
+        PGG_ArgSpec_Attr("ge", [<X>,<X>], func<args | PGG_Expression_BinOp('ge', args[1], args[2])>),
+        PGG_ArgSpec_Attr("gt", [<X>,<X>], func<args | PGG_Expression_BinOp('gt', args[1], args[2])>),
+        PGG_ArgSpec_Attr("eq", [<X>,<X>], func<args | PGG_Expression_BinOp('eq', args[1], args[2])>),
+        PGG_ArgSpec_Attr("ne", [<X>,<X>], func<args | PGG_Expression_BinOp('ne', args[1], args[2])>),
+        PGG_ArgSpec_AttrList("and", X, func<args | PGG_Expression_SeqOp('&and', [x : x in args])>),
+        PGG_ArgSpec_AttrList("or", X, func<args | PGG_Expression_SeqOp('&or', [x : x in args])>),
+        PGG_ArgSpec_Transform(PGG_ArgSpec_AttrInt(), func<x | PGG_Expression_Const(x)>)
+      ]);
+    end function)>;
+
     SUBGROUP_PRIORITY := set("SUBGROUP_PRIORITY", PGG_ArgSpec_Union([
       PGG_ArgSpec_ISA(PGGAlg_ResGroups_All_Priority),
       PGG_ArgSpec_Literal(false),
@@ -2689,17 +3098,17 @@ function parse_algorithm(alg)
         "Null",
         [],
         func<args | PGGAlg_ResGroups_All_Priority_Null_Make()>
-      )//,
-      // PGG_ArgSpec_Attr(
-      //   "Random",
-      //   [],
-      //   func<args | PGGAlg_ResGroups_All_Priority_Random_Make()>
-      // ),
-      // PGG_ArgSpec_Attr(
-      //   "Reverse",
-      //   [ <get("SUBGROUP_PRIORITY"),"Priority",false> ],
-      //   func<args | PGGAlg_ResGroups_All_Priority_Reverse_Make(:Priority:=args[1])>
-      // ),
+      ),
+      PGG_ArgSpec_Attr(
+        "Random",
+        [],
+        func<args | PGGAlg_ResGroups_All_Priority_Random_Make()>
+      ),
+      PGG_ArgSpec_Attr(
+        "Reverse",
+        [ <get("SUBGROUP_PRIORITY"),"Priority",false> ],
+        func<args | PGGAlg_ResGroups_All_Priority_Reverse_Make(:Priority:=args[1])>
+      ),
       // PGG_ArgSpec_Attr(
       //   "Filter",
       //   [ <SUBGROUP_PRIORITY_EXPRESSION,"Cond",false>,
@@ -2707,7 +3116,7 @@ function parse_algorithm(alg)
       //   ],
       //   func<args | PGGAlg_ResGroups_All_Priority_Null_Make(:Expression:=args[1], Priority:=args[2])>
       // ),
-      // PGG_ArgSpec_Transform(SUBGROUP_PRIORITY_EXPRESSION,func<x | PGGAlg_ResGroups_All_Priority_Key_Make(x)>)
+      PGG_ArgSpec_Transform(EXPRESSION(["Index","OrbitIndex","Diversity","Information"]), func<x | PGGAlg_ResGroups_All_Priority_Key_Make(x)>)
     ]));
 
     SUBGROUP_CHOICE := PGG_ArgSpec_Union([
@@ -2716,17 +3125,17 @@ function parse_algorithm(alg)
       PGG_ArgSpec_Attr(
         "All",
         [ <SUBGROUP_PRIORITY,"",false> ],
-        func<args | PGGAlg_ResGroups_All_Choice_All_Make()>
+        func<args | PGGAlg_ResGroups_All_Choice_All_Make(:Priority:=args[1])>
       ),
       PGG_ArgSpec_Attr(
         "Index",
-        [ <SUBGROUP_PRIORITY,"",false> ],
-        func<args | PGGAlg_ResGroups_All_Choice_Index_Make()>
+        [ <SUBGROUP_PRIORITY,"",false>, <X,"If",false>, <X,"Sort",false> ] where X:=EXPRESSION(["idx"]),
+        func<args | PGGAlg_ResGroups_All_Choice_Index_Make(:Priority:=args[1],Filter:=args[2], SortKey:=args[3])>
       ),
       PGG_ArgSpec_Attr(
         "OrbitIndex",
-        [ <SUBGROUP_PRIORITY,"",false> ],
-        func<args | PGGAlg_ResGroups_All_Choice_OrbitIndex_Make()>
+        [ <SUBGROUP_PRIORITY,"",false>, <X,"If",false>, <X,"Sort",false> ] where X:=EXPRESSION(["idx","oidx","ridx"]),
+        func<args | PGGAlg_ResGroups_All_Choice_OrbitIndex_Make(:Priority:=args[1], Filter:=args[2], SortKey:=args[3])>
       )//,
       // PGG_ArgSpec_Attr(
       //   "MostUseful",
