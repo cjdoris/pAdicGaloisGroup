@@ -1247,6 +1247,12 @@ declare attributes PGGAlg_ResGroups_All: subgroup_choice, statistic;
 declare type PGGAlgState_ResGroups_All: PGGAlgState;
 declare attributes PGGAlgState_ResGroups_All: conjugacy, overgroup, possible_groups, choice_state;
 
+declare type PGGAlg_ResGroups_Maximal: PGGAlg_ResGroups;
+declare attributes PGGAlg_ResGroups_Maximal: subgroup_choice, statistic;
+
+declare type PGGAlgState_ResGroups_Maximal: PGGAlgState;
+declare attributes PGGAlgState_ResGroups_Maximal: conjugacy, overgroup, possible_groups, choice_state;
+
 declare type PGGAlg_ResGroups_All_Choice: PGGAlg;
 declare type PGGAlg_ResGroups_All_Choice_Tranche: PGGAlg_ResGroups_All_Choice;
 declare attributes PGGAlg_ResGroups_All_Choice_Tranche: priority;
@@ -1311,7 +1317,7 @@ declare type PGGConj_Symmetric: PGGConj;
 declare attributes PGGConj_Symmetric: pol, top_field;
 
 declare type PGGConj_Factors: PGGConj;
-declare attributes PGGConj_Factors: factors;
+declare attributes PGGConj_Factors: factors, orbits_of_subgroups_from;
 
 declare type PGGConj_Tower: PGGConj;
 declare attributes PGGConj_Tower: tower, top_field, pol, orbits_of_subgroups_above;
@@ -2320,11 +2326,44 @@ intrinsic _OrbitsOfSubgroups(conj :: PGGConj_Tower, n :: RngIntElt, m :: RngIntE
       //       - distribute these over each class, but with an ordering enforced
       //       - take the product of all these choices
       //       maybe it's worth changing the return value of OrbitsOfSubgroups to group the orbits by conjugacy
-      not_implemented("OrbitsOfSubgroups");
+      not_implemented("OrbitsOfSubgroups: general towers");
     end if;
     conj`orbits_of_subgroups_above[<n,m>] := ans;
   end if;
   return conj`orbits_of_subgroups_above[<n,m>];
+end intrinsic;
+
+intrinsic _OrbitsOfSubgroups(conj :: PGGConj_Factors, n :: RngIntElt, m :: RngIntElt) -> []
+  {"}
+  if not assigned conj`orbits_of_subgroups_from then
+    conj`orbits_of_subgroups_from := AssociativeArray();
+  end if;
+  if not IsDefined(conj`orbits_of_subgroups_from, <n, m>) then
+    if m eq #conj`factors then
+      oss := OrbitsOfSubgroups(conj`factors[m], n);
+    else
+      assert m lt #conj`factors;
+      deg := Degree(conj`factors[m]);
+      oss := [];
+      for n1 in Divisors(n) do
+        oss1 := OrbitsOfSubgroups(conj`factors[m], n1);
+        oss2 := _OrbitsOfSubgroups(conj, xdiv(n,n1), m+1);
+        oss2_shifted := [[{x+deg : x in o} : o in os] : os in oss2];
+        for os1 in oss1 do
+          for os2 in oss2_shifted do
+            Append(~oss, os1 cat os2);
+          end for;
+        end for;
+      end for;
+    end if;
+    conj`orbits_of_subgroups_from[<n, m>] := oss;
+  end if;
+  return conj`orbits_of_subgroups_from[<n, m>];
+end intrinsic;
+
+intrinsic _OrbitsOfSubgroups(conj :: PGGConj_Factors, n :: RngIntElt) -> []
+  {"}
+  return _OrbitsOfSubgroups(conj, n, 1);
 end intrinsic;
 
 intrinsic Print(conj :: PGGConj)
