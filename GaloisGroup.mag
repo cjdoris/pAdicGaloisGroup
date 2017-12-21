@@ -473,6 +473,47 @@ function dedupe_conjugage_subgroups(G, Hs)
   return [Rep(c) : c in {CG ! H : H in Hs}];
 end function;
 
+// non-checking version
+// TODO: consider _is_subpartition_of({*1^^9*},{*2,3,4*}); currently we try assigning 1 to each of 2, 3, 4, and then assign 1 again, and keep going; but since we are assigning the same thing over and over, the order that these occur in is unimportant, so we are repeating work; hence, we should do a strategy which assigns all of the same element in one go
+function _is_subpartition_of(P, Q)
+  if #P eq 0 then
+    assert #Q eq 0;
+    return true;
+  end if;
+  assert #P gt 0;
+  assert #Q gt 0;
+  // pick an element of p
+  // hopefully dealing with the largest ones first is optimal
+  p := Max(P);
+  P2 := Exclude(P, p);
+  // pick an element of Q it could come from
+  for q in MultisetToSet(Q) do
+    if p le q then
+      Q2 := Exclude(Q, q);
+      if p lt q then
+        Include(~Q2, q-p);
+      end if;
+      ok := _is_subpartition_of(P2, Q2);
+      if ok then
+        return true;
+      end if;
+    end if;
+  end for;
+  return false;
+end function;
+
+// given two multisets of positive integers, determine if P may be obtained by partitioning each element of Q
+function is_subpartition_of(P, Q)
+  assert Type(P) eq SetMulti;
+  assert Type(Q) eq SetMulti;
+  assert Universe(P) cmpeq Z;
+  assert Universe(Q) cmpeq Z;
+  assert forall{x : x in MultisetToSet(P) | x gt 0};
+  assert forall{x : x in MultisetToSet(Q) | x gt 0};
+  assert ((#P eq 0) and (#Q eq 0)) or ((#P gt 0) and (#Q gt 0) and (&+P eq &+Q));
+  return _is_subpartition_of(P, Q);
+end function;
+
 declare type PGGArgSpec;
 declare attributes PGGArgSpec: is_valid;
 
@@ -777,13 +818,14 @@ intrinsic 'eq'(x :: PGGConjCls, y :: PGGConjCls) -> BoolElt
 end intrinsic;
 
 declare type PGGTimer;
-declare attributes PGGTimer: last_time, times, labels, current_label, idxs;
+declare attributes PGGTimer: last_time, times, counts, labels, current_label, idxs;
 
 intrinsic PGG_Timer() -> PGGTimer
   {A new timer.}
   t := New(PGGTimer);
   t`last_time := Cputime();
   t`times := [RealField()|];
+  t`counts := [Integers()|];
   t`labels := [PowerSequence(Strings())|];
   t`current_label := [Strings()|];
   t`idxs := AssociativeArray(PowerSequence(Strings()));
@@ -797,17 +839,24 @@ intrinsic FindIndex(t :: PGGTimer, label :: [MonStgElt]) -> RngIntElt
     return i;
   end if;
   Append(~t`times, 0);
+  Append(~t`counts, 0);
   Append(~t`labels, label);
   t`idxs[label] := #t`labels;
   return #t`labels;
 end intrinsic;
 
-intrinsic Update(t :: PGGTimer, label :: [MonStgElt])
+intrinsic Update(t :: PGGTimer, c :: RngIntElt, label :: [MonStgElt])
   {Assigns the accumulated time to the given label.}
   i := FindIndex(t, label);
   now := Cputime();
   t`times[i] +:= now - t`last_time;
+  t`counts[i] +:= c;
   t`last_time := now;
+end intrinsic;
+
+intrinsic Update(t :: PGGTimer, label :: [MonStgElt])
+  {"}
+  Update(t, 0, label);
 end intrinsic;
 
 intrinsic Push(t :: PGGTimer, x :: MonStgElt)
@@ -819,7 +868,7 @@ end intrinsic;
 intrinsic Pop(t :: PGGTimer, n :: RngIntElt)
   {Assigns time to the current label, then pops n items from the label.}
   error if #t`current_label lt n, "n greater than label length";
-  Update(t, t`current_label);
+  Update(t, 1, t`current_label);
   t`current_label := t`current_label[1..#t`current_label-n];
 end intrinsic;
 
@@ -827,7 +876,7 @@ intrinsic Pop(t :: PGGTimer, n :: RngIntElt, x :: MonStgElt)
   {Assigns time to the current label, then pops n items from the label, the nth being x.}
   error if #t`current_label lt n, "n greater than label length";
   error if t`current_label[#t`current_label-n+1] ne x, "incorrect label entry";
-  Update(t, t`current_label);
+  Update(t, 1, t`current_label);
   t`current_label := t`current_label[1..#t`current_label-n];
 end intrinsic;
 
@@ -844,44 +893,61 @@ end intrinsic;
 intrinsic Swap(t :: PGGTimer, x :: MonStgElt)
   {Assigns time to the current label, then swaps the last item from the label to x.}
   error if #t`current_label lt 1, "label too short";
-  Update(t, t`current_label);
+  Update(t, 1, t`current_label);
   t`current_label[#t`current_label] := x;
 end intrinsic;
 
 intrinsic Log(t :: PGGTimer, x :: MonStgElt)
   {Assigns time to the current label with x appended.}
-  Update(t, Append(t`current_label, x));
+  Update(t, 1, Append(t`current_label, x));
 end intrinsic;
 
-intrinsic Tree(t :: PGGTimer) -> Tup
+intrinsic Tree(t :: PGGTimer : Total:="TOTAL", Other:="OTHER") -> Tup
   {A tree representation of t.}
-  procedure insert(~node, label, tm)
+  procedure insert(~node, label, tm, ct)
     node[2] +:= tm;
     if #label gt 0 then
-      for i in [1..#node[3]] do
-        if node[3][i][1] eq label[1] then
-          insert(~node[3][i], label[2..#label], tm);
+      for i in [1..#node[4]] do
+        if node[4][i][1] eq label[1] then
+          insert(~node[4][i], label[2..#label], tm, ct);
           return;
         end if;
       end for;
-      Append(~node[3], <label[1], 0.0, [**]>);
-      insert(~node[3][#node[3]], label[2..#label], tm);
+      Append(~node[4], <label[1], 0.0, 0, [**]>);
+      insert(~node[4][#node[4]], label[2..#label], tm, ct);
+    else
+      node[3] +:= ct;
     end if;
   end procedure;
-  root := <"TOTAL", 0.0, [**]>;
+  procedure rest(~node)
+    if #node[4] gt 0 then
+      Append(~node[4], <Other, node[2] - &+[n[2] : n in node[4]], 0, [**]>);
+      for i in [1..#node[4]] do
+        rest(~node[4][i]);
+      end for;
+    end if;
+  end procedure;
+  root := <Total, 0.0, 0, [**]>;
   for i in [1..#t`labels] do
-    insert(~root, t`labels[i], t`times[i]);
+    insert(~root, t`labels[i], t`times[i], t`counts[i]);
   end for;
+  rest(~root);
   return root;
 end intrinsic;
 
 intrinsic PrintTree(t :: PGGTimer)
   {Prints t as a tree.}
   procedure pr(node, depth)
-    printf "%o%6.2o %o\n", &cat[Strings() | "  " : i in [1..depth]], node[2], node[1];
-    for n in node[3] do
-      pr(n, depth+1);
-    end for;
+    if node[3] ge 1 or node[2] ge 0.01 then
+      printf "%o%6.2o", &cat[Strings() | "  " : i in [1..depth]], node[2];
+      if node[3] ne 0 then
+        printf " (%o)", node[3];
+      end if;
+      printf " %o\n", node[1];
+      for n in node[4] do
+        pr(n, depth+1);
+      end for;
+    end if;
   end procedure;
   pr(Tree(t), 0);
 end intrinsic;
@@ -1240,48 +1306,57 @@ declare type PGGAlg_GaloisGroup_ResolventMethod: PGGAlg_GaloisGroup;
 declare attributes PGGAlg_GaloisGroup_ResolventMethod: groups_alg, resolvent_alg, conjugacy_alg, use_easy_resolvents;
 
 declare type PGGAlg_ResGroups: PGGAlg;
+declare type PGGAlgState_ResGroups: PGGAlgState;
 
 declare type PGGAlg_ResGroups_All: PGGAlg_ResGroups;
 declare attributes PGGAlg_ResGroups_All: subgroup_choice, statistic;
 
-declare type PGGAlgState_ResGroups_All: PGGAlgState;
+declare type PGGAlgState_ResGroups_All: PGGAlgState_ResGroups;
 declare attributes PGGAlgState_ResGroups_All: conjugacy, overgroup, possible_groups, choice_state;
 
 declare type PGGAlg_ResGroups_Maximal: PGGAlg_ResGroups;
-declare attributes PGGAlg_ResGroups_Maximal: subgroup_choice, statistic;
+declare attributes PGGAlg_ResGroups_Maximal: subgroup_choice, statistic, descend, reprocess, reset;
 
-declare type PGGAlgState_ResGroups_Maximal: PGGAlgState;
-declare attributes PGGAlgState_ResGroups_Maximal: conjugacy, overgroup, possible_groups, choice_state;
+declare type PGGAlgState_ResGroups_Maximal: PGGAlgState_ResGroups;
+declare attributes PGGAlgState_ResGroups_Maximal: conjugacy, overgroup, choice_state, conjugacy_classes
+  , resolvents    // sequence of records of information about each resolvent used
+  , id_to_node    // sequence of nodes
+  , class_to_node // associative array: class -> node
+  , current_layer // the galois group is a subgroup of at least one of these
+  ;
 
-declare type PGGAlg_ResGroups_All_Choice: PGGAlg;
-declare type PGGAlg_ResGroups_All_Choice_Tranche: PGGAlg_ResGroups_All_Choice;
-declare attributes PGGAlg_ResGroups_All_Choice_Tranche: priority;
-declare type PGGAlg_ResGroups_All_Choice_All: PGGAlg_ResGroups_All_Choice_Tranche;
-declare type PGGAlg_ResGroups_All_Choice_Index: PGGAlg_ResGroups_All_Choice_Tranche;
-declare attributes PGGAlg_ResGroups_All_Choice_Index: filter, sort_key;
-declare type PGGAlg_ResGroups_All_Choice_OrbitIndex: PGGAlg_ResGroups_All_Choice_Tranche;
-declare attributes PGGAlg_ResGroups_All_Choice_OrbitIndex: filter, sort_key;
-declare type PGGAlg_ResGroups_All_Choice_MostUseful: PGGAlg_ResGroups_All_Choice_Tranche;
+declare type PGG_ResGroups_Maximal_Node;
+declare attributes PGG_ResGroups_Maximal_Node: id, class, children, possible_children, state, maybe_equal, maybe_subgroup, seen_resolvents;
 
-declare type PGGAlgState_ResGroups_All_Choice_Tranche: PGGAlgState;
-declare attributes PGGAlgState_ResGroups_All_Choice_Tranche: priority, parent, overgroup;
-declare type PGGAlgState_ResGroups_All_Choice_All: PGGAlgState_ResGroups_All_Choice_Tranche;
-declare attributes PGGAlgState_ResGroups_All_Choice_All: all_groups, tranche;
-declare type PGGAlgState_ResGroups_All_Choice_Index: PGGAlgState_ResGroups_All_Choice_Tranche;
-declare attributes PGGAlgState_ResGroups_All_Choice_Index: indices, ii, all_groups, tranche;
-declare type PGGAlgState_ResGroups_All_Choice_OrbitIndex: PGGAlgState_ResGroups_All_Choice_Tranche;
-declare attributes PGGAlgState_ResGroups_All_Choice_OrbitIndex: indices, ii, si, all_groups, all_stabilizers, cur_stabilizers, tranche;
+declare type PGGAlg_ResChoice: PGGAlg;
+declare type PGGAlg_ResChoice_Tranche: PGGAlg_ResChoice;
+declare attributes PGGAlg_ResChoice_Tranche: priority;
+declare type PGGAlg_ResChoice_All: PGGAlg_ResChoice_Tranche;
+declare type PGGAlg_ResChoice_Index: PGGAlg_ResChoice_Tranche;
+declare attributes PGGAlg_ResChoice_Index: filter, sort_key;
+declare type PGGAlg_ResChoice_OrbitIndex: PGGAlg_ResChoice_Tranche;
+declare attributes PGGAlg_ResChoice_OrbitIndex: filter, sort_key;
+declare type PGGAlg_ResChoice_MostUseful: PGGAlg_ResChoice_Tranche;
 
-declare type PGGAlg_ResGroups_All_Priority: PGGAlg;
-declare type PGGAlg_ResGroups_All_Priority_Null: PGGAlg_ResGroups_All_Priority;
-declare type PGGAlg_ResGroups_All_Priority_Random: PGGAlg_ResGroups_All_Priority;
-declare type PGGAlg_ResGroups_All_Priority_Reverse: PGGAlg_ResGroups_All_Priority;
-declare attributes PGGAlg_ResGroups_All_Priority_Reverse: priority;
-declare type PGGAlg_ResGroups_All_Priority_Key: PGGAlg_ResGroups_All_Priority;
-declare attributes PGGAlg_ResGroups_All_Priority_Key: key;
+declare type PGGAlgState_ResChoice_Tranche: PGGAlgState;
+declare attributes PGGAlgState_ResChoice_Tranche: priority, parent, overgroup;
+declare type PGGAlgState_ResChoice_All: PGGAlgState_ResChoice_Tranche;
+declare attributes PGGAlgState_ResChoice_All: all_groups, tranche;
+declare type PGGAlgState_ResChoice_Index: PGGAlgState_ResChoice_Tranche;
+declare attributes PGGAlgState_ResChoice_Index: indices, ii, all_groups, tranche;
+declare type PGGAlgState_ResChoice_OrbitIndex: PGGAlgState_ResChoice_Tranche;
+declare attributes PGGAlgState_ResChoice_OrbitIndex: indices, ii, si, all_groups, all_stabilizers, cur_stabilizers, tranche;
 
-declare type PGGAlgState_ResGroups_All_Choice_TrancheItem;
-declare attributes PGGAlgState_ResGroups_All_Choice_TrancheItem: state, idx, subgroup;
+declare type PGGAlg_ResPriority: PGGAlg;
+declare type PGGAlg_ResPriority_Null: PGGAlg_ResPriority;
+declare type PGGAlg_ResPriority_Random: PGGAlg_ResPriority;
+declare type PGGAlg_ResPriority_Reverse: PGGAlg_ResPriority;
+declare attributes PGGAlg_ResPriority_Reverse: priority;
+declare type PGGAlg_ResPriority_Key: PGGAlg_ResPriority;
+declare attributes PGGAlg_ResPriority_Key: key;
+
+declare type PGGAlgState_ResChoice_TrancheItem;
+declare attributes PGGAlgState_ResChoice_TrancheItem: state, idx, subgroup;
 
 declare type PGGAlg_ResEval: PGGAlg;
 
@@ -1379,6 +1454,91 @@ intrinsic Start(alg :: PGGAlg_ResGroups_All, conj :: PGGConj, overgroup :: GrpPe
   return s;
 end intrinsic;
 
+intrinsic Start(alg :: PGGAlg_ResGroups_Maximal, conj :: PGGConj, overgroup :: GrpPerm) -> PGGAlgState_ResGroups_Maximal
+  {"}
+  assert overgroup subset conj`group;
+  s := New(PGGAlgState_ResGroups_Maximal);
+  s`algorithm := alg;
+  s`conjugacy := conj;
+  s`overgroup := overgroup;
+  s`choice_state := Start(alg`subgroup_choice, s);
+  s`resolvents := [**];
+  s`id_to_node := [];
+  s`class_to_node := AssociativeArray();
+  s`conjugacy_classes := PGG_ConjugacyClasses(conj`group);
+  ok, G := IsKnown(conj);
+  if ok then
+    node := Node(s, G);
+    node`children := [];
+    s`current_layer := node;
+  else
+    s`current_layer := [Node(s, Overgroup(conj))];
+  end if;
+  return s;
+end intrinsic;
+
+intrinsic Node(s :: PGGAlgState_ResGroups_Maximal, G :: GrpPerm) -> PGG_ResGroups_Maximal_Node
+  {The node of the graph of subgroups at G.}
+  return Node(s, s`conjugacy_classes ! G);
+end intrinsic;
+
+intrinsic Node(s :: PGGAlgState_ResGroups_Maximal, G :: PGGConjCls) -> PGG_ResGroups_Maximal_Node
+  {The node of the graph of subgroups at G.}
+  // check if the node already exists
+  ok, x := IsDefined(s`class_to_node, G);
+  if ok then
+    return x;
+  end if;
+  // make a new node
+  x := New(PGG_ResGroups_Maximal_Node);
+  x`id := #s`id_to_node + 1;
+  x`class := G;
+  x`state := s;
+  x`maybe_equal := true;
+  x`maybe_subgroup := true;
+  x`seen_resolvents := {};
+  s`class_to_node[G] := x;
+  s`id_to_node[x`id] := x;
+  return x;
+end intrinsic;
+
+intrinsic GroupStat(n :: PGG_ResGroups_Maximal_Node, q) -> PGGStatVal
+  {The value of the statistic under the quotient q.}
+  return GroupStat(n`state`algorithm`statistic, q(Rep(n`class)));
+end intrinsic;
+
+intrinsic 'eq'(x :: PGG_ResGroups_Maximal_Node, y :: PGG_ResGroups_Maximal_Node) -> BoolElt
+  {Equality.}
+  return x`id eq y`id;
+end intrinsic;
+
+intrinsic Hash(x :: PGG_ResGroups_Maximal_Node) -> RngIntElt
+  {Hash.}
+  return x`id;
+end intrinsic;
+
+intrinsic Children(x :: PGG_ResGroups_Maximal_Node) -> []
+  {The nodes below x, i.e. corresponding to maximal subgroups.}
+  if not assigned x`children then
+    PGG_GlobalTimer_Push("groups");
+    groups := [Node(x`state, G) : y in MaximalSubgroups(Rep(x`class) : IsSolvable, IsTransitive:=IsTransitive(x`state`conjugacy)) | IsConsistentWithSubgroup(x`state`conjugacy, G) where G:=y`subgroup];
+    PGG_GlobalTimer_Swap("dedupe");
+    x`children := SetToSequence(SequenceToSet(groups));
+    PGG_GlobalTimer_Pop();
+  end if;
+  return x`children;
+end intrinsic;
+
+intrinsic PossibleChildren(x :: PGG_ResGroups_Maximal_Node) -> []
+  {The nodes below x which are possibly overgroups of the Galois group.}
+  if not assigned x`possible_children then
+    PGG_GlobalTimer_Push("children");
+    x`possible_children := Children(x);
+    PGG_GlobalTimer_Pop();
+  end if;
+  return x`possible_children;
+end intrinsic;
+
 intrinsic IsDone(s :: PGGAlgState_ResGroups_All) -> BoolElt, GrpPerm
   {True if we have deduced the Galois group.}
   if #s`possible_groups eq 1 then
@@ -1389,7 +1549,17 @@ intrinsic IsDone(s :: PGGAlgState_ResGroups_All) -> BoolElt, GrpPerm
   end if;
 end intrinsic;
 
-intrinsic TheGroup(s :: PGGAlgState_ResGroups_All) -> GrpPerm
+intrinsic IsDone(s :: PGGAlgState_ResGroups_Maximal) -> BoolElt, GrpPerm
+  {"}
+  assert #s`current_layer gt 0;
+  if #s`current_layer eq 1 and #PossibleChildren(s`current_layer[1]) eq 0 then
+    return true, Rep(s`current_layer[1]`class);
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic TheGroup(s :: PGGAlgState_ResGroups) -> GrpPerm
   {The Galois group, assuming it is already known.}
   ok, G := IsDone(s);
   assert ok;
@@ -1500,6 +1670,12 @@ intrinsic 'eq'(v1 :: PGGStatVal, v2 :: PGGStatVal) -> BoolElt
   {Equality.}
   require v1`stat eq v2`stat: "must be values of the same statistic";
   return 'eq'(v1`stat, v1, v2);
+end intrinsic;
+
+intrinsic 'subset'(v1 :: PGGStatVal, v2 :: PGGStatVal) -> BoolElt
+  {True if v1 is possibly a statistic for a subgroup of the group v2 is a subset for.}
+  require v1`stat eq v2`stat: "must be values of the same statistic";
+  return 'subset'(v1`stat, v1, v2);
 end intrinsic;
 
 intrinsic Print(v :: PGGStatVal)
@@ -1658,6 +1834,43 @@ intrinsic 'eq'(S :: PGGStat_AutGroup, v1, v2) -> BoolElt
   {"}
   return Degree(Rep(v1`value)) eq Degree(Rep(v2`value)) and v1`value eq v2`value;
 end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat, v1, v2) -> BoolElt
+  {True if v1 is a refinement of v2.}
+  not_implemented("subset: ", Type(S));
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_HasRoot, v1, v2) -> BoolElt
+  {"}
+  return (not v2`value) or (v1`value);
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_NumRoots, v1, v2) -> BoolElt
+  {"}
+  return v1`value ge v2`value;
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_FactorDegrees, v1, v2) -> BoolElt
+  {"}
+  return is_subpartition_of(v1`value, v2`value);
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_Degree, v1, v2) -> BoolElt
+  {"}
+  return v1`degree eq v2`degree;
+end intrinsic;
+
+// Is it true that if H<G then N_G(Stab_G(1))/Stab_G(1) < N_H(Stab_H(1))/Stab_H(1)?
+// AG < AH <=> NG/SG < NH/SH = NH/(SG meet NH) ~ (NH SG)/SG <=> NG < NH SG ?
+// It is true for all transitive groups of degree up to 15.
+// 
+// SG = {s in G : s(1)=1}
+// SH = {s in H : s(1)=1} = SG meet H
+// NG = {n in G : s in SG => s^n in SG} = {n in G : s in G, s(1)=1 => (s^n)(1)=1 i.e. s(n(1))=n(1)}
+// 
+// intrinsic 'subset'(S :: PGGStat_AutGroup, v1, v2) -> BoolElt
+//   {"}
+// end intrinsic;
 
 intrinsic Hash(S :: PGGStat, v) -> .
   {Hash.}
@@ -1868,12 +2081,119 @@ end intrinsic;
 
 intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_All, resolvent :: RngUPolElt[FldPad], subgroup :: GrpPerm)
   {Use the resolvent to get information about the Galois group.}
+  PGG_GlobalTimer_Push("resolvent stat");
   rstat := ResolventStat(s`algorithm`statistic, resolvent);
   vprint PGG_GaloisGroup: "resolvent statistic =", rstat;
+  PGG_GlobalTimer_Swap("filter");
   h := CosetAction(s`overgroup, subgroup);
   vprint PGG_GaloisGroup: "group statistics =", {* GroupStat(s`algorithm`statistic, h(G)) : G in s`possible_groups *};
   s`possible_groups := [G : G in s`possible_groups | gstat eq rstat where gstat := GroupStat(s`algorithm`statistic, h(G))];
   vprint PGG_GaloisGroup: "#possible groups =", #s`possible_groups;
+  PGG_GlobalTimer_Pop();
+end intrinsic;
+
+intrinsic _ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, rid)
+  {"}
+  resolvent, subgroup, rstat, h := Explode(s`resolvents[rid]);
+  PGG_GlobalTimer_Push("update layer");
+  statalg := s`algorithm`statistic;
+  // update items in the layer
+  for i in [1..#s`current_layer] do
+    n := s`current_layer[i];
+    if rid notin n`seen_resolvents then
+      assert n`maybe_subgroup;
+      nstat := GroupStat(n, h);
+      n`maybe_subgroup := n`maybe_subgroup and (rstat subset nstat);
+      if n`maybe_subgroup then
+        n`maybe_equal := n`maybe_equal and (rstat eq nstat);
+      end if;
+      Include(~n`seen_resolvents, rid);
+    end if;
+  end for;
+  // eliminate items from the layer
+  PGG_GlobalTimer_Swap("filter layer");
+  new_layer := [n : n in s`current_layer | n`maybe_subgroup];
+  assert #new_layer gt 0;
+  // update children in the layer
+  PGG_GlobalTimer_Swap("list children");
+  children := SetToSequence({m : m in PossibleChildren(n), n in new_layer});
+  PGG_GlobalTimer_Swap("update children");
+  for i in [1..#children] do
+    m := children[i];
+    if rid notin m`seen_resolvents then
+      assert m`maybe_subgroup;
+      mstat := GroupStat(m, h);
+      m`maybe_subgroup := m`maybe_subgroup and (rstat subset mstat);
+      if m`maybe_subgroup then
+        m`maybe_equal := m`maybe_equal and (rstat eq mstat);
+      end if;
+      Include(~m`seen_resolvents, rid);
+    end if;
+  end for;
+  // elimitate children from the layer
+  PGG_GlobalTimer_Swap("filter children");
+  for i in [1..#new_layer] do
+    n := new_layer[i];
+    n`possible_children := [m : m in n`possible_children | m`maybe_subgroup];
+  end for;
+  s`current_layer := [n : n in new_layer | n`maybe_equal or (#n`possible_children gt 0)];
+  PGG_GlobalTimer_Pop();
+end intrinsic;
+
+intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, resolvent :: RngUPolElt[FldPad], subgroup :: GrpPerm)
+  {"}
+  // process this resolvent and record it
+  PGG_GlobalTimer_Push("resolvent stat");
+  rstat := ResolventStat(s`algorithm`statistic, resolvent);
+  vprint PGG_GaloisGroup: "resolvent statistic =", rstat;
+  PGG_GlobalTimer_Swap("process");
+  h := CosetAction(s`overgroup, subgroup);
+  Append(~s`resolvents, <resolvent, subgroup, rstat, h>);
+  _ProcessResolvent(s, #s`resolvents);
+  vprint PGG_GaloisGroup: "#layer =", #s`current_layer, #[n : n in s`current_layer | n`maybe_equal], #{m : m in PossibleChildren(n), n in s`current_layer}, #{m : m in PossibleChildren(n), n in s`current_layer | m`maybe_equal};
+  // now see if we need to descend a layer
+  while true do
+    descending := false;
+    case s`algorithm`descend:
+    when "Eager":
+      if #[n : n in s`current_layer | not n`maybe_equal] ne 0 then
+        vprint PGG_GaloisGroup: "next layer";
+        PGG_GlobalTimer_Swap("new layer");
+        s`current_layer := SetToSequence(&join[n`maybe_equal select {n} else {m : m in PossibleChildren(n)} : n in s`current_layer]);
+        descending := true;
+      end if;
+    when "Steady":
+      if #[n : n in s`current_layer | n`maybe_equal] eq 0 then
+        vprint PGG_GaloisGroup: "next layer";
+        PGG_GlobalTimer_Swap("new layer");
+        s`current_layer := SetToSequence({m : m in PossibleChildren(n), n in s`current_layer});
+        descending := true;
+      end if;
+    when "Patient":
+      not_implemented("patient descent");
+    else
+      assert false;
+    end case;
+    if descending then
+      vprint PGG_GaloisGroup: "#layer =", #s`current_layer, #[n : n in s`current_layer | n`maybe_equal], #{m : m in PossibleChildren(n), n in s`current_layer}, #{m : m in PossibleChildren(n), n in s`current_layer | m`maybe_equal};
+      // re-process all the resolvents we have tried already
+      if s`algorithm`reprocess then
+        PGG_GlobalTimer_Swap("re-process");
+        for i in [1..#s`resolvents] do
+          _ProcessResolvent(s, i);
+        end for;
+        vprint PGG_GaloisGroup: "#layer =", #s`current_layer, #[n : n in s`current_layer | n`maybe_equal], #{m : m in PossibleChildren(n), n in s`current_layer}, #{m : m in PossibleChildren(n), n in s`current_layer | m`maybe_equal};
+      end if;
+      // start picking groups from the beginning again
+      if s`algorithm`reset then
+        PGG_GlobalTimer_Swap("reset");
+        Reset(s`choice_state);
+      end if;
+    else
+      break;
+    end if;
+  end while;
+  PGG_GlobalTimer_Pop();
 end intrinsic;
 
 intrinsic GlobalModel(F :: FldPad) -> PGGGloMod
@@ -2050,7 +2370,7 @@ intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, I, U :: GrpPerm) -> RngUPol
         return ChangeRing(R, BaseField(s`conjugacy));
       end if;
     else
-      not_implemented("only implemented over Q");
+      not_implemented("Resolvent: only implemented over Q");
     end if;
   end while;
 end intrinsic;
@@ -2488,6 +2808,26 @@ intrinsic _IsConsistent(conj :: PGGConj_Tower, G :: GrpPerm) -> BoolElt
   return forall{c : c in conj`tower | IsConsistent(c, c`parent_quotient(G meet c`parent_subgroup))};
 end intrinsic;
 
+intrinsic IsConsistentWithSubgroup(conj :: PGGConj, G :: GrpPerm) -> BoolElt
+  {True if the Galois group could be a subgroup of G.}
+  not_implemented("IsConsistentWithSubgroup: ", Type(conj));
+end intrinsic;
+
+intrinsic IsConsistentWithSubgroup(conj :: PGGConj_Symmetric, G :: GrpPerm) -> BoolElt
+  {"}
+  return (not IsTransitive(conj)) or IsTransitive(G);
+end intrinsic;
+
+intrinsic IsConsistentWithSubgroup(conj :: PGGConj_Factors, G :: GrpPerm) -> BoolElt
+  {"}
+  return forall{c : c in conj`factors | IsConsistentWithSubgroup(c, c`parent_quotient(G meet c`parent_subgroup))};
+end intrinsic;
+
+intrinsic IsConsistentWithSubgroup(conj :: PGGConj_Tower, G :: GrpPerm) -> BoolElt
+  {"}
+  return forall{c : c in conj`tower | IsConsistentWithSubgroup(c, c`parent_quotient(G meet c`parent_subgroup))};
+end intrinsic;
+
 intrinsic IsKnown(conj :: PGGConj) -> BoolElt, GrpPerm
   {True if the Galois group is known exactly, and the group.}
   if not assigned conj`is_known then
@@ -2542,49 +2882,49 @@ intrinsic _IsKnown(conj :: PGGConj_Tower) -> BoolElt, GrpPerm
   end if;
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_All_Priority_Null_Make() -> PGGAlg_ResGroups_All_Priority_Null_Make
+intrinsic PGGAlg_ResPriority_Null_Make() -> PGGAlg_ResPriority_Null_Make
   {The "Null" subgroups priority.}
-  alg := New(PGGAlg_ResGroups_All_Priority_Null);
+  alg := New(PGGAlg_ResPriority_Null);
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_All_Priority_Random_Make() -> PGGAlg_ResGroups_All_Priority_Random_Make
+intrinsic PGGAlg_ResPriority_Random_Make() -> PGGAlg_ResPriority_Random_Make
   {The "Random" subgroups priority.}
-  alg := New(PGGAlg_ResGroups_All_Priority_Random);
+  alg := New(PGGAlg_ResPriority_Random);
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_All_Priority_Reverse_Make(:Priority:=false) -> PGGAlg_ResGroups_All_Priority_Reverse_Make
+intrinsic PGGAlg_ResPriority_Reverse_Make(:Priority:=false) -> PGGAlg_ResPriority_Reverse_Make
   {The "Reverse" subgroups priority.}
-  alg := New(PGGAlg_ResGroups_All_Priority_Reverse);
-  alg`priority := Priority cmpne false select Priority else PGGAlg_ResGroups_All_Priority_Null_Make();
+  alg := New(PGGAlg_ResPriority_Reverse);
+  alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_All_Priority_Key_Make(key :: PGGExpr) -> PGGAlg_ResGroups_All_Priority_Key
+intrinsic PGGAlg_ResPriority_Key_Make(key :: PGGExpr) -> PGGAlg_ResPriority_Key
   {The "Key" subgroups priority.}
-  alg := New(PGGAlg_ResGroups_All_Priority_Key);
+  alg := New(PGGAlg_ResPriority_Key);
   assert FreeVariables(key) subset {"Index", "OrbitIndex", "Diversity", "Information"};
   alg`key := key;
   return alg;
 end intrinsic;
 
-intrinsic Prioritize(X, P :: PGGAlg_ResGroups_All_Priority_Null) -> .
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Null) -> .
   {Prioritizes X.}
   return X;
 end intrinsic;
 
-intrinsic Prioritize(X, P :: PGGAlg_ResGroups_All_Priority_Reverse) -> .
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Reverse) -> .
   {Prioritizes X.}
   return Reverse(Prioritize(X, P`priority));
 end intrinsic;
 
-intrinsic Prioritize(X, P :: PGGAlg_ResGroups_All_Priority_Random) -> .
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Random) -> .
   {Prioritizes X.}
   return Shuffle(X);
 end intrinsic;
 
-intrinsic Prioritize(X, P :: PGGAlg_ResGroups_All_Priority_Key) -> .
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Key) -> .
   {"}
   return SortBy(X, function (i)
     return Evaluate(P`key, func<name | case<name |
@@ -2597,43 +2937,43 @@ intrinsic Prioritize(X, P :: PGGAlg_ResGroups_All_Priority_Key) -> .
   end function);
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_All_Choice_All_Make(:Priority:=false) -> PGGAlg_ResGroups_All_Choice_All
+intrinsic PGGAlg_ResChoice_All_Make(:Priority:=false) -> PGGAlg_ResChoice_All
   {The "All" subgroups choice.}
-  alg := New(PGGAlg_ResGroups_All_Choice_All);
-  alg`priority := Priority cmpne false select Priority else PGGAlg_ResGroups_All_Priority_Null_Make();
+  alg := New(PGGAlg_ResChoice_All);
+  alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_All_Choice_Index_Make(:Priority:=false, Filter:=false, SortKey:=false) -> PGGAlg_ResGroups_All_Choice_Index
+intrinsic PGGAlg_ResChoice_Index_Make(:Priority:=false, Filter:=false, SortKey:=false) -> PGGAlg_ResChoice_Index
   {The "Index" subgroups choice.}
-  alg := New(PGGAlg_ResGroups_All_Choice_Index);
-  alg`priority := Priority cmpne false select Priority else PGGAlg_ResGroups_All_Priority_Null_Make();
+  alg := New(PGGAlg_ResChoice_Index);
+  alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
   alg`filter := Filter;
   alg`sort_key := SortKey;
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_All_Choice_OrbitIndex_Make(:Priority:=false, Filter:=false, SortKey:=false) -> PGGAlg_ResGroups_All_Choice_OrbitIndex
+intrinsic PGGAlg_ResChoice_OrbitIndex_Make(:Priority:=false, Filter:=false, SortKey:=false) -> PGGAlg_ResChoice_OrbitIndex
   {The "Index" subgroups choice.}
-  alg := New(PGGAlg_ResGroups_All_Choice_OrbitIndex);
-  alg`priority := Priority cmpne false select Priority else PGGAlg_ResGroups_All_Priority_Null_Make();
+  alg := New(PGGAlg_ResChoice_OrbitIndex);
+  alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
   alg`filter := Filter;
   alg`sort_key := SortKey;
   return alg;
 end intrinsic;
 
-intrinsic Start(alg :: PGGAlg_ResGroups_All_Choice_All, parent :: PGGAlgState_ResGroups_All) -> PGGAlgState_ResGroups_All_Choice_All
+intrinsic Start(alg :: PGGAlg_ResChoice_All, parent :: PGGAlgState_ResGroups) -> PGGAlgState_ResChoice_All
   {Starts alg.}
-  s := New(PGGAlgState_ResGroups_All_Choice_All);
+  s := New(PGGAlgState_ResChoice_All);
   s`parent := parent;
   s`overgroup := parent`overgroup;
   s`algorithm := alg;
   return s;
 end intrinsic;
 
-intrinsic Start(alg :: PGGAlg_ResGroups_All_Choice_Index, parent :: PGGAlgState_ResGroups_All) -> PGGAlgState_ResGroups_All_Choice_Index
+intrinsic Start(alg :: PGGAlg_ResChoice_Index, parent :: PGGAlgState_ResGroups) -> PGGAlgState_ResChoice_Index
   {"}
-  s := New(PGGAlgState_ResGroups_All_Choice_Index);
+  s := New(PGGAlgState_ResChoice_Index);
   s`parent := parent;
   s`overgroup := parent`overgroup;
   s`algorithm := alg;
@@ -2652,9 +2992,9 @@ intrinsic Start(alg :: PGGAlg_ResGroups_All_Choice_Index, parent :: PGGAlgState_
   return s;
 end intrinsic;
 
-intrinsic Start(alg :: PGGAlg_ResGroups_All_Choice_OrbitIndex, parent :: PGGAlgState_ResGroups_All) -> PGGAlgState_ResGroups_All_Choice_OrbitIndex
+intrinsic Start(alg :: PGGAlg_ResChoice_OrbitIndex, parent :: PGGAlgState_ResGroups) -> PGGAlgState_ResChoice_OrbitIndex
   {"}
-  s := New(PGGAlgState_ResGroups_All_Choice_OrbitIndex);
+  s := New(PGGAlgState_ResChoice_OrbitIndex);
   s`parent := parent;
   s`overgroup := parent`overgroup;
   s`algorithm := alg;
@@ -2677,7 +3017,28 @@ intrinsic Start(alg :: PGGAlg_ResGroups_All_Choice_OrbitIndex, parent :: PGGAlgS
   return s;
 end intrinsic;
 
-intrinsic Subgroup(s :: PGGAlgState_ResGroups_All_Choice_Tranche) -> GrpPerm
+intrinsic Reset(s :: PGGAlgState_ResChoice_All)
+  {Starts choosing from the beginning again.}
+  if assigned s`tranche then
+    delete s`tranche;
+  end if;
+end intrinsic;
+
+intrinsic Reset(s :: PGGAlgState_ResChoice_Index)
+  {"}
+  s`ii := 0;
+  s`tranche := [];
+end intrinsic;
+
+intrinsic Reset(s :: PGGAlgState_ResChoice_OrbitIndex)
+  {"}
+  s`ii := 0;
+  s`si := 0;
+  s`tranche := [];
+  s`cur_stabilizers := [];
+end intrinsic;
+
+intrinsic Subgroup(s :: PGGAlgState_ResChoice_Tranche) -> GrpPerm
   {Selects a subgroup.}
   while true do
     tranche := Tranche(s);
@@ -2691,7 +3052,7 @@ intrinsic Subgroup(s :: PGGAlgState_ResGroups_All_Choice_Tranche) -> GrpPerm
   end while;
 end intrinsic;
 
-intrinsic Tranche(s :: PGGAlgState_ResGroups_All_Choice_All) -> []
+intrinsic Tranche(s :: PGGAlgState_ResChoice_All) -> []
   {Gets a tranche of potential subgroups.}
   if not assigned s`tranche then
     if not assigned s`all_groups then
@@ -2702,7 +3063,7 @@ intrinsic Tranche(s :: PGGAlgState_ResGroups_All_Choice_All) -> []
   return [i : i in s`tranche];
 end intrinsic;
 
-intrinsic Tranche(s :: PGGAlgState_ResGroups_All_Choice_Index) -> []
+intrinsic Tranche(s :: PGGAlgState_ResChoice_Index) -> []
   {"}
   while #s`tranche eq 0 do
     s`ii +:= 1;
@@ -2716,7 +3077,7 @@ intrinsic Tranche(s :: PGGAlgState_ResGroups_All_Choice_Index) -> []
   return [i : i in s`tranche];
 end intrinsic;
 
-intrinsic Tranche(s :: PGGAlgState_ResGroups_All_Choice_OrbitIndex) -> []
+intrinsic Tranche(s :: PGGAlgState_ResChoice_OrbitIndex) -> []
   {"}
   while #s`tranche eq 0 do
     while s`si ge #s`cur_stabilizers do
@@ -2743,45 +3104,50 @@ intrinsic Tranche(s :: PGGAlgState_ResGroups_All_Choice_OrbitIndex) -> []
   return [i : i in s`tranche];
 end intrinsic;
 
-intrinsic MakeTranche(s :: PGGAlgState_ResGroups_All_Choice_Tranche, groups :: [GrpPerm]) -> .
+intrinsic MakeTranche(s :: PGGAlgState_ResChoice_Tranche, groups :: [GrpPerm]) -> .
   {Makes a new tranche.}
   return [TrancheItem(s, i, groups[i]) : i in [1..#groups]];
 end intrinsic;
 
-intrinsic TrancheItem(s :: PGGAlgState_ResGroups_All_Choice_Tranche, idx, subgroup :: GrpPerm) -> PGGAlgState_ResGroups_All_Choice_TrancheItem
+intrinsic TrancheItem(s :: PGGAlgState_ResChoice_Tranche, idx, subgroup :: GrpPerm) -> PGGAlgState_ResChoice_TrancheItem
   {An item in a tranche.}
-  i := New(PGGAlgState_ResGroups_All_Choice_TrancheItem);
+  i := New(PGGAlgState_ResChoice_TrancheItem);
   i`state := s;
   i`idx := idx;
   i`subgroup := subgroup;
   return i;
 end intrinsic;
 
-intrinsic ForgetTrancheItem(s :: PGGAlgState_ResGroups_All_Choice_All, i :: RngIntElt)
+intrinsic ForgetTrancheItem(s :: PGGAlgState_ResChoice_All, i :: RngIntElt)
   {Don't consider this item again.}
   Undefine(~s`tranche, i);
 end intrinsic;
 
-intrinsic ForgetTrancheItem(s :: PGGAlgState_ResGroups_All_Choice_Index, i :: RngIntElt)
+intrinsic ForgetTrancheItem(s :: PGGAlgState_ResChoice_Index, i :: RngIntElt)
   {"}
   Undefine(~s`tranche, i);
 end intrinsic;
 
-intrinsic ForgetTrancheItem(s :: PGGAlgState_ResGroups_All_Choice_OrbitIndex, i :: RngIntElt)
+intrinsic ForgetTrancheItem(s :: PGGAlgState_ResChoice_OrbitIndex, i :: RngIntElt)
   {"}
   Undefine(~s`tranche, i);
 end intrinsic;
 
-intrinsic Group(i :: PGGAlgState_ResGroups_All_Choice_TrancheItem) -> GrpPerm
+intrinsic Group(i :: PGGAlgState_ResChoice_TrancheItem) -> GrpPerm
   {The group.}
   return i`subgroup;
 end intrinsic;
 
-intrinsic IsUseful(i :: PGGAlgState_ResGroups_All_Choice_TrancheItem) -> BoolElt
+intrinsic IsUseful(i :: PGGAlgState_ResChoice_TrancheItem) -> BoolElt
   {Checks if the item is useful. If not, forgets it.}
-  Gs := i`state`parent`possible_groups;
-  h := CosetAction(i`state`overgroup, i`subgroup);
-  statalg := i`state`parent`algorithm`statistic;
+  return IsUseful(i`state`parent, i);
+end intrinsic;
+
+intrinsic IsUseful(s :: PGGAlgState_ResGroups_All, i :: PGGAlgState_ResChoice_TrancheItem) -> BoolElt
+  {"}
+  Gs := s`possible_groups;
+  h := CosetAction(s`overgroup, i`subgroup);
+  statalg := s`algorithm`statistic;
   stat1 := GroupStat(statalg, h(Gs[1]));
   is_useful := exists{G : G in Gs[2..#Gs] | GroupStat(statalg, h(G)) ne stat1};
   if not is_useful then
@@ -2790,7 +3156,32 @@ intrinsic IsUseful(i :: PGGAlgState_ResGroups_All_Choice_TrancheItem) -> BoolElt
   return is_useful;
 end intrinsic;
 
-intrinsic Information(i :: PGGAlgState_ResGroups_All_Choice_TrancheItem) -> FldReElt
+// The actual Galois group is either:
+// - one of the groups in the current layer; or
+// - a subgroup of one of the children of the current layer.
+// So we say U is useful if either:
+// - it eliminates one of the groups in the layer as a possibility; or
+// - it eliminates one of the children as a possible overgroup.
+//
+// Consider the case where there is a single node in the layer, and it has a single child. If the statistic is the same on node and child, then we cannot conclude anything. If it is different, then the actual statistic is either that of the node, and hence rules out the child (which is a strict refinement), or is a refinement of that of the child, and hence rules out the node.
+// 
+// Suppose now there is a single node with several children. We partition the children into two sets, those with the same statistic as the node, and those with different statistics (which therefore are strict refinements). If the actual statistic is that of the node, then we rule out the children with different statistics. If the actual statistic is a refinement of one of the different children, then we rule out the node (and maybe some children).
+// 
+// More generally, if there is a node with maybe_equal=true and a child (of possibly a different node) with maybe_subgroup=true such that the statistic for the child is a strict refinement of that of the node, then we will distinguish between them: if the actual statistic agrees with the node, then it cannot agree with the child.
+intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal, i :: PGGAlgState_ResChoice_TrancheItem) -> BoolElt
+  {"}
+  h := CosetAction(s`overgroup, i`subgroup);
+  statalg := s`algorithm`statistic;
+  nstats := [GroupStat(n, h) : n in s`current_layer | n`maybe_equal];
+  mstats := [GroupStat(m, h) : m in {m : m in PossibleChildren(n), n in s`current_layer | m`maybe_subgroup}];
+  is_useful := exists{nstat : nstat in nstats, mstat in mstats | (mstat ne nstat) and (mstat subset nstat)};
+  if not is_useful then
+    Forget(i);
+  end if;
+  return is_useful;
+end intrinsic;
+
+intrinsic Information(i :: PGGAlgState_ResChoice_TrancheItem) -> FldReElt
   {The information provided by this item.}
   Gs := i`state`parent`possible_groups;
   h := CosetAction(i`state`overgroup, i`subgroup);
@@ -2799,7 +3190,7 @@ intrinsic Information(i :: PGGAlgState_ResGroups_All_Choice_TrancheItem) -> FldR
   return multiplicities_to_information(Multiplicities(stats));
 end intrinsic;
 
-intrinsic Diversity(i :: PGGAlgState_ResGroups_All_Choice_TrancheItem) -> RngIntElt
+intrinsic Diversity(i :: PGGAlgState_ResChoice_TrancheItem) -> RngIntElt
   {The information provided by this item.}
   Gs := i`state`parent`possible_groups;
   h := CosetAction(i`state`overgroup, i`subgroup);
@@ -2808,7 +3199,7 @@ intrinsic Diversity(i :: PGGAlgState_ResGroups_All_Choice_TrancheItem) -> RngInt
   return #stats;
 end intrinsic;
 
-intrinsic Forget(i :: PGGAlgState_ResGroups_All_Choice_TrancheItem)
+intrinsic Forget(i :: PGGAlgState_ResChoice_TrancheItem)
   {Don't consider this item again.}
   ForgetTrancheItem(i`state, i`idx);
 end intrinsic;
@@ -2817,11 +3208,27 @@ intrinsic PGGAlg_ResGroups_All_Make(:Statistic:=false, SubgroupChoice:=false) ->
   {The "All" resolvent groups algorithm.}
   alg := New(PGGAlg_ResGroups_All);
   alg`statistic := Statistic cmpne false select Statistic else PGGStat_FactorDegrees_Make();
-  alg`subgroup_choice := SubgroupChoice cmpne false select SubgroupChoice else PGGAlg_ResGroups_All_Choice_All_Make();
+  alg`subgroup_choice := SubgroupChoice cmpne false select SubgroupChoice else PGGAlg_ResChoice_All_Make();
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_ResGroups_Maximal_Make(:Statistic:=false, SubgroupChoice:=false, Descend:=false, Reprocess:=true, Reset:=true) -> PGGAlg_ResGroups_Maximal
+  {The "Maximal" resolvent groups algorithm.}
+  alg := New(PGGAlg_ResGroups_Maximal);
+  alg`statistic := Statistic cmpne false select Statistic else PGGStat_FactorDegrees_Make();
+  alg`subgroup_choice := SubgroupChoice cmpne false select SubgroupChoice else PGGAlg_ResChoice_All_Make();
+  alg`descend := Descend cmpne false select Descend else "Steady";
+  alg`reprocess := Reprocess;
+  alg`reset := Reset;
   return alg;
 end intrinsic;
 
 intrinsic Subgroup(s :: PGGAlgState_ResGroups_All) -> GrpPerm
+  {Selects a subgroup to form a resolvent with.}
+  return Subgroup(s`choice_state);
+end intrinsic;
+
+intrinsic Subgroup(s :: PGGAlgState_ResGroups_Maximal) -> GrpPerm
   {Selects a subgroup to form a resolvent with.}
   return Subgroup(s`choice_state);
 end intrinsic;
@@ -2857,52 +3264,48 @@ end intrinsic;
 intrinsic GaloisGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt[FldPad]) -> GrpPerm
   {The Galois group of f.}
   vprint PGG_GaloisGroup: "ResolventMethod...";
-  t := PGG_Timer();
-  Push(t, "conjugacy");
+  PGG_GlobalTimer_Push("conjugacy");
   conj := Conjugacy(Alg`conjugacy_alg, f);
   vprint PGG_GaloisGroup: "conjugacy =", conj;
-  Swap(t, "start resolvent");
+  PGG_GlobalTimer_Swap("start resolvent");
   rst := Start(Alg`resolvent_alg, conj);
-  Swap(t, "overgroup");
+  PGG_GlobalTimer_Swap("overgroup");
   W := Overgroup(rst);
   vprint PGG_GaloisGroup: "overgroup =", W;
-  Swap(t, "start groups");
+  PGG_GlobalTimer_Swap("start groups");
   gst := Start(Alg`groups_alg, conj, W);
   if Alg`use_easy_resolvents then
     vprint PGG_GaloisGroup: "easy resolvents...";
-    Swap(t, "easy resolvents");
+    PGG_GlobalTimer_Swap("easy resolvents");
     RUs := EasyResolvents(conj);
     for RU in RUs do
       if IsDone(gst) then
         break;
       end if;
       R, U := Explode(RU);
-      Swap(t, "process resolvent");
+      PGG_GlobalTimer_Swap("process resolvent");
       ProcessResolvent(gst, R, U);
     end for;
   end if;
   if not IsDone(gst) then
     vprint PGG_GaloisGroup: "main loop...";
     repeat
-      Swap(t, "subgroup");
+      PGG_GlobalTimer_Swap("subgroup");
       U := Subgroup(gst);
       vprint PGG_GaloisGroup: "subgroup index =", Index(W, U);
       vprint PGG_GaloisGroup: "orbit-relative index =", Index(Stabilizer(W, Orbits(U)), U);
-      Swap(t, "invariant");
+      PGG_GlobalTimer_Swap("invariant");
       I := RelativeInvariant(W, U);
       vprint PGG_GaloisGroup: "invariant =", I;
-      Swap(t, "resolvent");
+      PGG_GlobalTimer_Swap("resolvent");
       R := Resolvent(rst, I, U);
       vprint PGG_GaloisGroup: "resolvent =", R;
-      Swap(t, "process resolvent");
+      PGG_GlobalTimer_Swap("process resolvent");
       ProcessResolvent(gst, R, U);
     until IsDone(gst);
   end if;
   vprint PGG_GaloisGroup: "success";
-  Pop(t);
-  if GetVerbose("PGG_GaloisGroup") gt 0 then
-    PrintTree(t);
-  end if;
+  PGG_GlobalTimer_Pop();
   return TheGroup(gst);
 end intrinsic;
 
@@ -3131,55 +3534,55 @@ function parse_algorithm(alg)
     end function)>;
 
     SUBGROUP_PRIORITY := set("SUBGROUP_PRIORITY", PGG_ArgSpec_Union([
-      PGG_ArgSpec_ISA(PGGAlg_ResGroups_All_Priority),
+      PGG_ArgSpec_ISA(PGGAlg_ResPriority),
       PGG_ArgSpec_Literal(false),
       PGG_ArgSpec_Attr(
         "Null",
         [],
-        func<args | PGGAlg_ResGroups_All_Priority_Null_Make()>
+        func<args | PGGAlg_ResPriority_Null_Make()>
       ),
       PGG_ArgSpec_Attr(
         "Random",
         [],
-        func<args | PGGAlg_ResGroups_All_Priority_Random_Make()>
+        func<args | PGGAlg_ResPriority_Random_Make()>
       ),
       PGG_ArgSpec_Attr(
         "Reverse",
         [ <get("SUBGROUP_PRIORITY"),"Priority",false> ],
-        func<args | PGGAlg_ResGroups_All_Priority_Reverse_Make(:Priority:=args[1])>
+        func<args | PGGAlg_ResPriority_Reverse_Make(:Priority:=args[1])>
       ),
       // PGG_ArgSpec_Attr(
       //   "Filter",
       //   [ <SUBGROUP_PRIORITY_EXPRESSION,"Cond",false>,
       //     <get("SUBGROUP_PRIORITY"),"Priority",false>
       //   ],
-      //   func<args | PGGAlg_ResGroups_All_Priority_Null_Make(:Expression:=args[1], Priority:=args[2])>
+      //   func<args | PGGAlg_ResPriority_Null_Make(:Expression:=args[1], Priority:=args[2])>
       // ),
-      PGG_ArgSpec_Transform(EXPRESSION(["Index","OrbitIndex","Diversity","Information"]), func<x | PGGAlg_ResGroups_All_Priority_Key_Make(x)>)
+      PGG_ArgSpec_Transform(EXPRESSION(["Index","OrbitIndex","Diversity","Information"]), func<x | PGGAlg_ResPriority_Key_Make(x)>)
     ]));
 
     SUBGROUP_CHOICE := PGG_ArgSpec_Union([
-      PGG_ArgSpec_ISA(PGGAlg_ResGroups_All_Choice),
+      PGG_ArgSpec_ISA(PGGAlg_ResChoice),
       PGG_ArgSpec_Literal(false),
       PGG_ArgSpec_Attr(
         "All",
         [ <SUBGROUP_PRIORITY,"",false> ],
-        func<args | PGGAlg_ResGroups_All_Choice_All_Make(:Priority:=args[1])>
+        func<args | PGGAlg_ResChoice_All_Make(:Priority:=args[1])>
       ),
       PGG_ArgSpec_Attr(
         "Index",
         [ <SUBGROUP_PRIORITY,"",false>, <X,"If",false>, <X,"Sort",false> ] where X:=EXPRESSION(["idx"]),
-        func<args | PGGAlg_ResGroups_All_Choice_Index_Make(:Priority:=args[1],Filter:=args[2], SortKey:=args[3])>
+        func<args | PGGAlg_ResChoice_Index_Make(:Priority:=args[1],Filter:=args[2], SortKey:=args[3])>
       ),
       PGG_ArgSpec_Attr(
         "OrbitIndex",
         [ <SUBGROUP_PRIORITY,"",false>, <X,"If",false>, <X,"Sort",false> ] where X:=EXPRESSION(["idx","oidx","ridx"]),
-        func<args | PGGAlg_ResGroups_All_Choice_OrbitIndex_Make(:Priority:=args[1], Filter:=args[2], SortKey:=args[3])>
+        func<args | PGGAlg_ResChoice_OrbitIndex_Make(:Priority:=args[1], Filter:=args[2], SortKey:=args[3])>
       )//,
       // PGG_ArgSpec_Attr(
       //   "MostUseful",
       //   [ <SUBGROUP_PRIORITY,"",false> ],
-      //   func<args | PGGAlg_ResGroups_All_Choice_MostUseful_Make()>
+      //   func<args | PGGAlg_ResChoice_MostUseful_Make()>
       // )
     ]);
 
@@ -3192,6 +3595,21 @@ function parse_algorithm(alg)
         , <SUBGROUP_CHOICE,"Choice",false>
         ],
         func<args | PGGAlg_ResGroups_All_Make(:Statistic:=args[1], SubgroupChoice:=args[2])>
+      ),
+      PGG_ArgSpec_Attr(
+        "Maximal",
+        [ <STATISTIC,"Stat",false>
+        , <SUBGROUP_CHOICE,"Choice",false>
+        , <PGG_ArgSpec_Union([
+              PGG_ArgSpec_Literal(false),
+              PGG_ArgSpec_Attr("Eager"),
+              PGG_ArgSpec_Attr("Steady"),
+              PGG_ArgSpec_Attr("Patient")
+            ]), "Descend", false>
+        , <BOOL, "Reprocess", true>
+        , <BOOL, "Reset", true>
+        ],
+        func<args | PGGAlg_ResGroups_Maximal_Make(:Statistic:=args[1], SubgroupChoice:=args[2], Descend:=args[3], Reprocess:=args[4], Reset:=args[5])>
       )
     ]);
 
@@ -3233,8 +3651,19 @@ function parse_algorithm(alg)
   return PGG_Parse(specs("GALOISGROUP"), alg);
 end function;
 
-intrinsic PGG_GaloisGroup(f :: RngUPolElt[FldPad] : Alg:="ARM") -> GrpPerm
+intrinsic PGG_GaloisGroup(f :: RngUPolElt[FldPad] : Alg:="ARM", Time:=false) -> GrpPerm
   {The Galois group of f.}
+  if Time then
+    PGG_StartGlobalTimer();
+  end if;
+  PGG_GlobalTimer_Push("parse algorithm");
   alg := parse_algorithm(Alg);
-  return GaloisGroup(alg, f);
+  PGG_GlobalTimer_Swap("GaloisGroup");
+  G := GaloisGroup(alg, f);
+  PGG_GlobalTimer_Pop();
+  if Time then
+    PGG_GlobalTimer_PrintTree();
+    PGG_StopGlobalTimer();
+  end if;
+  return G;
 end intrinsic;

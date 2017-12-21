@@ -1,0 +1,91 @@
+freeze;
+
+declare type PGGState;
+declare attributes PGGState: timer;
+
+STATE := New(PGGState);
+
+intrinsic PGG_HasGlobalTimer() -> BoolElt, PGGTimer
+  {True if there is a global timer set.}
+  if assigned STATE`timer then
+    return true, STATE`timer;
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic PGG_GlobalTimer() -> PGGTimer
+  {The global timer.}
+  ok, t := PGG_HasGlobalTimer();
+  require ok: "no timer";
+  return t;
+end intrinsic;
+
+intrinsic PGG_StopGlobalTimer()
+  {Stops the global timer.}
+  s := STATE;
+  require assigned s`timer: "no timer";
+  delete s`timer;
+end intrinsic;
+
+intrinsic PGG_StartGlobalTimer()
+  {Starts the global timer.}
+  s := STATE;
+  require not assigned s`timer: "global timer already on";
+  s`timer := PGG_Timer();
+end intrinsic;
+
+intrinsic PGG_GlobalTimer_Push(x)
+  {Push.}
+  ok, t := PGG_HasGlobalTimer();
+  if ok then
+    Push(t, x);
+  end if;
+end intrinsic;
+
+intrinsic PGG_GlobalTimer_Pop()
+  {Pop.}
+  ok, t := PGG_HasGlobalTimer();
+  if ok then
+    Pop(t);
+  end if;
+end intrinsic;
+
+intrinsic PGG_GlobalTimer_Pop(x)
+  {Pop.}
+  ok, t := PGG_HasGlobalTimer();
+  if ok then
+    Pop(t, x);
+  end if;
+end intrinsic;
+
+intrinsic PGG_GlobalTimer_Pop(x, y)
+  {Pop.}
+  ok, t := PGG_HasGlobalTimer();
+  if ok then
+    Pop(t, x, y);
+  end if;
+end intrinsic;
+
+intrinsic PGG_GlobalTimer_Swap(x)
+  {Swap.}
+  ok, t := PGG_HasGlobalTimer();
+  if ok then
+    Swap(t, x);
+  end if;
+end intrinsic;
+
+intrinsic PGG_GlobalTimer_Log(x)
+  {Log.}
+  ok, t := PGG_HasGlobalTimer();
+  if ok then
+    Log(t, x);
+  end if;
+end intrinsic;
+
+intrinsic PGG_GlobalTimer_PrintTree()
+  {PrintTree.}
+  ok, t := PGG_HasGlobalTimer();
+  require ok: "no timer";
+  PrintTree(t);
+end intrinsic;

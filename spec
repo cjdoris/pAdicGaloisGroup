@@ -1,3 +1,4 @@
 {
   GaloisGroup.mag
+  State.mag
 }
