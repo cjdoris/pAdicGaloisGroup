@@ -1315,7 +1315,7 @@ declare type PGGAlgState_ResGroups_All: PGGAlgState_ResGroups;
 declare attributes PGGAlgState_ResGroups_All: conjugacy, overgroup, possible_groups, choice_state;
 
 declare type PGGAlg_ResGroups_Maximal: PGGAlg_ResGroups;
-declare attributes PGGAlg_ResGroups_Maximal: subgroup_choice, statistic, descend, reprocess, reset;
+declare attributes PGGAlg_ResGroups_Maximal: subgroup_choice, statistic, descend, reprocess, reset, useful;
 
 declare type PGGAlgState_ResGroups_Maximal: PGGAlgState_ResGroups;
 declare attributes PGGAlgState_ResGroups_Maximal: conjugacy, overgroup, choice_state, conjugacy_classes
@@ -3172,9 +3172,19 @@ intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal, i :: PGGAlgState_ResChoic
   {"}
   h := CosetAction(s`overgroup, i`subgroup);
   statalg := s`algorithm`statistic;
-  nstats := [GroupStat(n, h) : n in s`current_layer | n`maybe_equal];
-  mstats := [GroupStat(m, h) : m in {m : m in PossibleChildren(n), n in s`current_layer | m`maybe_subgroup}];
-  is_useful := exists{nstat : nstat in nstats, mstat in mstats | (mstat ne nstat) and (mstat subset nstat)};
+  case s`algorithm`useful:
+  when "Strict":
+    nstats := [GroupStat(n, h) : n in s`current_layer | n`maybe_equal];
+    mstats := [GroupStat(m, h) : m in {m : m in PossibleChildren(n), n in s`current_layer | m`maybe_subgroup}];
+    is_useful := exists{nstat : nstat in nstats, mstat in mstats | (mstat ne nstat) and (mstat subset nstat)};
+  when "Generous":
+    ns := [n : n in s`current_layer | n`maybe_equal] cat [m : m in PossibleChildren(n), n in s`current_layer | m`maybe_subgroup];
+    assert #ns ge 2;
+    stat1 := GroupStat(ns[1], h);
+    is_useful := exists{n : n in ns[2..#ns] | GroupStat(n, h) ne stat1};
+  else
+    assert false;
+  end case;
   if not is_useful then
     Forget(i);
   end if;
@@ -3212,7 +3222,7 @@ intrinsic PGGAlg_ResGroups_All_Make(:Statistic:=false, SubgroupChoice:=false) ->
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_Maximal_Make(:Statistic:=false, SubgroupChoice:=false, Descend:=false, Reprocess:=true, Reset:=true) -> PGGAlg_ResGroups_Maximal
+intrinsic PGGAlg_ResGroups_Maximal_Make(:Statistic:=false, SubgroupChoice:=false, Descend:=false, Reprocess:=true, Reset:=true, Useful:=false) -> PGGAlg_ResGroups_Maximal
   {The "Maximal" resolvent groups algorithm.}
   alg := New(PGGAlg_ResGroups_Maximal);
   alg`statistic := Statistic cmpne false select Statistic else PGGStat_FactorDegrees_Make();
@@ -3220,6 +3230,7 @@ intrinsic PGGAlg_ResGroups_Maximal_Make(:Statistic:=false, SubgroupChoice:=false
   alg`descend := Descend cmpne false select Descend else "Steady";
   alg`reprocess := Reprocess;
   alg`reset := Reset;
+  alg`useful := Useful cmpne false select Useful else "Generous";
   return alg;
 end intrinsic;
 
@@ -3601,13 +3612,18 @@ function parse_algorithm(alg)
         [ <STATISTIC,"Stat",false>
         , <SUBGROUP_CHOICE,"Choice",false>
         , <PGG_ArgSpec_Union([
-              PGG_ArgSpec_Literal(false),
-              PGG_ArgSpec_Attr("Eager"),
-              PGG_ArgSpec_Attr("Steady"),
-              PGG_ArgSpec_Attr("Patient")
-            ]), "Descend", false>
+            PGG_ArgSpec_Literal(false),
+            PGG_ArgSpec_Attr("Eager"),
+            PGG_ArgSpec_Attr("Steady"),
+            PGG_ArgSpec_Attr("Patient")
+          ]), "Descend", false>
         , <BOOL, "Reprocess", true>
         , <BOOL, "Reset", true>
+        , <PGG_ArgSpec_Union([
+            PGG_ArgSpec_Literal(false),
+            PGG_ArgSpec_Attr("Strict"),
+            PGG_ArgSpec_Attr("Generous")
+          ]), "Useful", false>
         ],
         func<args | PGGAlg_ResGroups_Maximal_Make(:Statistic:=args[1], SubgroupChoice:=args[2], Descend:=args[3], Reprocess:=args[4], Reset:=args[5])>
       )

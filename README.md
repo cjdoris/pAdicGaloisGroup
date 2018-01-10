@@ -69,6 +69,10 @@ GROUP_ALG
                                     a common subgroup which could be a Galois group
   , Reprocess: BOOL           When true, on a descent re-use all resolvents computed so far
   , Reset: BOOL               When true, on a descent reset the subgroup choice algorithm
+  , Useful:                   How to decide whether a subgroup is useful
+    [ "Generous"                  Useful if there is a pair of nodes with different statistics
+    , "Strict"                    Useful if there is a pair of nodes with strictly nested statistics
+    ]
   ]
 
 RESEVAL_ALG
