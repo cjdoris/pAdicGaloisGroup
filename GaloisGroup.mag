@@ -254,7 +254,7 @@ function is_in_standard_form(L, K)
       return true, U;
     end if;
   end if;
-  return false;
+  return false, _;
 end function;
 
 function valuation_eq(c, n)
@@ -3607,8 +3607,11 @@ intrinsic Print(alg :: PGGAlg_GaloisGroup_SinglyRamified)
   printf "singly ramified";
 end intrinsic;
 
-intrinsic GaloisGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt[FldPad]) -> GrpPerm
-  {The Galois group of f.}
+intrinsic RamificationGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt[FldPad], u :: FldRatElt) -> GrpPerm
+  {The u-th ramification group of f.}
+  if u ge 0 then
+    not_implemented("RamificationGroup except GaloisGroup");
+  end if;
   PGG_GlobalTimer_Push("conjugacy");
   conj := Conjugacy(Alg`conjugacy_alg, f);
   vprint PGG_GaloisGroup: "conjugacy =", conj;
@@ -3661,7 +3664,7 @@ intrinsic GaloisGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt
 end intrinsic;
 
 intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: RngUPolElt[FldPad]) -> GrpPerm
-  {"}
+  {The Galois group of f.}
   G := GaloisGroup(f);
   return G;
 end intrinsic;
@@ -3670,7 +3673,7 @@ end intrinsic;
 // Example 9.* from Greve, Pauli "On ramification polygons..."
 // Example 3.24 from Milstead "Computing Galois groups..." (thesis)
 intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: RngUPolElt[FldPad]) -> GrpPerm
-  {"}
+  {The Galois group of f.}
   // check f is irreducible and find the extension it defines
   d := Degree(f);
   facs, certs := factorization(f : Extensions);
@@ -3790,6 +3793,27 @@ intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: RngUPolElt[
   // convert G to a permutation group
   Gperm := OrbitImage(G, {@ Vector([x : x in v]) : v in CartesianProduct([[x : x in GF(p)] : i in [1..m]] cat [[GF(p) ! 1]]) @});
   return Gperm;
+end intrinsic;
+
+intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup, f :: RngUPolElt[FldPad]) -> GrpPerm
+  {The Galois group of f.}
+  return RamificationGroup(alg, f, Q!-1);
+end intrinsic;
+
+intrinsic InertiaGroup(alg :: PGGAlg_GaloisGroup, f :: RngUPolElt[FldPad]) -> GrpPerm
+  {The inertia group of f.}
+  return RamificationGroup(alg, f, Q!0);
+end intrinsic;
+
+intrinsic RamificationGroup(alg :: PGGAlg_GaloisGroup, f :: RngUPolElt[FldPad], u :: FldRatElt) -> GrpPerm
+  {The u-th ramification group of f.}
+  if u lt 0 then
+    not_implemented("GaloisGroup");
+  elif u lt 1 then
+    not_implemented("InertiaGroup");
+  else
+    not_implemented("RamificationGroup");
+  end if;
 end intrinsic;
 
 function parse_algorithm(alg)
@@ -4015,20 +4039,44 @@ function parse_algorithm(alg)
   return PGG_Parse(specs("GALOISGROUP"), alg);
 end function;
 
-intrinsic PGG_GaloisGroup(f :: RngUPolElt[FldPad] : Alg:="ARM", Time:=false) -> GrpPerm
-  {The Galois group of f.}
+intrinsic PGG_RamificationGroup(f :: RngUPolElt[FldPad], u :: FldRatElt : Alg:=false, Time:=false) -> GrpPerm
+  {The u-th Galois group of f (in the upper numbering).}
   if Time then
     PGG_StartGlobalTimer();
   end if;
   PGG_GlobalTimer_Push("parse algorithm");
+  if Alg cmpne false then
+    Alg := "ARM";
+  end if;
   alg := parse_algorithm(Alg);
   vprint PGG_GaloisGroup: "algorithm =", alg;
   PGG_GlobalTimer_Swap("GaloisGroup");
-  G := GaloisGroup(alg, f);
+  if u lt 0 then
+    G := GaloisGroup(alg, f);
+  elif u lt 1 then
+    G := InertiaGroup(alg, f);
+  else
+    G := RamificationGroup(alg, f, u);
+  end if;
   PGG_GlobalTimer_Pop();
   if Time then
     PGG_GlobalTimer_PrintTree();
     PGG_StopGlobalTimer();
   end if;
   return G;
+end intrinsic;
+
+intrinsic PGG_RamificationGroup(f :: RngUPolElt[FldPad], u :: RngIntElt : Alg:=false, Time:=false) -> GrpPerm
+  {"}
+  return PGG_RamificationGroup(f, Q!u : Alg:=Alg, Time:=Time);
+end intrinsic;
+
+intrinsic PGG_GaloisGroup(f :: RngUPolElt[FldPad] : Alg:=false, Time:=false) -> GrpPerm
+  {The Galois group of f.}
+  return PGG_RamificationGroup(f, -1 : Alg:=Alg, Time:=Time);
+end intrinsic;
+
+intrinsic PGG_InertiaGroup(f :: RngUPolElt[FldPad] : Alg:=false, Time:=false) -> GrpPerm
+  {The inertia group of f.}
+  return PGG_RamificationGroup(f, 0 : Alg:=Alg, Time:=Time);
 end intrinsic;
