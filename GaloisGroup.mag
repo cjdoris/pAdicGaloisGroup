@@ -761,6 +761,11 @@ intrinsic PGG_ConjugacyClasses(G :: GrpPerm) -> PGGSetConjCls
   return X;
 end intrinsic;
 
+intrinsic Group(X :: PGGSetConjCls) -> GrpPerm
+  {The group.}
+  return X`overgroup;
+end intrinsic;
+
 intrinsic 'eq'(X :: PGGSetConjCls, Y :: PGGSetConjCls) -> BoolElt
   {Equality.}
   return IsIdentical(X, Y);
@@ -815,6 +820,13 @@ intrinsic 'eq'(x :: PGGConjCls, y :: PGGConjCls) -> BoolElt
   {Equality.}
   assert Parent(x) eq Parent(y);
   return (x`class_function_value eq y`class_function_value) and IsConjugate(Parent(x)`overgroup, x`subgroup, y`subgroup);
+end intrinsic;
+
+intrinsic 'subset'(x :: PGGConjCls, y :: PGGConjCls) -> BoolElt
+  {Subset.}
+  assert Parent(x) eq Parent(y);
+  ans := IsConjugateSubgroup(x`parent`overgroup, y`subgroup, x`subgroup);
+  return ans;
 end intrinsic;
 
 declare type PGGTimer;
@@ -1323,10 +1335,16 @@ declare attributes PGGAlgState_ResGroups_Maximal: conjugacy, overgroup, choice_s
   , id_to_node    // sequence of nodes
   , class_to_node // associative array: class -> node
   , current_layer // the galois group is a subgroup of at least one of these
+  , blacklist     // the galois group is not a subgroup of any of these
   ;
 
+declare type PGGAlg_ResGroups_RootsMaximal: PGGAlg_ResGroups;
+
+declare type PGGAlgState_ResGroups_RootsMaximal: PGGAlgState_ResGroups;
+declare attributes PGGAlgState_ResGroups_RootsMaximal: conjugacy, overgroup, cur_group, possible_subgroups, conjugacy_classes;
+
 declare type PGG_ResGroups_Maximal_Node;
-declare attributes PGG_ResGroups_Maximal_Node: id, class, children, possible_children, state, maybe_equal, maybe_subgroup, seen_resolvents;
+declare attributes PGG_ResGroups_Maximal_Node: id, class, children, possible_children, state, maybe_equal, maybe_subgroup, seen_resolvents, blacklist_done;
 
 declare type PGGAlg_ResChoice: PGGAlg;
 declare type PGGAlg_ResChoice_Tranche: PGGAlg_ResChoice;
@@ -1448,7 +1466,7 @@ intrinsic Start(alg :: PGGAlg_ResGroups_All, conj :: PGGConj, overgroup :: GrpPe
   s`conjugacy := conj;
   s`overgroup := overgroup;
   // get a list of possible groups
-  s`possible_groups := (known select [G] else dedupe_conjugage_subgroups(conj`group, [G : x in Subgroups(Overgroup(conj) : IsSolvable, IsTransitive:=IsTransitive(conj)) | IsConsistent(conj, G) where G:=x`subgroup])) where known,G:=IsKnown(conj);
+  s`possible_groups := dedupe_conjugage_subgroups(conj`group, [G : x in Subgroups(Overgroup(conj) : IsSolvable, IsTransitive:=IsTransitive(conj)) | IsConsistent(conj, G) where G:=x`subgroup]);
   s`choice_state := Start(alg`subgroup_choice, s);
   vprint PGG_GaloisGroup: "#possible groups =", #s`possible_groups;
   return s;
@@ -1466,14 +1484,20 @@ intrinsic Start(alg :: PGGAlg_ResGroups_Maximal, conj :: PGGConj, overgroup :: G
   s`id_to_node := [];
   s`class_to_node := AssociativeArray();
   s`conjugacy_classes := PGG_ConjugacyClasses(conj`group);
-  ok, G := IsKnown(conj);
-  if ok then
-    node := Node(s, G);
-    node`children := [];
-    s`current_layer := node;
-  else
-    s`current_layer := [Node(s, Overgroup(conj))];
-  end if;
+  s`current_layer := [Node(s, Overgroup(conj))];
+  s`blacklist := [];
+  return s;
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_ResGroups_RootsMaximal, conj :: PGGConj, overgroup :: GrpPerm) -> PGGAlgState_ResGroups_RootsMaximal
+  {"}
+  assert overgroup subset conj`group;
+  s := New(PGGAlgState_ResGroups_RootsMaximal);
+  s`algorithm := alg;
+  s`conjugacy := conj;
+  s`overgroup := overgroup;
+  s`conjugacy_classes := PGG_ConjugacyClasses(conj`group);
+  s`cur_group := s`conjugacy_classes ! Overgroup(conj);
   return s;
 end intrinsic;
 
@@ -1497,6 +1521,7 @@ intrinsic Node(s :: PGGAlgState_ResGroups_Maximal, G :: PGGConjCls) -> PGG_ResGr
   x`maybe_equal := true;
   x`maybe_subgroup := true;
   x`seen_resolvents := {};
+  x`blacklist_done := 0;
   s`class_to_node[G] := x;
   s`id_to_node[x`id] := x;
   return x;
@@ -1529,11 +1554,18 @@ intrinsic Children(x :: PGG_ResGroups_Maximal_Node) -> []
   return x`children;
 end intrinsic;
 
-intrinsic PossibleChildren(x :: PGG_ResGroups_Maximal_Node) -> []
+intrinsic PossibleChildren(x :: PGG_ResGroups_Maximal_Node : CheckBlacklist:=true) -> []
   {The nodes below x which are possibly overgroups of the Galois group.}
   if not assigned x`possible_children then
     PGG_GlobalTimer_Push("children");
     x`possible_children := Children(x);
+    PGG_GlobalTimer_Pop();
+  end if;
+  if CheckBlacklist and (#x`state`blacklist gt x`blacklist_done) then
+    PGG_GlobalTimer_Push("checking blacklist");
+    x`possible_children := [n : n in x`possible_children | not exists{b : b in blacklist | n`class subset b`class}]
+      where blacklist := x`state`blacklist[x`blacklist_done+1 .. #x`state`blacklist];
+    x`blacklist_done := #x`state`blacklist;
     PGG_GlobalTimer_Pop();
   end if;
   return x`possible_children;
@@ -1559,11 +1591,30 @@ intrinsic IsDone(s :: PGGAlgState_ResGroups_Maximal) -> BoolElt, GrpPerm
   end if;
 end intrinsic;
 
+intrinsic IsDone(s :: PGGAlgState_ResGroups_RootsMaximal) -> BoolElt, GrpPerm
+  {"}
+  if #PossibleSubgroups(s) eq 0 then
+    return true, Rep(s`cur_group);
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
 intrinsic TheGroup(s :: PGGAlgState_ResGroups) -> GrpPerm
   {The Galois group, assuming it is already known.}
   ok, G := IsDone(s);
   assert ok;
   return G;
+end intrinsic;
+
+intrinsic PossibleSubgroups(s :: PGGAlgState_ResGroups_RootsMaximal) -> []
+  {The subgroups of s`cur_group which have not yet been ruled out.}
+  if not assigned s`possible_subgroups then
+    PGG_GlobalTimer_Push("possible subgroups");
+    s`possible_subgroups := SetToSequence({ s`conjugacy_classes ! G : x in MaximalSubgroups(Rep(s`cur_group)) | IsConsistentWithSubgroup(s`conjugacy, G) where G:=x`subgroup });
+    PGG_GlobalTimer_Pop();
+  end if;
+  return s`possible_subgroups;
 end intrinsic;
 
 // intrinsic SubgroupTranche(s :: PGGAlgState_ResGroups_All) -> []
@@ -2104,6 +2155,9 @@ intrinsic _ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, rid)
       assert n`maybe_subgroup;
       nstat := GroupStat(n, h);
       n`maybe_subgroup := n`maybe_subgroup and (rstat subset nstat);
+      if not n`maybe_subgroup then
+        Append(~s`blacklist, n);
+      end if;
       if n`maybe_subgroup then
         n`maybe_equal := n`maybe_equal and (rstat eq nstat);
       end if;
@@ -2124,6 +2178,9 @@ intrinsic _ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, rid)
       assert m`maybe_subgroup;
       mstat := GroupStat(m, h);
       m`maybe_subgroup := m`maybe_subgroup and (rstat subset mstat);
+      if not m`maybe_subgroup then
+        Append(~s`blacklist, m);
+      end if;
       if m`maybe_subgroup then
         m`maybe_equal := m`maybe_equal and (rstat eq mstat);
       end if;
@@ -2134,9 +2191,9 @@ intrinsic _ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, rid)
   PGG_GlobalTimer_Swap("filter children");
   for i in [1..#new_layer] do
     n := new_layer[i];
-    n`possible_children := [m : m in n`possible_children | m`maybe_subgroup];
+    n`possible_children := [m : m in PossibleChildren(n) | m`maybe_subgroup];
   end for;
-  s`current_layer := [n : n in new_layer | n`maybe_equal or (#n`possible_children gt 0)];
+  s`current_layer := [n : n in new_layer | n`maybe_equal or (#PossibleChildren(n) gt 0)];
   PGG_GlobalTimer_Pop();
 end intrinsic;
 
@@ -2153,28 +2210,10 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, resolvent :: RngU
   vprint PGG_GaloisGroup: "#layer =", #s`current_layer, #[n : n in s`current_layer | n`maybe_equal], #{m : m in PossibleChildren(n), n in s`current_layer}, #{m : m in PossibleChildren(n), n in s`current_layer | m`maybe_equal};
   // now see if we need to descend a layer
   while true do
-    descending := false;
-    case s`algorithm`descend:
-    when "Eager":
-      if #[n : n in s`current_layer | not n`maybe_equal] ne 0 then
-        vprint PGG_GaloisGroup: "next layer";
-        PGG_GlobalTimer_Swap("new layer");
-        s`current_layer := SetToSequence(&join[n`maybe_equal select {n} else {m : m in PossibleChildren(n)} : n in s`current_layer]);
-        descending := true;
-      end if;
-    when "Steady":
-      if #[n : n in s`current_layer | n`maybe_equal] eq 0 then
-        vprint PGG_GaloisGroup: "next layer";
-        PGG_GlobalTimer_Swap("new layer");
-        s`current_layer := SetToSequence({m : m in PossibleChildren(n), n in s`current_layer});
-        descending := true;
-      end if;
-    when "Patient":
-      not_implemented("patient descent");
-    else
-      assert false;
-    end case;
-    if descending then
+    if ShouldDescend(s) then
+      vprint PGG_GaloisGroup: "next layer";
+      PGG_GlobalTimer_Swap("new layer");
+      Descend(s);
       vprint PGG_GaloisGroup: "#layer =", #s`current_layer, #[n : n in s`current_layer | n`maybe_equal], #{m : m in PossibleChildren(n), n in s`current_layer}, #{m : m in PossibleChildren(n), n in s`current_layer | m`maybe_equal};
       // re-process all the resolvents we have tried already
       if s`algorithm`reprocess then
@@ -2194,6 +2233,75 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, resolvent :: RngU
     end if;
   end while;
   PGG_GlobalTimer_Pop();
+end intrinsic;
+
+intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_RootsMaximal, resolvent :: RngUPolElt[FldPad], subgroup :: GrpPerm)
+  {"}
+  PGG_GlobalTimer_Push("assert");
+  poss := PossibleSubgroups(s);
+  assert #poss gt 0;
+  assert IsConjugate(s`overgroup, subgroup, Rep(poss[1]));
+  PGG_GlobalTimer_Swap("has root");
+  ok := has_root(resolvent);
+  if ok then
+    PGG_GlobalTimer_Swap("descend");
+    s`cur_group := poss[1];
+    if assigned s`possible_subgroups then
+      delete s`possible_subgroups;
+    end if;
+  else
+    PGG_GlobalTimer_Swap("eliminate");
+    s`possible_subgroups := poss[2..#poss];
+  end if;
+  PGG_GlobalTimer_Pop();
+end intrinsic;
+
+function layer_has_consistent_subgroup(s, i, G)
+  // check the inputs
+  assert i ge 1;
+  if i eq 1 then
+    assert IsConsistentWithSubgroup(s`conjugacy, G);
+  end if;
+  // base case
+  if i eq #s`current_layer then
+    assert IsConsistentWithSubgroup(s`conjugacy, G);
+    return true;
+  end if;
+  // general case
+  assert i lt #s`current_layer;
+  for H in Conjugates(s`conjugacy`group, Rep(s`current_layer[i+1]`class)) do
+    G2 := H meet G;
+    if IsConsistentWithSubgroup(s`conjugacy, G2) then
+      if layer_has_consistent_subgroup(s, i+1, G2) then
+        return true;
+      end if;
+    end if;
+  end for;
+  return false;
+end function;
+
+intrinsic ShouldDescend(s :: PGGAlgState_ResGroups_Maximal) -> BoolElt
+  {True if we should descend now.}
+  descending := false;
+  case s`algorithm`descend:
+  when "Eager":
+    return #[n : n in s`current_layer | not n`maybe_equal] ne 0;
+  when "Steady":
+    return #[n : n in s`current_layer | n`maybe_equal] eq 0;
+  when "Patient":
+    if #[n : n in s`current_layer | n`maybe_equal] eq 0 then
+      return layer_has_consistent_subgroup(s, 1, Rep(s`current_layer[1]`class));
+    else
+      return false;
+    end if;
+  else
+    assert false;
+  end case;  
+end intrinsic;
+
+intrinsic Descend(s :: PGGAlgState_ResGroups_Maximal)
+  {Descend.}
+  s`current_layer := SetToSequence({m : m in (n`maybe_equal select [n] else PossibleChildren(n)), n in s`current_layer});
 end intrinsic;
 
 intrinsic GlobalModel(F :: FldPad) -> PGGGloMod
@@ -3007,7 +3115,7 @@ intrinsic Start(alg :: PGGAlg_ResChoice_OrbitIndex, parent :: PGGAlgState_ResGro
   else
     s`indices := Sort(s`indices);
   end if;
-  print "indices =", s`indices;
+  vprint PGG_GaloisGroup: "indices =", s`indices;
   s`ii := 0;
   s`si := 0;
   s`tranche := [];
@@ -3173,10 +3281,28 @@ intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal, i :: PGGAlgState_ResChoic
   h := CosetAction(s`overgroup, i`subgroup);
   statalg := s`algorithm`statistic;
   case s`algorithm`useful:
-  when "Strict":
-    nstats := [GroupStat(n, h) : n in s`current_layer | n`maybe_equal];
-    mstats := [GroupStat(m, h) : m in {m : m in PossibleChildren(n), n in s`current_layer | m`maybe_subgroup}];
-    is_useful := exists{nstat : nstat in nstats, mstat in mstats | (mstat ne nstat) and (mstat subset nstat)};
+  when "Sufficient":
+    is_useful := (
+        #nstats ge 2 and (
+          exists{nstat : nstat in nstats[2..#nstats] | nstat1 ne nstat}
+          where nstat1 := nstats[1]
+        )
+      ) or (
+        exists{nstat : nstat in nstats, mstat in mstats | (mstat ne nstat) and (mstat subset nstat)}
+        where mstats := [GroupStat(m, h) : m in {m : m in PossibleChildren(n), n in s`current_layer | m`maybe_subgroup}]
+      )
+      where nstats := [GroupStat(n, h) : n in s`current_layer | n`maybe_equal];
+  when "Necessary":
+    is_useful := (
+        #nstats ge 2 and (
+          exists{nstat : nstat in nstats[2..#nstats] | nstat1 ne nstat}
+          where nstat1 := nstats[1]
+        )
+      ) or (
+        exists{nstat : nstat in nstats, mstat in mstats | not (nstat subset mstat)}
+        where mstats := [GroupStat(m, h) : m in {m : m in PossibleChildren(n), n in s`current_layer | m`maybe_subgroup}]
+      )
+      where nstats := [GroupStat(n, h) : n in s`current_layer | n`maybe_equal];
   when "Generous":
     ns := [n : n in s`current_layer | n`maybe_equal] cat [m : m in PossibleChildren(n), n in s`current_layer | m`maybe_subgroup];
     assert #ns ge 2;
@@ -3234,14 +3360,25 @@ intrinsic PGGAlg_ResGroups_Maximal_Make(:Statistic:=false, SubgroupChoice:=false
   return alg;
 end intrinsic;
 
+intrinsic PGGAlg_ResGroups_RootsMaximal_Make() -> PGGAlg_ResGroups_RootsMaximal
+  {The "RootsMaximal" resolvent groups algorithm.}
+  alg := New(PGGAlg_ResGroups_RootsMaximal);
+  return alg;
+end intrinsic;
+
 intrinsic Subgroup(s :: PGGAlgState_ResGroups_All) -> GrpPerm
   {Selects a subgroup to form a resolvent with.}
   return Subgroup(s`choice_state);
 end intrinsic;
 
 intrinsic Subgroup(s :: PGGAlgState_ResGroups_Maximal) -> GrpPerm
-  {Selects a subgroup to form a resolvent with.}
+  {"}
   return Subgroup(s`choice_state);
+end intrinsic;
+
+intrinsic Subgroup(s :: PGGAlgState_ResGroups_RootsMaximal) -> GrpPerm
+  {"}
+  return Rep(PossibleSubgroups(s)[1]);
 end intrinsic;
 
 intrinsic PGGAlg_ResEval_Global_Make() -> PGGAlg_ResEval_Global
@@ -3278,6 +3415,10 @@ intrinsic GaloisGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt
   PGG_GlobalTimer_Push("conjugacy");
   conj := Conjugacy(Alg`conjugacy_alg, f);
   vprint PGG_GaloisGroup: "conjugacy =", conj;
+  ok, G := IsKnown(conj);
+  if ok then
+    return G;
+  end if;
   PGG_GlobalTimer_Swap("start resolvent");
   rst := Start(Alg`resolvent_alg, conj);
   PGG_GlobalTimer_Swap("overgroup");
@@ -3298,6 +3439,7 @@ intrinsic GaloisGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt
       ProcessResolvent(gst, R, U);
     end for;
   end if;
+  PGG_GlobalTimer_Swap("check done");
   if not IsDone(gst) then
     vprint PGG_GaloisGroup: "main loop...";
     repeat
@@ -3313,6 +3455,7 @@ intrinsic GaloisGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt
       vprint PGG_GaloisGroup: "resolvent =", R;
       PGG_GlobalTimer_Swap("process resolvent");
       ProcessResolvent(gst, R, U);
+      PGG_GlobalTimer_Swap("check done");
     until IsDone(gst);
   end if;
   vprint PGG_GaloisGroup: "success";
@@ -3621,11 +3764,17 @@ function parse_algorithm(alg)
         , <BOOL, "Reset", true>
         , <PGG_ArgSpec_Union([
             PGG_ArgSpec_Literal(false),
-            PGG_ArgSpec_Attr("Strict"),
+            PGG_ArgSpec_Attr("Sufficient"),
+            PGG_ArgSpec_Attr("Necessary"),
             PGG_ArgSpec_Attr("Generous")
           ]), "Useful", false>
         ],
-        func<args | PGGAlg_ResGroups_Maximal_Make(:Statistic:=args[1], SubgroupChoice:=args[2], Descend:=args[3], Reprocess:=args[4], Reset:=args[5])>
+        func<args | PGGAlg_ResGroups_Maximal_Make(:Statistic:=args[1], SubgroupChoice:=args[2], Descend:=args[3], Reprocess:=args[4], Reset:=args[5], Useful:=args[6])>
+      ),
+      PGG_ArgSpec_Attr(
+        "RootsMaximal",
+        [],
+        func<args | PGGAlg_ResGroups_RootsMaximal_Make()>
       )
     ]);
 

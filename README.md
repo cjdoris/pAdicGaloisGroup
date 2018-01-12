@@ -71,9 +71,16 @@ GROUP_ALG
   , Reset: BOOL               When true, on a descent reset the subgroup choice algorithm
   , Useful:                   How to decide whether a subgroup is useful
     [ "Generous"                  Useful if there is a pair of nodes with different statistics
-    , "Strict"                    Useful if there is a pair of nodes with strictly nested statistics
+    , "Necessary"                 Useful if it satisfies a necessary condition to provide information
+    , "Sufficient"                Useful if it satisfies a sufficient condition to provide information
     ]
   ]
+| "RootsMaximal"          Work down the graph of possible Galois groups by maximal inclusion, similar
+                            to the relative resolvent method, forming resolvents from the subgroups
+                            of the current candidate G and testing for roots to rule out the subgroup
+                            or change the candidate to that subgroup. Will compute resolvents of degree
+                            equal to the index of the Galois group, which is exponential in the degree
+                            of the input polynomial.
 
 RESEVAL_ALG
 = "Global"                Produce a global model for the local fields involved
