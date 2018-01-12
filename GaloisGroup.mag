@@ -469,7 +469,7 @@ function dflt(what, d)
 end function;
 
 function dedupe_conjugage_subgroups(G, Hs)
-  CG := PGG_ConjugacyClasses(G);
+  CG := PGG_SubgroupClasses(G);
   return [Rep(c) : c in {CG ! H : H in Hs}];
 end function;
 
@@ -748,38 +748,50 @@ intrinsic PGG_ArgSpec_Predicate(test :: UserProgram) -> PGGArgSpec
   end function);
 end intrinsic;
 
-declare type PGGSetConjCls[PGGConjCls];
-declare attributes PGGSetConjCls: overgroup, class_function;
-declare attributes PGGConjCls: subgroup, parent, class_function_value, hash;
+declare type PGGSetSubgrpcls[PGGSubgrpcls];
+declare attributes PGGSetSubgrpcls: overgroup, class_function, eq_op, subset_op;
+declare attributes PGGSubgrpcls: subgroup, parent, class_function_value, hash;
 
-intrinsic PGG_ConjugacyClasses(G :: GrpPerm) -> PGGSetConjCls
+intrinsic PGG_SubgroupClasses(G :: GrpPerm) -> PGGSetSubgrpcls
   {The conjugacy classes of subgroups of G.}
-  X := New(PGGSetConjCls);
+  X := New(PGGSetSubgrpcls);
   X`overgroup := G;
   X`class_function := func<H | <#H, Hash(H), {*cf(x[3])^^x[2] : x in Classes(H)*}>>
     where cf := ClassMap(G);
+  X`eq_op := func<x, y | (x`class_function_value eq y`class_function_value) and IsConjugate(Parent(x)`overgroup, x`subgroup, y`subgroup)>;
+  X`subset_op := func<x, y | IsConjugateSubgroup(x`parent`overgroup, y`subgroup, x`subgroup)>;
   return X;
 end intrinsic;
 
-intrinsic Group(X :: PGGSetConjCls) -> GrpPerm
+intrinsic PGG_Subgroups(G :: GrpPerm) -> PGGSetSubgrpcls
+  {The subgroups of G, as classes.}
+  X := New(PGGSetSubgrpcls);
+  X`overgroup := G;
+  X`class_function := func<H | H>;
+  X`eq_op := 'eq';
+  X`subset_op := 'subset';
+  return X;
+end intrinsic;
+
+intrinsic Group(X :: PGGSetSubgrpcls) -> GrpPerm
   {The group.}
   return X`overgroup;
 end intrinsic;
 
-intrinsic 'eq'(X :: PGGSetConjCls, Y :: PGGSetConjCls) -> BoolElt
+intrinsic 'eq'(X :: PGGSetSubgrpcls, Y :: PGGSetSubgrpcls) -> BoolElt
   {Equality.}
   return IsIdentical(X, Y);
 end intrinsic;
 
-intrinsic IsCoercible(X :: PGGSetConjCls, H) -> BoolElt, .
+intrinsic IsCoercible(X :: PGGSetSubgrpcls, H) -> BoolElt, .
   {IsCoercible.}
   return false, "wrong type";
 end intrinsic;
 
-intrinsic IsCoercible(X :: PGGSetConjCls, H :: GrpPerm) -> BoolElt, .
+intrinsic IsCoercible(X :: PGGSetSubgrpcls, H :: GrpPerm) -> BoolElt, .
   {"}
   if H subset X`overgroup then
-    x := New(PGGConjCls);
+    x := New(PGGSubgrpcls);
     x`subgroup := H;
     x`parent := X;
     x`class_function_value := x`parent`class_function(H);
@@ -790,7 +802,7 @@ intrinsic IsCoercible(X :: PGGSetConjCls, H :: GrpPerm) -> BoolElt, .
   end if;
 end intrinsic;
 
-intrinsic IsCoercible(X :: PGGSetConjCls, H :: PGGConjCls) -> BoolElt, .
+intrinsic IsCoercible(X :: PGGSetSubgrpcls, H :: PGGSubgrpcls) -> BoolElt, .
   {"}
   if Parent(H) eq X then
     return true, H;
@@ -801,32 +813,31 @@ intrinsic IsCoercible(X :: PGGSetConjCls, H :: PGGConjCls) -> BoolElt, .
   end if;
 end intrinsic;
 
-intrinsic Parent(x :: PGGConjCls) -> PGGSetConjCls
+intrinsic Parent(x :: PGGSubgrpcls) -> PGGSetSubgrpcls
   {The parent set.}
   return x`parent;
 end intrinsic;
 
-intrinsic Hash(x :: PGGConjCls) -> RngIntElt
+intrinsic Hash(x :: PGGSubgrpcls) -> RngIntElt
   {Hash.}
   return x`hash;
 end intrinsic;
 
-intrinsic Rep(x :: PGGConjCls) -> GrpPerm
+intrinsic Rep(x :: PGGSubgrpcls) -> GrpPerm
   {A representative.}
   return x`subgroup;
 end intrinsic;
 
-intrinsic 'eq'(x :: PGGConjCls, y :: PGGConjCls) -> BoolElt
+intrinsic 'eq'(x :: PGGSubgrpcls, y :: PGGSubgrpcls) -> BoolElt
   {Equality.}
   assert Parent(x) eq Parent(y);
-  return (x`class_function_value eq y`class_function_value) and IsConjugate(Parent(x)`overgroup, x`subgroup, y`subgroup);
+  return Parent(x)`eq_op(x, y);
 end intrinsic;
 
-intrinsic 'subset'(x :: PGGConjCls, y :: PGGConjCls) -> BoolElt
+intrinsic 'subset'(x :: PGGSubgrpcls, y :: PGGSubgrpcls) -> BoolElt
   {Subset.}
   assert Parent(x) eq Parent(y);
-  ans := IsConjugateSubgroup(x`parent`overgroup, y`subgroup, x`subgroup);
-  return ans;
+  return Parent(x)`subset_op(x, y);
 end intrinsic;
 
 declare type PGGTimer;
@@ -1339,6 +1350,7 @@ declare attributes PGGAlgState_ResGroups_Maximal: conjugacy, overgroup, choice_s
   ;
 
 declare type PGGAlg_ResGroups_RootsMaximal: PGGAlg_ResGroups;
+declare attributes PGGAlg_ResGroups_RootsMaximal: dedupe;
 
 declare type PGGAlgState_ResGroups_RootsMaximal: PGGAlgState_ResGroups;
 declare attributes PGGAlgState_ResGroups_RootsMaximal: conjugacy, overgroup, cur_group, possible_subgroups, conjugacy_classes;
@@ -1483,7 +1495,7 @@ intrinsic Start(alg :: PGGAlg_ResGroups_Maximal, conj :: PGGConj, overgroup :: G
   s`resolvents := [**];
   s`id_to_node := [];
   s`class_to_node := AssociativeArray();
-  s`conjugacy_classes := PGG_ConjugacyClasses(conj`group);
+  s`conjugacy_classes := PGG_SubgroupClasses(conj`group);
   s`current_layer := [Node(s, Overgroup(conj))];
   s`blacklist := [];
   return s;
@@ -1496,7 +1508,7 @@ intrinsic Start(alg :: PGGAlg_ResGroups_RootsMaximal, conj :: PGGConj, overgroup
   s`algorithm := alg;
   s`conjugacy := conj;
   s`overgroup := overgroup;
-  s`conjugacy_classes := PGG_ConjugacyClasses(conj`group);
+  s`conjugacy_classes := (alg`dedupe select PGG_SubgroupClasses else PGG_Subgroups)(conj`group);
   s`cur_group := s`conjugacy_classes ! Overgroup(conj);
   return s;
 end intrinsic;
@@ -1506,7 +1518,7 @@ intrinsic Node(s :: PGGAlgState_ResGroups_Maximal, G :: GrpPerm) -> PGG_ResGroup
   return Node(s, s`conjugacy_classes ! G);
 end intrinsic;
 
-intrinsic Node(s :: PGGAlgState_ResGroups_Maximal, G :: PGGConjCls) -> PGG_ResGroups_Maximal_Node
+intrinsic Node(s :: PGGAlgState_ResGroups_Maximal, G :: PGGSubgrpcls) -> PGG_ResGroups_Maximal_Node
   {The node of the graph of subgroups at G.}
   // check if the node already exists
   ok, x := IsDefined(s`class_to_node, G);
@@ -1610,9 +1622,18 @@ end intrinsic;
 intrinsic PossibleSubgroups(s :: PGGAlgState_ResGroups_RootsMaximal) -> []
   {The subgroups of s`cur_group which have not yet been ruled out.}
   if not assigned s`possible_subgroups then
-    PGG_GlobalTimer_Push("possible subgroups");
-    s`possible_subgroups := SetToSequence({ s`conjugacy_classes ! G : x in MaximalSubgroups(Rep(s`cur_group)) | IsConsistentWithSubgroup(s`conjugacy, G) where G:=x`subgroup });
+    PGG_GlobalTimer_Push("maximal subgroups");
+    Gs := [x`subgroup : x in MaximalSubgroups(Rep(s`cur_group))];
+    PGG_GlobalTimer_Swap("consistent");
+    Gs := [G : G in Gs | IsConsistentWithSubgroup(s`conjugacy, G)];
+    if s`algorithm`dedupe then
+      PGG_GlobalTimer_Swap("dedupe");
+      s`possible_subgroups := SetToSequence({s`conjugacy_classes!G : G in Gs});
+    else
+      s`possible_subgroups := [s`conjugacy_classes!G : G in Gs];
+    end if;
     PGG_GlobalTimer_Pop();
+    vprint PGG_GaloisGroup: "#possible_subgroups =", #s`possible_subgroups;
   end if;
   return s`possible_subgroups;
 end intrinsic;
@@ -1669,7 +1690,7 @@ end intrinsic;
 //   when "MostUseful":
 //     W := s`overgroup;
 //     if not assigned s`possible_subgroups then
-//       CW := PGG_ConjugacyClasses(W);
+//       CW := PGG_SubgroupClasses(W);
 //       s`possible_subgroups := rec<recformat<queue, queue_changed, cur_groups, usefulness, ignore_groups, classes> | queue:=[<CW!W, <1, 1>>], queue_changed:=false, cur_groups:=[], usefulness:=AssociativeArray(), classes:=CW>;
 //     else
 //       CW := s`possible_subgroups`classes;
@@ -1778,13 +1799,13 @@ intrinsic PGGStat_Tup_Make(args) -> PGGStat_Tup
   return S;
 end intrinsic;
 
-intrinsic ConjugacyClasses(S :: PGGStat_AutGroup, d :: RngIntElt) -> PGGSetConjCls
+intrinsic ConjugacyClasses(S :: PGGStat_AutGroup, d :: RngIntElt) -> PGGSetSubgrpcls
   {The conjugacy classes of Sym(d).}
   if not assigned S`conjugacy_classes then
     S`conjugacy_classes := AssociativeArray();
   end if;
   if not IsDefined(S`conjugacy_classes, d) then
-    S`conjugacy_classes[d] := PGG_ConjugacyClasses(SymmetricGroup(d));
+    S`conjugacy_classes[d] := PGG_SubgroupClasses(SymmetricGroup(d));
   end if;
   return S`conjugacy_classes[d];
 end intrinsic;
@@ -2245,13 +2266,17 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_RootsMaximal, resolvent ::
   ok := has_root(resolvent);
   if ok then
     PGG_GlobalTimer_Swap("descend");
+    vprint PGG_GaloisGroup: "descending";
     s`cur_group := poss[1];
     if assigned s`possible_subgroups then
       delete s`possible_subgroups;
     end if;
+    vprint PGG_GaloisGroup: "index =", Index(s`overgroup, Rep(s`cur_group));
   else
     PGG_GlobalTimer_Swap("eliminate");
+    vprint PGG_GaloisGroup: "eliminating";
     s`possible_subgroups := poss[2..#poss];
+    vprint PGG_GaloisGroup: "#possible_subgroups =", #s`possible_subgroups;
   end if;
   PGG_GlobalTimer_Pop();
 end intrinsic;
@@ -3360,9 +3385,10 @@ intrinsic PGGAlg_ResGroups_Maximal_Make(:Statistic:=false, SubgroupChoice:=false
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_RootsMaximal_Make() -> PGGAlg_ResGroups_RootsMaximal
+intrinsic PGGAlg_ResGroups_RootsMaximal_Make( : Dedupe:=false) -> PGGAlg_ResGroups_RootsMaximal
   {The "RootsMaximal" resolvent groups algorithm.}
   alg := New(PGGAlg_ResGroups_RootsMaximal);
+  alg`dedupe := Dedupe;
   return alg;
 end intrinsic;
 
@@ -3773,8 +3799,8 @@ function parse_algorithm(alg)
       ),
       PGG_ArgSpec_Attr(
         "RootsMaximal",
-        [],
-        func<args | PGGAlg_ResGroups_RootsMaximal_Make()>
+        [ <BOOL,"Dedupe",false> ],
+        func<args | PGGAlg_ResGroups_RootsMaximal_Make(:Dedupe:=args[1])>
       )
     ]);
 
