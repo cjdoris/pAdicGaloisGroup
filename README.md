@@ -67,13 +67,16 @@ GROUP_ALG
                                     on to their children
     | "Patient"                   Like Steady, but also require that the remaining top nodes have
                                     a common subgroup which could be a Galois group
-  , Reprocess: BOOL           When true, on a descent re-use all resolvents computed so far
-  , Reset: BOOL               When true, on a descent reset the subgroup choice algorithm
   , Useful:                   How to decide whether a subgroup is useful
     [ "Generous"                  Useful if there is a pair of nodes with different statistics
     , "Necessary"                 Useful if it satisfies a necessary condition to provide information
     , "Sufficient"                Useful if it satisfies a sufficient condition to provide information
     ]
+  , Reprocess: BOOL           When true, on a descent re-use all resolvents computed so far
+  , Reset: BOOL               When true, on a descent reset the subgroup choice algorithm
+  , Blacklist: BOOL           When true, maintain a blacklist to exclude groups from; not required if
+                                Reprocess is true
+  , Dedupe: BOOL              When true, nodes in the graph are merged if they are conjugate
   ]
 | "RootsMaximal"          Work down the graph of possible Galois groups by maximal inclusion, similar
                             to the relative resolvent method, forming resolvents from the subgroups
@@ -81,6 +84,8 @@ GROUP_ALG
                             or change the candidate to that subgroup. Will compute resolvents of degree
                             equal to the index of the Galois group, which is exponential in the degree
                             of the input polynomial.
+  [ Dedupe: BOOL              Dedupe groups by conjugacy in the overgroup
+  ]
 
 RESEVAL_ALG
 = "Global"                Produce a global model for the local fields involved

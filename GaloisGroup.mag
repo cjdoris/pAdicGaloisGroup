@@ -758,18 +758,18 @@ intrinsic PGG_SubgroupClasses(G :: GrpPerm) -> PGGSetSubgrpcls
   X`overgroup := G;
   X`class_function := func<H | <#H, Hash(H), {*cf(x[3])^^x[2] : x in Classes(H)*}>>
     where cf := ClassMap(G);
-  X`eq_op := func<x, y | (x`class_function_value eq y`class_function_value) and IsConjugate(Parent(x)`overgroup, x`subgroup, y`subgroup)>;
+  X`eq_op := func<x, y | (x`hash eq y`hash) and (x`class_function_value eq y`class_function_value) and IsConjugate(Parent(x)`overgroup, x`subgroup, y`subgroup)>;
   X`subset_op := func<x, y | IsConjugateSubgroup(x`parent`overgroup, y`subgroup, x`subgroup)>;
   return X;
 end intrinsic;
 
-intrinsic PGG_Subgroups(G :: GrpPerm) -> PGGSetSubgrpcls
+intrinsic PGG_Subgroups(G :: GrpPerm : RandomClass:=false) -> PGGSetSubgrpcls
   {The subgroups of G, as classes.}
   X := New(PGGSetSubgrpcls);
   X`overgroup := G;
-  X`class_function := func<H | H>;
-  X`eq_op := 'eq';
-  X`subset_op := 'subset';
+  X`class_function := RandomClass select func<H | Random(1000000000)> else func<H | H>;
+  X`eq_op := func<x, y | x`subgroup eq y`subgroup>;
+  X`subset_op := func<x, y | x`subgroup subset y`subgroup>;
   return X;
 end intrinsic;
 
@@ -1338,7 +1338,7 @@ declare type PGGAlgState_ResGroups_All: PGGAlgState_ResGroups;
 declare attributes PGGAlgState_ResGroups_All: conjugacy, overgroup, possible_groups, choice_state;
 
 declare type PGGAlg_ResGroups_Maximal: PGGAlg_ResGroups;
-declare attributes PGGAlg_ResGroups_Maximal: subgroup_choice, statistic, descend, reprocess, reset, useful;
+declare attributes PGGAlg_ResGroups_Maximal: subgroup_choice, statistic, descend, reprocess, reset, useful, blacklist, dedupe;
 
 declare type PGGAlgState_ResGroups_Maximal: PGGAlgState_ResGroups;
 declare attributes PGGAlgState_ResGroups_Maximal: conjugacy, overgroup, choice_state, conjugacy_classes
@@ -1495,7 +1495,7 @@ intrinsic Start(alg :: PGGAlg_ResGroups_Maximal, conj :: PGGConj, overgroup :: G
   s`resolvents := [**];
   s`id_to_node := [];
   s`class_to_node := AssociativeArray();
-  s`conjugacy_classes := PGG_SubgroupClasses(conj`group);
+  s`conjugacy_classes := alg`dedupe select PGG_SubgroupClasses(conj`group) else PGG_Subgroups(conj`group : RandomClass);
   s`current_layer := [Node(s, Overgroup(conj))];
   s`blacklist := [];
   return s;
@@ -1573,7 +1573,7 @@ intrinsic PossibleChildren(x :: PGG_ResGroups_Maximal_Node : CheckBlacklist:=tru
     x`possible_children := Children(x);
     PGG_GlobalTimer_Pop();
   end if;
-  if CheckBlacklist and (#x`state`blacklist gt x`blacklist_done) then
+  if CheckBlacklist and x`state`algorithm`blacklist and (#x`state`blacklist gt x`blacklist_done) then
     PGG_GlobalTimer_Push("checking blacklist");
     x`possible_children := [n : n in x`possible_children | not exists{b : b in blacklist | n`class subset b`class}]
       where blacklist := x`state`blacklist[x`blacklist_done+1 .. #x`state`blacklist];
@@ -1596,7 +1596,7 @@ end intrinsic;
 intrinsic IsDone(s :: PGGAlgState_ResGroups_Maximal) -> BoolElt, GrpPerm
   {"}
   assert #s`current_layer gt 0;
-  if #s`current_layer eq 1 and #PossibleChildren(s`current_layer[1]) eq 0 then
+  if (s`algorithm`dedupe select #s`current_layer eq 1 else forall{n : n in s`current_layer[2..#s`current_layer] | IsConjugate(s`overgroup, Rep(n`class), Rep(s`current_layer[1]`class))}) and #PossibleChildren(s`current_layer[1]) eq 0 then
     return true, Rep(s`current_layer[1]`class);
   else
     return false, _;
@@ -1728,7 +1728,7 @@ end intrinsic;
 intrinsic Hash(v :: PGGStatVal) -> .
   {Hash of v.}
   if not assigned v`hash then
-    v`hash := Hash(v`stat, v);
+    v`hash := _Hash(v`stat, v);
   end if;
   return v`hash;
 end intrinsic;
@@ -1752,7 +1752,7 @@ end intrinsic;
 
 intrinsic Print(v :: PGGStatVal)
   {Prints.}
-  Print(v`stat, v);
+  _Print(v`stat, v);
 end intrinsic;
 
 intrinsic PGGStat_HasRoot_Make() -> PGGStat_HasRoot
@@ -1799,6 +1799,55 @@ intrinsic PGGStat_Tup_Make(args) -> PGGStat_Tup
   return S;
 end intrinsic;
 
+intrinsic Print(S :: PGGStat_HasRoot)
+  {Print.}
+  printf "has root";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_NumRoots)
+  {"}
+  printf "number of roots";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_FactorDegrees)
+  {"}
+  printf "degrees of factors";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_FactorDegrees2)
+  {"}
+  printf "degrees of factors of factors";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_AutGroup)
+  {"}
+  printf "automorphism group";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_Degree)
+  {"}
+  printf "degree";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_Factors)
+  {"}
+  printf "factors -> %o", S`stat;
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_Tup)
+  {"}
+  if #S`stats eq 0 then
+    printf "tuple (empty)";
+  else
+    print "tuple";
+    IndentPush();
+    for i in [1..#S`stats-1] do
+      print S`stats[i];
+    end for;
+    printf "%o", S`stats[#S`stats];
+    IndentPop();
+  end if;
+end intrinsic;
 intrinsic ConjugacyClasses(S :: PGGStat_AutGroup, d :: RngIntElt) -> PGGSetSubgrpcls
   {The conjugacy classes of Sym(d).}
   if not assigned S`conjugacy_classes then
@@ -1944,22 +1993,22 @@ end intrinsic;
 //   {"}
 // end intrinsic;
 
-intrinsic Hash(S :: PGGStat, v) -> .
+intrinsic _Hash(S :: PGGStat, v) -> .
   {Hash.}
   return Hash(v`value);
 end intrinsic;
 
-intrinsic Hash(S :: PGGStat_AutGroup, v) -> .
+intrinsic _Hash(S :: PGGStat_AutGroup, v) -> .
   {"}
   return Hash(<Degree(Rep(v`value)), v`value>);
 end intrinsic;
 
-intrinsic Print(S :: PGGStat, v)
+intrinsic _Print(S :: PGGStat, v)
   {"}
   printf "%o", v`value;
 end intrinsic;
 
-intrinsic Print(S :: PGGStat_AutGroup, v)
+intrinsic _Print(S :: PGGStat_AutGroup, v)
   {"}
   printf "%o", GroupName(Rep(v`value));
 end intrinsic;
@@ -2176,7 +2225,7 @@ intrinsic _ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, rid)
       assert n`maybe_subgroup;
       nstat := GroupStat(n, h);
       n`maybe_subgroup := n`maybe_subgroup and (rstat subset nstat);
-      if not n`maybe_subgroup then
+      if s`algorithm`blacklist and (not n`maybe_subgroup) then
         Append(~s`blacklist, n);
       end if;
       if n`maybe_subgroup then
@@ -2199,7 +2248,7 @@ intrinsic _ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, rid)
       assert m`maybe_subgroup;
       mstat := GroupStat(m, h);
       m`maybe_subgroup := m`maybe_subgroup and (rstat subset mstat);
-      if not m`maybe_subgroup then
+      if s`algorithm`blacklist and (not m`maybe_subgroup) then
         Append(~s`blacklist, m);
       end if;
       if m`maybe_subgroup then
@@ -2529,6 +2578,24 @@ intrinsic PGGAlg_Conjugacy_RamTower_Make(:Next:=false) -> PGGAlg_Conjugacy_RamTo
   a := New(PGGAlg_Conjugacy_RamTower);
   a`next := Next cmpne false select Next else PGGAlg_Conjugacy_Symmetric_Make();
   return a;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Conjugacy_Symmetric)
+  {Print.}
+  print "symmetric";
+  IndentPush();
+  printf "galois group = %o", assigned alg`galois_group_alg select alg`galois_group_alg else "unset";
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Conjugacy_Factors)
+  {"}
+  printf "factors -> %o", alg`next;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Conjugacy_RamTower)
+  {"}
+  printf "ramification tower -> %o", alg`next;
 end intrinsic;
 
 intrinsic Conjugacy(alg :: PGGAlg_Conjugacy_Symmetric, f :: RngUPolElt[FldPad] : TopField:=false, IsTransitive:=false, KnownGroup:=false) -> PGGConj
@@ -3042,6 +3109,26 @@ intrinsic PGGAlg_ResPriority_Key_Make(key :: PGGExpr) -> PGGAlg_ResPriority_Key
   return alg;
 end intrinsic;
 
+intrinsic Print(alg :: PGGAlg_ResPriority_Null)
+  {Print.}
+  printf "null";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResPriority_Random)
+  {"}
+  printf "random";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResPriority_Reverse)
+  {"}
+  print "reverse of %o", alg`priority;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResPriority_Key)
+  {"}
+  printf "key %o", alg`key;
+end intrinsic;
+
 intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Null) -> .
   {Prioritizes X.}
   return X;
@@ -3093,6 +3180,34 @@ intrinsic PGGAlg_ResChoice_OrbitIndex_Make(:Priority:=false, Filter:=false, Sort
   alg`filter := Filter;
   alg`sort_key := SortKey;
   return alg;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResChoice_All)
+  {"}
+  print "all";
+  IndentPush();
+  printf "priority = %o", alg`priority;
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResChoice_Index)
+  {"}
+  print "index";
+  IndentPush();
+  print "priority =", alg`priority;
+  print "filter =", alg`filter cmpeq false select "none" else alg`filter;
+  printf "sort key = %o", alg`sort_key cmpeq false select "none" else alg`sort_key;
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResChoice_OrbitIndex)
+  {"}
+  print "index";
+  IndentPush();
+  print "priority =", alg`priority;
+  print "filter =", alg`filter cmpeq false select "none" else alg`filter;
+  printf "sort key = %o", alg`sort_key cmpeq false select "none" else alg`sort_key;
+  IndentPop();
 end intrinsic;
 
 intrinsic Start(alg :: PGGAlg_ResChoice_All, parent :: PGGAlgState_ResGroups) -> PGGAlgState_ResChoice_All
@@ -3373,7 +3488,7 @@ intrinsic PGGAlg_ResGroups_All_Make(:Statistic:=false, SubgroupChoice:=false) ->
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_Maximal_Make(:Statistic:=false, SubgroupChoice:=false, Descend:=false, Reprocess:=true, Reset:=true, Useful:=false) -> PGGAlg_ResGroups_Maximal
+intrinsic PGGAlg_ResGroups_Maximal_Make(:Statistic:=false, SubgroupChoice:=false, Descend:=false, Reprocess:=true, Reset:=true, Useful:=false, Blacklist:=false, Dedupe:=false) -> PGGAlg_ResGroups_Maximal
   {The "Maximal" resolvent groups algorithm.}
   alg := New(PGGAlg_ResGroups_Maximal);
   alg`statistic := Statistic cmpne false select Statistic else PGGStat_FactorDegrees_Make();
@@ -3382,6 +3497,8 @@ intrinsic PGGAlg_ResGroups_Maximal_Make(:Statistic:=false, SubgroupChoice:=false
   alg`reprocess := Reprocess;
   alg`reset := Reset;
   alg`useful := Useful cmpne false select Useful else "Generous";
+  alg`blacklist := Blacklist;
+  alg`dedupe := Dedupe;
   return alg;
 end intrinsic;
 
@@ -3390,6 +3507,35 @@ intrinsic PGGAlg_ResGroups_RootsMaximal_Make( : Dedupe:=false) -> PGGAlg_ResGrou
   alg := New(PGGAlg_ResGroups_RootsMaximal);
   alg`dedupe := Dedupe;
   return alg;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResGroups_All)
+  {Print.}
+  print "all";
+  IndentPush();
+  print "subgroup choice =", alg`subgroup_choice;
+  printf "statistic = %o", alg`statistic;
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResGroups_Maximal)
+  {"}
+  print "maximal";
+  IndentPush();
+  print "subgroup choice =", alg`subgroup_choice;
+  print "statistic =", alg`statistic;
+  print "descend =", alg`descend;
+  print "useful =", alg`useful;
+  print "reprocess =", alg`reprocess;
+  print "reset =", alg`reset;
+  print "blacklist =", alg`blacklist;
+  printf "dedupe = %o", alg`dedupe;
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResGroups_RootsMaximal)
+  {"}
+  printf "roots maximal";
 end intrinsic;
 
 intrinsic Subgroup(s :: PGGAlgState_ResGroups_All) -> GrpPerm
@@ -3411,6 +3557,11 @@ intrinsic PGGAlg_ResEval_Global_Make() -> PGGAlg_ResEval_Global
   {The "Absolute" resolvent evaluation algorithm.}
   alg := New(PGGAlg_ResEval_Global);
   return alg;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResEval_Global)
+  {Print.}
+  printf "global";
 end intrinsic;
 
 intrinsic PGGAlg_GaloisGroup_ResolventMethod_Make( : GroupsAlg:=false, ResolventAlg:=false, ConjugacyAlg:=false, UseEasyResolvents:=false) -> PGGAlg_GaloisGroup_ResolventMethod
@@ -3435,9 +3586,29 @@ intrinsic PGGAlg_GaloisGroup_SinglyRamified_Make() -> PGGAlg_GaloisGroup_SinglyR
   return alg;
 end intrinsic;
 
+intrinsic Print(alg :: PGGAlg_GaloisGroup_ResolventMethod)
+  {Print.}
+  print "resolvent method";
+  IndentPush();
+  print "conjugacy =", alg`conjugacy_alg;
+  print "groups =", alg`groups_alg;
+  print "resolvents =", alg`resolvent_alg;
+  printf "use easy resolvents = %o", alg`use_easy_resolvents;
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_GaloisGroup_Builtin)
+  {"}
+  printf "builtin";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_GaloisGroup_SinglyRamified)
+  {"}
+  printf "singly ramified";
+end intrinsic;
+
 intrinsic GaloisGroup(Alg :: PGGAlg_GaloisGroup_ResolventMethod, f :: RngUPolElt[FldPad]) -> GrpPerm
   {The Galois group of f.}
-  vprint PGG_GaloisGroup: "ResolventMethod...";
   PGG_GlobalTimer_Push("conjugacy");
   conj := Conjugacy(Alg`conjugacy_alg, f);
   vprint PGG_GaloisGroup: "conjugacy =", conj;
@@ -3786,16 +3957,18 @@ function parse_algorithm(alg)
             PGG_ArgSpec_Attr("Steady"),
             PGG_ArgSpec_Attr("Patient")
           ]), "Descend", false>
-        , <BOOL, "Reprocess", true>
-        , <BOOL, "Reset", true>
         , <PGG_ArgSpec_Union([
             PGG_ArgSpec_Literal(false),
             PGG_ArgSpec_Attr("Sufficient"),
             PGG_ArgSpec_Attr("Necessary"),
             PGG_ArgSpec_Attr("Generous")
           ]), "Useful", false>
+        , <BOOL, "Reprocess", true>
+        , <BOOL, "Reset", true>
+        , <BOOL, "Blacklist", false>
+        , <BOOL, "Dedupe", true>
         ],
-        func<args | PGGAlg_ResGroups_Maximal_Make(:Statistic:=args[1], SubgroupChoice:=args[2], Descend:=args[3], Reprocess:=args[4], Reset:=args[5], Useful:=args[6])>
+        func<args | PGGAlg_ResGroups_Maximal_Make(:Statistic:=args[1], SubgroupChoice:=args[2], Descend:=args[3], Useful:=args[4], Reprocess:=args[5], Reset:=args[6], Blacklist:=args[7], Dedupe:=args[8])>
       ),
       PGG_ArgSpec_Attr(
         "RootsMaximal",
@@ -3849,6 +4022,7 @@ intrinsic PGG_GaloisGroup(f :: RngUPolElt[FldPad] : Alg:="ARM", Time:=false) -> 
   end if;
   PGG_GlobalTimer_Push("parse algorithm");
   alg := parse_algorithm(Alg);
+  vprint PGG_GaloisGroup: "algorithm =", alg;
   PGG_GlobalTimer_Swap("GaloisGroup");
   G := GaloisGroup(alg, f);
   PGG_GlobalTimer_Pop();
