@@ -752,12 +752,27 @@ declare type PGGSetSubgrpcls[PGGSubgrpcls];
 declare attributes PGGSetSubgrpcls: overgroup, class_function, eq_op, subset_op;
 declare attributes PGGSubgrpcls: subgroup, parent, class_function_value, hash;
 
-intrinsic PGG_SubgroupClasses(G :: GrpPerm) -> PGGSetSubgrpcls
+intrinsic PGG_SubgroupClasses(G :: GrpPerm : ClassFunction:=4) -> PGGSetSubgrpcls
   {The conjugacy classes of subgroups of G.}
   X := New(PGGSetSubgrpcls);
   X`overgroup := G;
-  X`class_function := func<H | <#H, Hash(H), {*cf(x[3])^^x[2] : x in Classes(H)*}>>
-    where cf := ClassMap(G);
+  case ClassFunction:
+  when 1:
+    X`class_function := func<H | <#H, Hash(H), {*cf(x[3])^^x[2] : x in Classes(H)*}>>
+      where cf := ClassMap(G);
+  when 2:
+    X`class_function := func<H | <#H, GroupName(H)>>;
+  when 3:
+    X`class_function := func<H | <#H, {* /* #o eq 32 select <#o, -1, "", Trans32Identify(Go)> else */ #o le TransitiveGroupDatabaseLimit() and #o ne 32 select <#o, TransitiveGroupIdentification(Go), "", <-1,-1,-1,-1>> else <#o, -1, GroupName(Go),<-1,-1,-1,-1>> where Go:=OrbitImage(G,o) : o in Orbits(H)*}>>;
+  when 4:
+    X`class_function := func<H | <#H, [#(N meet H) : N in Ns]>>
+      where Ns := #all_Ns le limit select all_Ns else ([all_Ns[i^s] : i in [1..limit]] where s := Random(SymmetricGroup(#all_Ns)))
+      where limit := Infinity()
+      where all_Ns := [x`subgroup : x in NormalSubgroups(G : IndexLimit:=index_limit)]
+      where index_limit := 2;
+  else
+    assert false;
+  end case;
   X`eq_op := func<x, y | (x`hash eq y`hash) and (x`class_function_value eq y`class_function_value) and IsConjugate(Parent(x)`overgroup, x`subgroup, y`subgroup)>;
   X`subset_op := func<x, y | IsConjugateSubgroup(x`parent`overgroup, y`subgroup, x`subgroup)>;
   return X;
@@ -1185,6 +1200,9 @@ declare attributes PGGExpr: free_vars;
 declare type PGGExpr_FreeVar: PGGExpr;
 declare attributes PGGExpr_FreeVar: name;
 
+declare type PGGExpr_Unop: PGGExpr;
+declare attributes PGGExpr_Unop: op, arg1;
+
 declare type PGGExpr_Binop: PGGExpr;
 declare attributes PGGExpr_Binop: op, arg1, arg2;
 
@@ -1206,6 +1224,14 @@ intrinsic PGG_Expression_FreeVariable(name :: MonStgElt) -> PGGExpr_FreeVar
   {The free variable with the given name.}
   x := New(PGGExpr_FreeVar);
   x`name := name;
+  return x;
+end intrinsic;
+
+intrinsic PGG_Expression_UnOp(op, arg1 :: PGGExpr) -> PGGExpr_Unop
+  {The unary operation op (a function or intrinsic) with argument arg1.}
+  x := New(PGGExpr_Unop);
+  x`op := op;
+  x`arg1 := arg1;
   return x;
 end intrinsic;
 
@@ -1236,6 +1262,11 @@ end intrinsic;
 intrinsic _FreeVariables(x :: PGGExpr_FreeVar) -> {}
   {"}
   return {x`name};
+end intrinsic;
+
+intrinsic _FreeVariables(x :: PGGExpr_Unop) -> {}
+  {"}
+  return FreeVariables(x`arg1);
 end intrinsic;
 
 intrinsic _FreeVariables(x :: PGGExpr_Binop) -> {}
@@ -1298,6 +1329,11 @@ intrinsic _Evaluate(x :: PGGExpr_FreeVar, vars) -> .
   return vars(x`name);
 end intrinsic;
 
+intrinsic _Evaluate(x :: PGGExpr_Unop, vars) -> .
+  {"}
+  return x`op(Evaluate(x`arg1, vars));
+end intrinsic;
+
 intrinsic _Evaluate(x :: PGGExpr_Binop, vars) -> .
   {"}
   return x`op(Evaluate(x`arg1, vars), Evaluate(x`arg2, vars));
@@ -1358,24 +1394,28 @@ declare attributes PGGAlgState_ResGroups_RootsMaximal: conjugacy, overgroup, cur
 declare type PGG_ResGroups_Maximal_Node;
 declare attributes PGG_ResGroups_Maximal_Node: id, class, children, possible_children, state, maybe_equal, maybe_subgroup, seen_resolvents, blacklist_done;
 
+declare type PGGAlg_Tranche: PGGAlg;
+declare type PGGAlg_Tranche_All: PGGAlg_Tranche;
+declare type PGGAlg_Tranche_Index: PGGAlg_Tranche;
+declare attributes PGGAlg_Tranche_Index: filter, sort_key;
+declare type PGGAlg_Tranche_OrbitIndex: PGGAlg_Tranche;
+declare attributes PGGAlg_Tranche_OrbitIndex: filter, sort_key;
+
+declare type PGGAlgState_Tranche: PGGAlgState;
+declare attributes PGGAlgState_Tranche: conjugacy;
+declare type PGGAlgState_Tranche_All: PGGAlgState_Tranche;
+declare attributes PGGAlgState_Tranche_All: all_groups, tranche;
+declare type PGGAlgState_Tranche_Index: PGGAlgState_Tranche;
+declare attributes PGGAlgState_Tranche_Index: indices, ii, all_groups, tranche;
+declare type PGGAlgState_Tranche_OrbitIndex: PGGAlgState_Tranche;
+declare attributes PGGAlgState_Tranche_OrbitIndex: indices, ii, si, all_groups, all_stabilizers, cur_stabilizers, tranche;
+
 declare type PGGAlg_ResChoice: PGGAlg;
 declare type PGGAlg_ResChoice_Tranche: PGGAlg_ResChoice;
-declare attributes PGGAlg_ResChoice_Tranche: priority;
-declare type PGGAlg_ResChoice_All: PGGAlg_ResChoice_Tranche;
-declare type PGGAlg_ResChoice_Index: PGGAlg_ResChoice_Tranche;
-declare attributes PGGAlg_ResChoice_Index: filter, sort_key;
-declare type PGGAlg_ResChoice_OrbitIndex: PGGAlg_ResChoice_Tranche;
-declare attributes PGGAlg_ResChoice_OrbitIndex: filter, sort_key;
-declare type PGGAlg_ResChoice_MostUseful: PGGAlg_ResChoice_Tranche;
+declare attributes PGGAlg_ResChoice_Tranche: tranche_alg, priority;
 
 declare type PGGAlgState_ResChoice_Tranche: PGGAlgState;
-declare attributes PGGAlgState_ResChoice_Tranche: priority, parent, overgroup;
-declare type PGGAlgState_ResChoice_All: PGGAlgState_ResChoice_Tranche;
-declare attributes PGGAlgState_ResChoice_All: all_groups, tranche;
-declare type PGGAlgState_ResChoice_Index: PGGAlgState_ResChoice_Tranche;
-declare attributes PGGAlgState_ResChoice_Index: indices, ii, all_groups, tranche;
-declare type PGGAlgState_ResChoice_OrbitIndex: PGGAlgState_ResChoice_Tranche;
-declare attributes PGGAlgState_ResChoice_OrbitIndex: indices, ii, si, all_groups, all_stabilizers, cur_stabilizers, tranche;
+declare attributes PGGAlgState_ResChoice_Tranche: tranche_state, parent, overgroup;
 
 declare type PGGAlg_ResPriority: PGGAlg;
 declare type PGGAlg_ResPriority_Null: PGGAlg_ResPriority;
@@ -1385,8 +1425,8 @@ declare attributes PGGAlg_ResPriority_Reverse: priority;
 declare type PGGAlg_ResPriority_Key: PGGAlg_ResPriority;
 declare attributes PGGAlg_ResPriority_Key: key;
 
-declare type PGGAlgState_ResChoice_TrancheItem;
-declare attributes PGGAlgState_ResChoice_TrancheItem: state, idx, subgroup;
+declare type PGGAlgState_TrancheItem;
+declare attributes PGGAlgState_TrancheItem: state, idx, subgroup;
 
 declare type PGGAlg_ResEval: PGGAlg;
 
@@ -2368,6 +2408,16 @@ intrinsic ShouldDescend(s :: PGGAlgState_ResGroups_Maximal) -> BoolElt
     else
       return false;
     end if;
+  when "Ask":
+    while true do
+      read ans, "Descend? (y/n) ";
+      case ans:
+      when "y":
+        return true;
+      when "n":
+        return false;
+      end case;
+    end while;
   else
     assert false;
   end case;  
@@ -3129,103 +3179,88 @@ intrinsic Print(alg :: PGGAlg_ResPriority_Key)
   printf "key %o", alg`key;
 end intrinsic;
 
-intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Null) -> .
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Null, s :: PGGAlgState_ResGroups) -> .
   {Prioritizes X.}
   return X;
 end intrinsic;
 
-intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Reverse) -> .
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Reverse, s :: PGGAlgState_ResGroups) -> .
   {Prioritizes X.}
-  return Reverse(Prioritize(X, P`priority));
+  return Reverse(Prioritize(X, P`priority, s));
 end intrinsic;
 
-intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Random) -> .
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Random, s :: PGGAlgState_ResGroups) -> .
   {Prioritizes X.}
   return Shuffle(X);
 end intrinsic;
 
-intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Key) -> .
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Key, s :: PGGAlgState_ResGroups) -> .
   {"}
   return SortBy(X, function (i)
     return Evaluate(P`key, func<name | case<name |
-      "Index": Index(i`state`overgroup, i`subgroup),
-      "OrbitIndex": Index(i`state`overgroup, Stabilizer(i`state`overgroup, i`subgroup)),
-      "Diversity": Diversity(i),
-      "Information": Information(i),
+      "Index": Index(s`overgroup, i`subgroup),
+      "OrbitIndex": Index(s`overgroup, Stabilizer(s`overgroup, [{x : x in o} : o in Orbits(i`subgroup)])),
+      "Diversity": Diversity(i, s),
+      "Information": Information(i, s),
       default: not_implemented(name)
     >>);
   end function);
 end intrinsic;
 
-intrinsic PGGAlg_ResChoice_All_Make(:Priority:=false) -> PGGAlg_ResChoice_All
+intrinsic PGGAlg_ResChoice_Tranche_Make(:Tranche:=false, Priority:=false) -> PGGAlg_ResChoice_Tranche
+  {The "Tranche" subgroups choice.}
+  alg := New(PGGAlg_ResChoice_Tranche);
+  alg`tranche_alg := Tranche cmpne false select Tranche else PGGAlg_Tranche_Index_Make();
+  alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_Tranche_All_Make() -> PGGAlg_Tranche_All
   {The "All" subgroups choice.}
-  alg := New(PGGAlg_ResChoice_All);
-  alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
+  alg := New(PGGAlg_Tranche_All);
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResChoice_Index_Make(:Priority:=false, Filter:=false, SortKey:=false) -> PGGAlg_ResChoice_Index
+intrinsic PGGAlg_Tranche_Index_Make(:Filter:=false, SortKey:=false) -> PGGAlg_Tranche_Index
   {The "Index" subgroups choice.}
-  alg := New(PGGAlg_ResChoice_Index);
-  alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
+  alg := New(PGGAlg_Tranche_Index);
   alg`filter := Filter;
   alg`sort_key := SortKey;
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResChoice_OrbitIndex_Make(:Priority:=false, Filter:=false, SortKey:=false) -> PGGAlg_ResChoice_OrbitIndex
+intrinsic PGGAlg_Tranche_OrbitIndex_Make(:Filter:=false, SortKey:=false) -> PGGAlg_Tranche_OrbitIndex
   {The "Index" subgroups choice.}
-  alg := New(PGGAlg_ResChoice_OrbitIndex);
-  alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
+  alg := New(PGGAlg_Tranche_OrbitIndex);
   alg`filter := Filter;
   alg`sort_key := SortKey;
   return alg;
 end intrinsic;
 
-intrinsic Print(alg :: PGGAlg_ResChoice_All)
-  {"}
-  print "all";
-  IndentPush();
-  printf "priority = %o", alg`priority;
-  IndentPop();
-end intrinsic;
-
-intrinsic Print(alg :: PGGAlg_ResChoice_Index)
-  {"}
-  print "index";
-  IndentPush();
-  print "priority =", alg`priority;
-  print "filter =", alg`filter cmpeq false select "none" else alg`filter;
-  printf "sort key = %o", alg`sort_key cmpeq false select "none" else alg`sort_key;
-  IndentPop();
-end intrinsic;
-
-intrinsic Print(alg :: PGGAlg_ResChoice_OrbitIndex)
-  {"}
-  print "index";
-  IndentPush();
-  print "priority =", alg`priority;
-  print "filter =", alg`filter cmpeq false select "none" else alg`filter;
-  printf "sort key = %o", alg`sort_key cmpeq false select "none" else alg`sort_key;
-  IndentPop();
-end intrinsic;
-
-intrinsic Start(alg :: PGGAlg_ResChoice_All, parent :: PGGAlgState_ResGroups) -> PGGAlgState_ResChoice_All
+intrinsic Start(alg :: PGGAlg_ResChoice_Tranche, parent :: PGGAlgState_ResGroups) -> PGGAlgState_ResChoice_Tranche
   {Starts alg.}
-  s := New(PGGAlgState_ResChoice_All);
+  s := New(PGGAlgState_ResChoice_Tranche);
+  s`algorithm := alg;
   s`parent := parent;
   s`overgroup := parent`overgroup;
-  s`algorithm := alg;
+  s`tranche_state := Start(alg`tranche_alg, parent`conjugacy);
   return s;
 end intrinsic;
 
-intrinsic Start(alg :: PGGAlg_ResChoice_Index, parent :: PGGAlgState_ResGroups) -> PGGAlgState_ResChoice_Index
-  {"}
-  s := New(PGGAlgState_ResChoice_Index);
-  s`parent := parent;
-  s`overgroup := parent`overgroup;
+intrinsic Start(alg :: PGGAlg_Tranche_All, conj :: PGGConj) -> PGGAlgState_Tranche_All
+  {Starts alg.}
+  s := New(PGGAlgState_Tranche_All);
   s`algorithm := alg;
-  s`indices := Divisors(Order(s`overgroup));
+  s`conjugacy := conj;
+  return s;
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_Tranche_Index, conj :: PGGConj) -> PGGAlgState_Tranche_Index
+  {"}
+  s := New(PGGAlgState_Tranche_Index);
+  s`algorithm := alg;
+  s`conjugacy := conj;
+  s`indices := Divisors(Order(s`conjugacy`group));
   if alg`filter cmpne false then
     s`indices := [n : n in s`indices | Evaluate(alg`filter, func<name | case<name | "idx": n, default: not_implemented()>>)];
   end if;
@@ -3234,19 +3269,17 @@ intrinsic Start(alg :: PGGAlg_ResChoice_Index, parent :: PGGAlgState_ResGroups) 
   else
     s`indices := Sort(s`indices);
   end if;
-  s`ii := 0;
-  s`tranche := [];
   s`all_groups := [];
+  Reset(s);
   return s;
 end intrinsic;
 
-intrinsic Start(alg :: PGGAlg_ResChoice_OrbitIndex, parent :: PGGAlgState_ResGroups) -> PGGAlgState_ResChoice_OrbitIndex
+intrinsic Start(alg :: PGGAlg_Tranche_OrbitIndex, conj :: PGGConj) -> PGGAlgState_Tranche_OrbitIndex
   {"}
-  s := New(PGGAlgState_ResChoice_OrbitIndex);
-  s`parent := parent;
-  s`overgroup := parent`overgroup;
+  s := New(PGGAlgState_Tranche_OrbitIndex);
   s`algorithm := alg;
-  s`indices := [<idx,ridx> : ridx in Divisors(idx), idx in Divisors(Order(s`overgroup))];
+  s`conjugacy := conj;
+  s`indices := [<idx,ridx> : ridx in Divisors(idx), idx in Divisors(Order(s`conjugacy`group))];
   if alg`filter cmpne false then
     s`indices := [nr : nr in s`indices | Evaluate(alg`filter, func<name | case<name | "idx": nr[1], "ridx": nr[2], "oidx": nr[1] div nr[2], default: not_implemented()>>)];
   end if;
@@ -3256,42 +3289,83 @@ intrinsic Start(alg :: PGGAlg_ResChoice_OrbitIndex, parent :: PGGAlgState_ResGro
     s`indices := Sort(s`indices);
   end if;
   vprint PGG_GaloisGroup: "indices =", s`indices;
-  s`ii := 0;
-  s`si := 0;
-  s`tranche := [];
   s`all_groups := AssociativeArray();
   s`all_stabilizers := [];
-  s`cur_stabilizers := [];
+  Reset(s);
   return s;
 end intrinsic;
 
-intrinsic Reset(s :: PGGAlgState_ResChoice_All)
+intrinsic Reset(s :: PGGAlgState_Tranche)
   {Starts choosing from the beginning again.}
-  if assigned s`tranche then
-    delete s`tranche;
+  SetState(s, InitialState(s));
+end intrinsic;
+
+intrinsic Reset(s :: PGGAlgState_ResChoice_Tranche)
+  {Starts the choice from the beginning again.}
+  Reset(s`tranche_state);
+end intrinsic;
+
+intrinsic InitialState(s :: PGGAlgState_Tranche_All) -> .
+  {Gets the initial state of the choice.}
+  return false;
+end intrinsic;
+
+intrinsic InitialState(s :: PGGAlgState_Tranche_Index) -> .
+  {"}
+  return <0, []>;
+end intrinsic;
+
+intrinsic InitialState(s :: PGGAlgState_Tranche_OrbitIndex) -> .
+  {"}
+  return <0, 0, [], []>;
+end intrinsic;
+
+intrinsic CurrentState(s :: PGGAlgState_Tranche_All) -> .
+  {Gets the current state of the choice.}
+  return assigned s`tranche select s`tranche else false;
+end intrinsic;
+
+intrinsic CurrentState(s :: PGGAlgState_Tranche_Index) -> .
+  {"}
+  return <s`ii, s`tranche>;
+end intrinsic;
+
+intrinsic CurrentState(s :: PGGAlgState_Tranche_OrbitIndex) -> .
+  {"}
+  return <s`ii, s`si, s`tranche, s`cur_stabilizers>;
+end intrinsic;
+
+intrinsic SetState(s :: PGGAlgState_Tranche_All, x)
+  {Sets the state of the choice.}
+  if x cmpeq false then
+    if assigned s`tranche then
+      delete s`tranche;
+    end if;
+  else
+    s`tranche := x;
   end if;
 end intrinsic;
 
-intrinsic Reset(s :: PGGAlgState_ResChoice_Index)
+intrinsic SetState(s :: PGGAlgState_Tranche_Index, x)
   {"}
-  s`ii := 0;
-  s`tranche := [];
+  s`ii := x[1];
+  s`tranche := x[2];
 end intrinsic;
 
-intrinsic Reset(s :: PGGAlgState_ResChoice_OrbitIndex)
+intrinsic SetState(s :: PGGAlgState_Tranche_OrbitIndex, x)
   {"}
-  s`ii := 0;
-  s`si := 0;
-  s`tranche := [];
-  s`cur_stabilizers := [];
+  s`ii := x[1];
+  s`si := x[2];
+  s`tranche := x[3];
+  s`cur_stabilizers := x[4];
 end intrinsic;
 
 intrinsic Subgroup(s :: PGGAlgState_ResChoice_Tranche) -> GrpPerm
   {Selects a subgroup.}
   while true do
-    tranche := Tranche(s);
+    tranche := Tranche(s`tranche_state);
     assert #tranche gt 0;
-    tranche2 := Prioritize(Filter(PGG_ToIter(tranche), IsUseful), s`algorithm`priority);
+    tranche2 := Prioritize(Filter(PGG_ToIter(tranche), func<i | IsUseful(s`parent, i)>), s`algorithm`priority, s`parent);
     ok, i := HasNext(tranche2);
     if ok then
       Forget(i);
@@ -3300,32 +3374,32 @@ intrinsic Subgroup(s :: PGGAlgState_ResChoice_Tranche) -> GrpPerm
   end while;
 end intrinsic;
 
-intrinsic Tranche(s :: PGGAlgState_ResChoice_All) -> []
+intrinsic Tranche(s :: PGGAlgState_Tranche_All) -> []
   {Gets a tranche of potential subgroups.}
   if not assigned s`tranche then
     if not assigned s`all_groups then
-      s`all_groups := [x`subgroup : x in Subgroups(s`overgroup)];
+      s`all_groups := [x`subgroup : x in Subgroups(s`conjugacy`group)];
     end if;
     s`tranche := MakeTranche(s, s`all_groups);
   end if;
   return [i : i in s`tranche];
 end intrinsic;
 
-intrinsic Tranche(s :: PGGAlgState_ResChoice_Index) -> []
+intrinsic Tranche(s :: PGGAlgState_Tranche_Index) -> []
   {"}
   while #s`tranche eq 0 do
     s`ii +:= 1;
     index := s`indices[s`ii];
     vprint PGG_GaloisGroup: "index =", index;
     if not IsDefined(s`all_groups, s`ii) then
-      s`all_groups[s`ii] := [x`subgroup : x in Subgroups(s`overgroup : IndexEqual:=index)];
+      s`all_groups[s`ii] := [x`subgroup : x in Subgroups(s`conjugacy`group : IndexEqual:=index)];
     end if;
     s`tranche := MakeTranche(s, s`all_groups[s`ii]);
   end while;
   return [i : i in s`tranche];
 end intrinsic;
 
-intrinsic Tranche(s :: PGGAlgState_ResChoice_OrbitIndex) -> []
+intrinsic Tranche(s :: PGGAlgState_Tranche_OrbitIndex) -> []
   {"}
   while #s`tranche eq 0 do
     while s`si ge #s`cur_stabilizers do
@@ -3335,8 +3409,8 @@ intrinsic Tranche(s :: PGGAlgState_ResChoice_OrbitIndex) -> []
       oidx := xdiv(idx, ridx);
       vprint PGG_GaloisGroup: "index =", idx, ridx, oidx;
       if not IsDefined(s`all_stabilizers, oidx) then
-        s`all_stabilizers[oidx] := [Stabilizer(s`overgroup, os) : os in OrbitsOfSubgroups(s`parent`conjugacy, oidx)];
-        assert forall{S : S in s`all_stabilizers[oidx] | Index(s`overgroup, S) eq oidx};
+        s`all_stabilizers[oidx] := [Stabilizer(s`conjugacy`group, os) : os in OrbitsOfSubgroups(s`conjugacy, oidx)];
+        assert forall{S : S in s`all_stabilizers[oidx] | Index(s`conjugacy`group, S) eq oidx};
       end if;
       s`cur_stabilizers := s`all_stabilizers[oidx];
     end while;
@@ -3345,53 +3419,48 @@ intrinsic Tranche(s :: PGGAlgState_ResChoice_OrbitIndex) -> []
     k := <idx, ridx, s`si>;
     if not IsDefined(s`all_groups, k) then
       s`all_groups[k] := [x`subgroup : x in Subgroups(s`cur_stabilizers[s`si] : IndexEqual:=ridx)];
-      assert forall{U : U in s`all_groups[k] | Index(s`overgroup, U) eq idx};
+      assert forall{U : U in s`all_groups[k] | Index(s`conjugacy`group, U) eq idx};
     end if;
     s`tranche := MakeTranche(s, s`all_groups[k]);
   end while;
   return [i : i in s`tranche];
 end intrinsic;
 
-intrinsic MakeTranche(s :: PGGAlgState_ResChoice_Tranche, groups :: [GrpPerm]) -> .
+intrinsic MakeTranche(s :: PGGAlgState_Tranche, groups :: [GrpPerm]) -> .
   {Makes a new tranche.}
   return [TrancheItem(s, i, groups[i]) : i in [1..#groups]];
 end intrinsic;
 
-intrinsic TrancheItem(s :: PGGAlgState_ResChoice_Tranche, idx, subgroup :: GrpPerm) -> PGGAlgState_ResChoice_TrancheItem
+intrinsic TrancheItem(s :: PGGAlgState_Tranche, idx, subgroup :: GrpPerm) -> PGGAlgState_TrancheItem
   {An item in a tranche.}
-  i := New(PGGAlgState_ResChoice_TrancheItem);
+  i := New(PGGAlgState_TrancheItem);
   i`state := s;
   i`idx := idx;
   i`subgroup := subgroup;
   return i;
 end intrinsic;
 
-intrinsic ForgetTrancheItem(s :: PGGAlgState_ResChoice_All, i :: RngIntElt)
+intrinsic ForgetTrancheItem(s :: PGGAlgState_Tranche_All, i :: RngIntElt)
   {Don't consider this item again.}
   Undefine(~s`tranche, i);
 end intrinsic;
 
-intrinsic ForgetTrancheItem(s :: PGGAlgState_ResChoice_Index, i :: RngIntElt)
+intrinsic ForgetTrancheItem(s :: PGGAlgState_Tranche_Index, i :: RngIntElt)
   {"}
   Undefine(~s`tranche, i);
 end intrinsic;
 
-intrinsic ForgetTrancheItem(s :: PGGAlgState_ResChoice_OrbitIndex, i :: RngIntElt)
+intrinsic ForgetTrancheItem(s :: PGGAlgState_Tranche_OrbitIndex, i :: RngIntElt)
   {"}
   Undefine(~s`tranche, i);
 end intrinsic;
 
-intrinsic Group(i :: PGGAlgState_ResChoice_TrancheItem) -> GrpPerm
+intrinsic Group(i :: PGGAlgState_TrancheItem) -> GrpPerm
   {The group.}
   return i`subgroup;
 end intrinsic;
 
-intrinsic IsUseful(i :: PGGAlgState_ResChoice_TrancheItem) -> BoolElt
-  {Checks if the item is useful. If not, forgets it.}
-  return IsUseful(i`state`parent, i);
-end intrinsic;
-
-intrinsic IsUseful(s :: PGGAlgState_ResGroups_All, i :: PGGAlgState_ResChoice_TrancheItem) -> BoolElt
+intrinsic IsUseful(s :: PGGAlgState_ResGroups_All, i :: PGGAlgState_TrancheItem) -> BoolElt
   {"}
   Gs := s`possible_groups;
   h := CosetAction(s`overgroup, i`subgroup);
@@ -3416,7 +3485,7 @@ end intrinsic;
 // Suppose now there is a single node with several children. We partition the children into two sets, those with the same statistic as the node, and those with different statistics (which therefore are strict refinements). If the actual statistic is that of the node, then we rule out the children with different statistics. If the actual statistic is a refinement of one of the different children, then we rule out the node (and maybe some children).
 // 
 // More generally, if there is a node with maybe_equal=true and a child (of possibly a different node) with maybe_subgroup=true such that the statistic for the child is a strict refinement of that of the node, then we will distinguish between them: if the actual statistic agrees with the node, then it cannot agree with the child.
-intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal, i :: PGGAlgState_ResChoice_TrancheItem) -> BoolElt
+intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal, i :: PGGAlgState_TrancheItem) -> BoolElt
   {"}
   h := CosetAction(s`overgroup, i`subgroup);
   statalg := s`algorithm`statistic;
@@ -3448,6 +3517,8 @@ intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal, i :: PGGAlgState_ResChoic
     assert #ns ge 2;
     stat1 := GroupStat(ns[1], h);
     is_useful := exists{n : n in ns[2..#ns] | GroupStat(n, h) ne stat1};
+  when "All":
+    is_useful := Index(s`overgroup, i`subgroup) ne 1;
   else
     assert false;
   end case;
@@ -3457,25 +3528,25 @@ intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal, i :: PGGAlgState_ResChoic
   return is_useful;
 end intrinsic;
 
-intrinsic Information(i :: PGGAlgState_ResChoice_TrancheItem) -> FldReElt
+intrinsic Information(i :: PGGAlgState_TrancheItem, s :: PGGAlgState_ResGroups_All) -> FldReElt
   {The information provided by this item.}
-  Gs := i`state`parent`possible_groups;
-  h := CosetAction(i`state`overgroup, i`subgroup);
-  statalg := i`state`parent`algorithm`statistic;
+  Gs := s`possible_groups;
+  h := CosetAction(s`overgroup, i`subgroup);
+  statalg := s`algorithm`statistic;
   stats := {* GroupStat(statalg, h(G)) : G in Gs *};
   return multiplicities_to_information(Multiplicities(stats));
 end intrinsic;
 
-intrinsic Diversity(i :: PGGAlgState_ResChoice_TrancheItem) -> RngIntElt
+intrinsic Diversity(i :: PGGAlgState_TrancheItem, s :: PGGAlgState_ResGroups_All) -> RngIntElt
   {The information provided by this item.}
-  Gs := i`state`parent`possible_groups;
-  h := CosetAction(i`state`overgroup, i`subgroup);
-  statalg := i`state`parent`algorithm`statistic;
+  Gs := s`possible_groups;
+  h := CosetAction(s`overgroup, i`subgroup);
+  statalg := s`algorithm`statistic;
   stats := { GroupStat(statalg, h(G)) : G in Gs };
   return #stats;
 end intrinsic;
 
-intrinsic Forget(i :: PGGAlgState_ResChoice_TrancheItem)
+intrinsic Forget(i :: PGGAlgState_TrancheItem)
   {Don't consider this item again.}
   ForgetTrancheItem(i`state, i`idx);
 end intrinsic;
@@ -3484,7 +3555,7 @@ intrinsic PGGAlg_ResGroups_All_Make(:Statistic:=false, SubgroupChoice:=false) ->
   {The "All" resolvent groups algorithm.}
   alg := New(PGGAlg_ResGroups_All);
   alg`statistic := Statistic cmpne false select Statistic else PGGStat_FactorDegrees_Make();
-  alg`subgroup_choice := SubgroupChoice cmpne false select SubgroupChoice else PGGAlg_ResChoice_All_Make();
+  alg`subgroup_choice := SubgroupChoice cmpne false select SubgroupChoice else PGGAlg_ResChoice_Tranche_Make();
   return alg;
 end intrinsic;
 
@@ -3492,7 +3563,7 @@ intrinsic PGGAlg_ResGroups_Maximal_Make(:Statistic:=false, SubgroupChoice:=false
   {The "Maximal" resolvent groups algorithm.}
   alg := New(PGGAlg_ResGroups_Maximal);
   alg`statistic := Statistic cmpne false select Statistic else PGGStat_FactorDegrees_Make();
-  alg`subgroup_choice := SubgroupChoice cmpne false select SubgroupChoice else PGGAlg_ResChoice_All_Make();
+  alg`subgroup_choice := SubgroupChoice cmpne false select SubgroupChoice else PGGAlg_ResChoice_Tranche_Make();
   alg`descend := Descend cmpne false select Descend else "Steady";
   alg`reprocess := Reprocess;
   alg`reset := Reset;
@@ -3904,6 +3975,10 @@ function parse_algorithm(alg)
         PGG_ArgSpec_Attr("ne", [<X>,<X>], func<args | PGG_Expression_BinOp('ne', args[1], args[2])>),
         PGG_ArgSpec_AttrList("and", X, func<args | PGG_Expression_SeqOp('&and', [x : x in args])>),
         PGG_ArgSpec_AttrList("or", X, func<args | PGG_Expression_SeqOp('&or', [x : x in args])>),
+        PGG_ArgSpec_Attr("-", [<X>], func<args | PGG_Expression_UnOp('-', args[1])>),
+        PGG_ArgSpec_Attr("-", [<X>,<X>], func<args | PGG_Expression_BinOp('-', args[1], args[2])>),
+        PGG_ArgSpec_AttrList("+", X, func<args | PGG_Expression_SeqOp('&+', [x : x in args])>),
+        PGG_ArgSpec_AttrList("*", X, func<args | PGG_Expression_SeqOp('&*', [x : x in args])>),
         PGG_ArgSpec_Transform(PGG_ArgSpec_AttrInt(), func<x | PGG_Expression_Const(x)>)
       ]);
     end function)>;
@@ -3936,29 +4011,38 @@ function parse_algorithm(alg)
       PGG_ArgSpec_Transform(EXPRESSION(["Index","OrbitIndex","Diversity","Information"]), func<x | PGGAlg_ResPriority_Key_Make(x)>)
     ]));
 
-    SUBGROUP_CHOICE := PGG_ArgSpec_Union([
-      PGG_ArgSpec_ISA(PGGAlg_ResChoice),
+    SUBGROUP_TRANCHE := PGG_ArgSpec_Union([
+      PGG_ArgSpec_ISA(PGGAlg_Tranche),
       PGG_ArgSpec_Literal(false),
       PGG_ArgSpec_Attr(
         "All",
-        [ <SUBGROUP_PRIORITY,"",false> ],
-        func<args | PGGAlg_ResChoice_All_Make(:Priority:=args[1])>
+        [ ],
+        func<args | PGGAlg_Tranche_All_Make()>
       ),
       PGG_ArgSpec_Attr(
         "Index",
-        [ <SUBGROUP_PRIORITY,"",false>, <X,"If",false>, <X,"Sort",false> ] where X:=EXPRESSION(["idx"]),
-        func<args | PGGAlg_ResChoice_Index_Make(:Priority:=args[1],Filter:=args[2], SortKey:=args[3])>
+        [ <X,"If",false>, <X,"Sort",false> ] where X:=EXPRESSION(["idx"]),
+        func<args | PGGAlg_Tranche_Index_Make(:Filter:=args[1], SortKey:=args[2])>
       ),
       PGG_ArgSpec_Attr(
         "OrbitIndex",
-        [ <SUBGROUP_PRIORITY,"",false>, <X,"If",false>, <X,"Sort",false> ] where X:=EXPRESSION(["idx","oidx","ridx"]),
-        func<args | PGGAlg_ResChoice_OrbitIndex_Make(:Priority:=args[1], Filter:=args[2], SortKey:=args[3])>
-      )//,
-      // PGG_ArgSpec_Attr(
-      //   "MostUseful",
-      //   [ <SUBGROUP_PRIORITY,"",false> ],
-      //   func<args | PGGAlg_ResChoice_MostUseful_Make()>
-      // )
+        [ <X,"If",false>, <X,"Sort",false> ] where X:=EXPRESSION(["idx","oidx","ridx"]),
+        func<args | PGGAlg_Tranche_OrbitIndex_Make(:Filter:=args[1], SortKey:=args[2])>
+      )
+    ]);
+
+    SUBGROUP_CHOICE := PGG_ArgSpec_Union([
+      PGG_ArgSpec_ISA(PGGAlg_ResChoice),
+      PGG_ArgSpec_Literal(false),
+      PGG_ArgSpec_Transform(
+        SUBGROUP_TRANCHE,
+        func<t | PGGAlg_ResChoice_Tranche_Make(:Tranche:=t)>
+      ),
+      PGG_ArgSpec_Attr(
+        "",
+        [ <SUBGROUP_TRANCHE,"Tranche",false>, <SUBGROUP_PRIORITY,"Priority",false> ],
+        func<args | PGGAlg_ResChoice_Tranche_Make(:Tranche:=args[1], Priority:=args[2])>
+      )
     ]);
 
     RESGROUPS := PGG_ArgSpec_Union([
@@ -3979,13 +4063,15 @@ function parse_algorithm(alg)
             PGG_ArgSpec_Literal(false),
             PGG_ArgSpec_Attr("Eager"),
             PGG_ArgSpec_Attr("Steady"),
-            PGG_ArgSpec_Attr("Patient")
+            PGG_ArgSpec_Attr("Patient"),
+            PGG_ArgSpec_Attr("Ask")
           ]), "Descend", false>
         , <PGG_ArgSpec_Union([
             PGG_ArgSpec_Literal(false),
             PGG_ArgSpec_Attr("Sufficient"),
             PGG_ArgSpec_Attr("Necessary"),
-            PGG_ArgSpec_Attr("Generous")
+            PGG_ArgSpec_Attr("Generous"),
+            PGG_ArgSpec_Attr("All")
           ]), "Useful", false>
         , <BOOL, "Reprocess", true>
         , <BOOL, "Reset", true>
@@ -4045,7 +4131,7 @@ intrinsic PGG_RamificationGroup(f :: RngUPolElt[FldPad], u :: FldRatElt : Alg:=f
     PGG_StartGlobalTimer();
   end if;
   PGG_GlobalTimer_Push("parse algorithm");
-  if Alg cmpne false then
+  if Alg cmpeq false then
     Alg := "ARM";
   end if;
   alg := parse_algorithm(Alg);
