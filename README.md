@@ -67,10 +67,12 @@ GROUP_ALG
                                     on to their children
     | "Patient"                   Like Steady, but also require that the remaining top nodes have
                                     a common subgroup which could be a Galois group
+    | "Ask"                       Asks the user
   , Useful:                   How to decide whether a subgroup is useful
     [ "Generous"                  Useful if there is a pair of nodes with different statistics
     , "Necessary"                 Useful if it satisfies a necessary condition to provide information
     , "Sufficient"                Useful if it satisfies a sufficient condition to provide information
+    , "All"                       Always useful
     ]
   , Reprocess: BOOL           When true, on a descent re-use all resolvents computed so far
   , Reset: BOOL               When true, on a descent reset the subgroup choice algorithm
@@ -120,17 +122,19 @@ STATISTIC
   ]
 
 SUBGROUP_CHOICE
-= "All"                   Consider all subgroups
-  [ SUBGROUP_PRIORITY       How we select among these
+= SUBGROUP_TRANCHE        Consider each group in each tranche in turn (equivalent to the Null priority)
+| [ SUBGROUP_TRANCHE      Consider each tranche in turn, and consider the groups ordered by...
+  , SUBGROUP_PRIORITY       ... this.
   ]
+
+SUBGROUP_TRANCHE
+= "All"                   Consider all subgroups
 | "Index"                 Consider subgroups by index
-  [ SUBGROUP_PRIORITY         How we select among these
-  , If: EXPRESSION            A filter on the indices to use, with free variable "idx"
+  [ If: EXPRESSION            A filter on the indices to use, with free variable "idx"
   , Sort: EXPRESSION          Sort indices by this expression in "idx"
   ]
 | "OrbitIndex"            Consider subgroups by orbit index and index
-  [ SUBGROUP_PRIORITY         How we select among these
-  , If: EXPRESSION            A filter on the indices to use, with free variables "idx", "oidx", "ridx"
+  [ If: EXPRESSION            A filter on the indices to use, with free variables "idx", "oidx", "ridx"
   , Sort: EXPRESSION          Sort by this expression in "idx", "oidx", "ridx"
   ]
 
@@ -151,6 +155,21 @@ EXPRESSION                An expression with some free variables
   , EXPRESSION
   ]
 | ("and"|"or")              True if all/any of the arguments are true
+  [ EXPRESSION
+  , ...
+  ]
+| "-"                       Negation
+  [ EXPRESSION
+  ]
+| "-"                       Subtraction
+  [ EXPRESSION
+  , EXPRESSION
+  ]
+| "+"                       Sum
+  [ EXPRESSION
+  , ...
+  ]
+| "*"                       Product
   [ EXPRESSION
   , ...
   ]
