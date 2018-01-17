@@ -122,9 +122,9 @@ STATISTIC
   ]
 
 SUBGROUP_CHOICE
-= SUBGROUP_TRANCHE        Consider each group in each tranche in turn (equivalent to the Null priority)
+= SUBGROUP_TRANCHE        Consider each group in each tranche in turn
 | [ SUBGROUP_TRANCHE      Consider each tranche in turn, and consider the groups ordered by...
-  , SUBGROUP_PRIORITY       ... this.
+  , SUBGROUP_PRIORITY       ... this priority.
   ]
 
 SUBGROUP_TRANCHE
