@@ -301,7 +301,6 @@ end function;
 
 // given L/K and a sequence pis of elements of L which are uniformizing elements of subextensions K(pis[#pis])/.../K(pis[1]), return this tower from the bottom up
 function tower_from_uniformizers(L, K, pis : alg:="LA")
-  timer := PGG_Timer();
   assert Universe(pis) eq L;
   assert not IsPrimeField(L);
   assert BaseField(L) eq K;
@@ -311,11 +310,11 @@ function tower_from_uniformizers(L, K, pis : alg:="LA")
   LtoL2 := map<L -> L2 | x :-> x>;
   f := DefiningPolynomial(L);
   Lpi := L.1;
-  Log(timer, "init");
   for i in [1..#pis] do
+    PGG_GlobalTimer_Push("minimal polynomial");
     pi2 := LtoL2(pis[i]);
     m := MinimalPolynomial(pi2, K2);
-    Log(timer, "MinimalPolynomial");
+    PGG_GlobalTimer_Swap("factorization");
     assert is_eisenstein(m);
     d := Degree(m);
     n := xdiv(Degree(L2, K2), d);
@@ -345,7 +344,7 @@ function tower_from_uniformizers(L, K, pis : alg:="LA")
       LtoL2 := LtoL2new;
     end if;
     Append(~t, K2);
-    Log(timer, "factorization");
+    PGG_GlobalTimer_Pop();
   end for;
   return t;
 end function;
@@ -358,24 +357,23 @@ function ramification_tower(L, K)
   elif L eq U then
     return [K, U];
   elif U eq K then
-    timer := PGG_Timer();
     f := DefiningPolynomial(L);
     assert is_eisenstein(f);
     pi := L.1;
     assert IsWeaklyZero(Evaluate(f, pi));
     r := Evaluate(f, PolynomialRing(L) ! [pi, 1]);
     assert IsWeaklyZero(Coefficient(r, 0));
-    Log(timer, "ramification polynomial");
+    PGG_GlobalTimer_Push("newton polygon factorization");
     rfacs := newton_polygon_factorization(r);
-    Log(timer, "newton_polygon_factorization");
+    PGG_GlobalTimer_Swap("get uniformizers");
     assert Degree(rfacs[1]) eq 1;
     assert forall{i : i in [1..#rfacs] | IsDivisibleBy(Degree(f), &+[Degree(rfacs[j]) : j in [1..i]])};
     crfacs := [&*rfacs[1..i] : i in [1..#rfacs]];
     cffacs := [Evaluate(crfac, PolynomialRing(L) ! [-pi, 1]) : crfac in crfacs];
     pis := [Coefficient(cffac, 0) : cffac in cffacs];
-    Log(timer, "get uniformizers");
+    PGG_GlobalTimer_Swap("tower from uniformizers");
     twr := tower_from_uniformizers(L, K, Reverse(pis));
-    Log(timer, "tower_from_uniformizers");
+    PGG_GlobalTimer_Pop();
     return twr;
   else
     return [K] cat ramification_tower(L, U);
@@ -763,7 +761,7 @@ intrinsic PGG_SubgroupClasses(conj :: PGGConj : Tranche:=false, Statistic:=false
   {The conjugacy classes of subgroups of conj`group.}
   X := New(PGGSetSubgrpcls2);
   X`conjugacy := conj;
-  X`tranche := Start(Tranche cmpne false select Tranche else PGGAlg_Tranche_OrbitIndex_Make(:Filter:=PGG_Expression_BinOp('and', PGG_Expression_BinOp('le', PGG_Expression_FreeVariable("idx"), PGG_Expression_Const(16)) ,PGG_Expression_BinOp('le', PGG_Expression_FreeVariable("ridx"), PGG_Expression_Const(2)))), conj);
+  X`tranche := Start(Tranche cmpne false select Tranche else PGGAlg_Tranche_OrbitIndex_Make(:Verbosity:=2, Filter:=PGG_Expression_BinOp('and', PGG_Expression_BinOp('le', PGG_Expression_FreeVariable("idx"), PGG_Expression_Const(8)) ,PGG_Expression_BinOp('le', PGG_Expression_FreeVariable("ridx"), PGG_Expression_Const(2)))), conj);
   X`statistic := Statistic cmpne false select Statistic else PGGStat_Tup_Make(<PGGStat_Order_Make(), PGGStat_FactorDegrees_Make()>);
   X`count := 0;
   X`root_node := MakeLeaf(X, conj`group, X);
@@ -849,6 +847,7 @@ intrinsic Find(N :: PGGSubgrpcls2, G :: GrpPerm) -> PGGSubgrpcls2
           Nstat := GroupStat(N`parent`statistic, q(N`group));
           Gstat := GroupStat(N`parent`statistic, q(G));
           if Nstat ne Gstat then
+            // we have found a distinguishing statistic, so insert a branch here
             B := New(PGGSetSubgrpcls2_Branch);
             B`quotient := q;
             B`up := N`up;
@@ -876,7 +875,27 @@ intrinsic Find(N :: PGGSubgrpcls2, G :: GrpPerm) -> PGGSubgrpcls2
           Forget(i);
         end for;
       else
-        not_implemented("ambiguous groups");
+        // we have failed to find a distinguishing statistic, so insert an ambiguous node here
+        B := New(PGGSetSubgrpcls2_Ambig);
+        B`up := N`up;
+        N`up := B;
+        if assigned N`stat then
+          B`stat := N`stat;
+          delete N`stat;
+        end if;
+        B`parent := N`parent;
+        M := MakeLeaf(N`parent, G, B);
+        B`down := [* N, M *];
+        case Type(B`up):
+        when PGGSetSubgrpcls2:
+          assert B`up eq B`parent;
+          B`up`root_node := B;
+        when PGGSetSubgrpcls2_Branch:
+          B`up`down[B`stat] := B;
+        else
+          assert false;
+        end case;
+        return M;
       end if;
     end while;
   end if;
@@ -895,14 +914,31 @@ intrinsic Find(B :: PGGSetSubgrpcls2_Branch, G :: GrpPerm) -> PGGSubgrpcls2
   end if;
 end intrinsic;
 
+intrinsic Find(A :: PGGSetSubgrpcls2_Ambig, G :: GrpPerm) -> PGGSubgrpcls2
+  {"}
+  for N in A`down do
+    if IsConjugate(A`parent`conjugacy`group, N`group, G) then
+      return N;
+    end if;
+  end for;
+  N := MakeLeaf(A`parent, G, A);
+  Append(~A`down, N);
+  return N;
+end intrinsic;
+
 intrinsic Shape(N :: PGGSubgrpcls2) -> .
   {The shape of the node N.}
-  return "*";
+  return 1;
 end intrinsic;
 
 intrinsic Shape(N :: PGGSetSubgrpcls2_Branch) -> .
   {"}
   return [* Shape(N`down[k]) : k in Keys(N`down) *];
+end intrinsic;
+
+intrinsic Shape(N :: PGGSetSubgrpcls2_Ambig) -> .
+  {"}
+  return #N`down;
 end intrinsic;
 
 intrinsic Depths(N :: PGGSubgrpcls2) -> .
@@ -913,6 +949,11 @@ end intrinsic;
 intrinsic Depths(N :: PGGSetSubgrpcls2_Branch) -> .
   {"}
   return &join[{* (d+1)^^Multiplicity(ds, d) : d in MultisetToSet(ds) *} where ds := Depths(N`down[k]) : k in Keys(N`down) ];
+end intrinsic;
+
+intrinsic Depths(N :: PGGSubgrpcls2) -> .
+  {"}
+  return {* 0^^#N`down *};
 end intrinsic;
 
 declare type PGGSetSubgrpcls[PGGSubgrpcls]: _PGGSetSubgrpcls;
@@ -1380,6 +1421,31 @@ declare attributes PGGExpr_Seqop: op, args;
 declare type PGGExpr_Const: PGGExpr;
 declare attributes PGGExpr_Const: val;
 
+intrinsic Print(x :: PGGExpr_FreeVar)
+  {Print.}
+  printf "%o", x`name;
+end intrinsic;
+
+intrinsic Print(x :: PGGExpr_Unop)
+  {"}
+  printf "%o(%o)", Type(x`op) eq Intrinsic select GetIntrinsicName(x`op) else "<unknown>", x`arg1;
+end intrinsic;
+
+intrinsic Print(x :: PGGExpr_Binop)
+  {"}
+  printf "%o(%o, %o)", Type(x`op) eq Intrinsic select GetIntrinsicName(x`op) else "<unknown>", x`arg1, x`arg2;
+end intrinsic;
+
+intrinsic Print(x :: PGGExpr_Seqop)
+  {"}
+  printf "%o([%o])", Type(x`op) eq Intrinsic select GetIntrinsicName(x`op) else "<unknown>", Join([Sprintf("%o", a) : a in x`args], ", ");
+end intrinsic;
+
+intrinsic Print(x :: PGGExpr_Const)
+  {"}
+  printf "%o", x`val;
+end intrinsic;
+
 intrinsic FreeVariables(x :: PGGExpr) -> {}
   {The free variables in the expression.}
   if not assigned x`free_vars then
@@ -1563,6 +1629,7 @@ declare type PGG_ResGroups_Maximal_Node;
 declare attributes PGG_ResGroups_Maximal_Node: id, class, children, possible_children, state, maybe_equal, maybe_subgroup, seen_resolvents, blacklist_done;
 
 declare type PGGAlg_Tranche: PGGAlg;
+declare attributes PGGAlg_Tranche: verbosity;
 declare type PGGAlg_Tranche_All: PGGAlg_Tranche;
 declare type PGGAlg_Tranche_Index: PGGAlg_Tranche;
 declare attributes PGGAlg_Tranche_Index: filter, sort_key;
@@ -1594,7 +1661,7 @@ declare type PGGAlg_ResPriority_Key: PGGAlg_ResPriority;
 declare attributes PGGAlg_ResPriority_Key: key;
 
 declare type PGGAlgState_TrancheItem;
-declare attributes PGGAlgState_TrancheItem: state, idx, subgroup;
+declare attributes PGGAlgState_TrancheItem: state, idx, tidx, subgroup;
 
 declare type PGGAlg_ResEval: PGGAlg;
 
@@ -1767,9 +1834,14 @@ intrinsic Children(x :: PGG_ResGroups_Maximal_Node) -> []
   {The nodes below x, i.e. corresponding to maximal subgroups.}
   if not assigned x`children then
     PGG_GlobalTimer_Push("groups");
-    groups := [Node(x`state, G) : y in MaximalSubgroups(Rep(x`class) : IsSolvable, IsTransitive:=IsTransitive(x`state`conjugacy)) | IsConsistentWithSubgroup(x`state`conjugacy, G) where G:=y`subgroup];
+    mgroups := MaximalSubgroups(Rep(x`class) : IsSolvable, IsTransitive:=IsTransitive(x`state`conjugacy));
+    PGG_GlobalTimer_Swap("consistent");
+    cgroups := [G : y in mgroups | IsConsistentWithSubgroup(x`state`conjugacy, G) where G:=y`subgroup];
+    PGG_GlobalTimer_Swap("nodes");
+    nodes := [Node(x`state, G) : G in cgroups];
+    // groups := [Node(x`state, G) : y in MaximalSubgroups(Rep(x`class) : IsSolvable, IsTransitive:=IsTransitive(x`state`conjugacy)) | IsConsistentWithSubgroup(x`state`conjugacy, G) where G:=y`subgroup];
     PGG_GlobalTimer_Swap("dedupe");
-    x`children := SetToSequence(SequenceToSet(groups));
+    x`children := SetToSequence(SequenceToSet(nodes));
     PGG_GlobalTimer_Pop();
   end if;
   return x`children;
@@ -2626,8 +2698,10 @@ intrinsic GlobalModel(conj :: PGGConj_Symmetric, bm :: PGGGloMod) -> PGGGloMod
   e := bm`embedding;
   locpol := conj`pol;
   m`local_pol := locpol;
+  PGG_GlobalTimer_Push("global polynomial");
   glopol0 := Polynomial([c@@e : c in Coefficients(locpol)]);
   if assigned conj`top_field then
+    PGG_GlobalTimer_Swap("minimize coefficients");
     locext := conj`top_field;
     assert IsWeaklyEqual(DefiningPolynomial(locext), locpol);
     // minimize the coefficients of glopol
@@ -2643,11 +2717,14 @@ intrinsic GlobalModel(conj :: PGGConj_Symmetric, bm :: PGGGloMod) -> PGGGloMod
       if pr lt 2 then
         break;
       end if;
+      PGG_GlobalTimer_Push("reduce coefficients");
       glopol2 := Polynomial([reduce_coefficients(c, Prime(K)^pr) : c in Coefficients(glopol)]);
       locpol2 := Polynomial([change_apr(c@e, Precision(K)) : c in Coefficients(glopol2)]);
       locext2new := ext<K | locpol2>;
+      PGG_GlobalTimer_Swap("has root");
       ok1, root := has_root(ChangeRing(locpol, locext2new));
       ok2, root2 := has_root(ChangeRing(locpol2, locext));
+      PGG_GlobalTimer_Pop();
       if ok1 and ok2 then
         locext2 := locext2new;
         isom := map<locext -> locext2 | x :-> &+[cs[i] * root^(i-1) : i in [1..#cs]] where cs:=Eltseq(x), y :-> &+[cs[i] * root2^(i-1) : i in [1..#cs]] where cs:=Eltseq(y)>;
@@ -2666,13 +2743,16 @@ intrinsic GlobalModel(conj :: PGGConj_Symmetric, bm :: PGGGloMod) -> PGGGloMod
   else
     m`global_pol := glopol0;
   end if;
+  PGG_GlobalTimer_Pop();
   return m;
 end intrinsic;
 
 intrinsic GlobalModel(conj :: PGGConj_Factors, bm :: PGGGloMod) -> PGGGloMod
   {"}
   m := New(PGGGloMod_Factors);
+  PGG_GlobalTimer_Push("recurse");
   m`factors := [GlobalModel(c, bm) : c in conj`factors];
+  PGG_GlobalTimer_Pop();
   return m;
 end intrinsic;
 
@@ -2681,19 +2761,17 @@ intrinsic GlobalModel(conj :: PGGConj_Tower, bm :: PGGGloMod) -> PGGGloMod
   m := New(PGGGloMod_Tower);
   m`tower := [**];
   m2 := bm;
+  PGG_GlobalTimer_Push("recurse");
   for c in conj`tower do
     m2 := GlobalModel(c, m2);
     Append(~m`tower, m2);
   end for;
+  PGG_GlobalTimer_Swap("primitive element");
   gloroot, glopol := random_primitive_element(m`tower[#m`tower]`global_field, BaseRing(m`tower[1]`global_pol));
+  PGG_GlobalTimer_Pop();
   m`global_pol := glopol;
   m`global_pol_root := gloroot;
   return m;
-end intrinsic;
-
-intrinsic PGG_AbsoluteResolvents() -> PGGAlg_ResEval_Global
-  {The "AbsoluteResolvents" resolvent algorithm for the resolvent method.}
-  return New(PGGAlg_ResEval_Global);
 end intrinsic;
 
 intrinsic Start(alg :: PGGAlg_ResEval_Global, conj :: PGGConj) -> PGGAlgState_ResEval_Global
@@ -2702,8 +2780,11 @@ intrinsic Start(alg :: PGGAlg_ResEval_Global, conj :: PGGConj) -> PGGAlgState_Re
   s`algorithm := alg;
   s`conjugacy := conj;
   s`precision := -Infinity();
+  PGG_GlobalTimer_Push("base field model");
   s`base_field_model := GlobalModel(BaseField(conj));
+  PGG_GlobalTimer_Swap("polynomial model");
   s`pol_model := GlobalModel(conj, s`base_field_model);
+  PGG_GlobalTimer_Pop();
   return s;
 end intrinsic;
 
@@ -2819,12 +2900,12 @@ end intrinsic;
 
 intrinsic Print(alg :: PGGAlg_Conjugacy_Factors)
   {"}
-  printf "factors -> %o", alg`next;
+  printf "factors -> "; Print(alg`next);
 end intrinsic;
 
 intrinsic Print(alg :: PGGAlg_Conjugacy_RamTower)
   {"}
-  printf "ramification tower -> %o", alg`next;
+  printf "ramification tower -> "; Print(alg`next);
 end intrinsic;
 
 intrinsic Conjugacy(alg :: PGGAlg_Conjugacy_Symmetric, f :: RngUPolElt[FldPad] : TopField:=false, IsTransitive:=false, KnownGroup:=false) -> PGGConj
@@ -2842,7 +2923,9 @@ intrinsic Conjugacy(alg :: PGGAlg_Conjugacy_Symmetric, f :: RngUPolElt[FldPad] :
   elif Degree(c) eq 1 then
     c`is_known := [* true, c`group *];
   elif assigned alg`galois_group_alg then
+    PGG_GlobalTimer_Push("galois group");
     c`is_known := [* true, GaloisGroup(alg`galois_group_alg, f) *];
+    PGG_GlobalTimer_Pop();
   else
     c`is_known := [* false *];
   end if;
@@ -2852,10 +2935,13 @@ end intrinsic;
 
 intrinsic Conjugacy(alg :: PGGAlg_Conjugacy_Factors, f :: RngUPolElt[FldPad] : IsTransitive:=false) -> PGGConj
   {"}
+  PGG_GlobalTimer_Push("factorization");
   facs := factorization(f);
   assert #facs le 1 or not IsTransitive;
   c := New(PGGConj_Factors);
+  PGG_GlobalTimer_Swap("recurse");
   c`factors := [Conjugacy(alg`next, fac : IsTransitive) : fac in facs];
+  PGG_GlobalTimer_Pop();
   c`group := DirectProduct([cc`group : cc in c`factors]);
   c`base_field := BaseRing(f);
   offset := 0;
@@ -2872,12 +2958,16 @@ end intrinsic;
 
 intrinsic Conjugacy(alg :: PGGAlg_Conjugacy_RamTower, f :: RngUPolElt[FldPad] : IsTransitive:=false) -> PGGConj
   {"}
+  PGG_GlobalTimer_Push("factorization");
   facs, certs := factorization(f : Extensions);
   assert #facs eq 1;
+  PGG_GlobalTimer_Swap("ramification tower");
   t := ramification_tower(certs[1]`Extension, BaseRing(f));
   c := New(PGGConj_Tower);
   c`pol := f;
+  PGG_GlobalTimer_Swap("recurse");
   c`tower := [Conjugacy(alg`next, DefiningPolynomial(t[i]) : IsTransitive, TopField:=t[i]) : i in [2..#t]];
+  PGG_GlobalTimer_Pop();
   c`group := WreathProduct([cc`group : cc in Reverse(c`tower)]);
   c`base_field := BaseRing(f);
   degree := 1;
@@ -3394,26 +3484,61 @@ intrinsic PGGAlg_ResChoice_Tranche_Make(:Tranche:=false, Priority:=false) -> PGG
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_Tranche_All_Make() -> PGGAlg_Tranche_All
+intrinsic Print(alg :: PGGAlg_ResChoice_Tranche)
+  {Print.}
+  print "tranche";
+  IndentPush();
+  print "tranche =", alg`tranche_alg;
+  printf "priority = "; Print(alg`priority);
+  IndentPop();
+end intrinsic;
+
+intrinsic PGGAlg_Tranche_All_Make(:Verbosity:=1) -> PGGAlg_Tranche_All
   {The "All" subgroups choice.}
   alg := New(PGGAlg_Tranche_All);
+  alg`verbosity := Verbosity;
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_Tranche_Index_Make(:Filter:=false, SortKey:=false) -> PGGAlg_Tranche_Index
+intrinsic PGGAlg_Tranche_Index_Make(:Filter:=false, SortKey:=false, Verbosity:=1) -> PGGAlg_Tranche_Index
   {The "Index" subgroups choice.}
   alg := New(PGGAlg_Tranche_Index);
+  alg`verbosity := Verbosity;
   alg`filter := Filter;
   alg`sort_key := SortKey;
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_Tranche_OrbitIndex_Make(:Filter:=false, SortKey:=false) -> PGGAlg_Tranche_OrbitIndex
+intrinsic PGGAlg_Tranche_OrbitIndex_Make(:Filter:=false, SortKey:=false, Verbosity:=1) -> PGGAlg_Tranche_OrbitIndex
   {The "Index" subgroups choice.}
   alg := New(PGGAlg_Tranche_OrbitIndex);
+  alg`verbosity := Verbosity;
   alg`filter := Filter;
   alg`sort_key := SortKey;
   return alg;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Tranche_All)
+  {Print.}
+  printf "all";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Tranche_Index)
+  {"}
+  print "index";
+  IndentPush();
+  print "filter =", alg`filter cmpeq false select "none" else alg`filter;
+  printf "sort by = %o", alg`sort_key cmpeq false select "none" else alg`sort_key;
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Tranche_OrbitIndex)
+  {"}
+  print "orbit index";
+  IndentPush();
+  print "filter =", alg`filter cmpeq false select "none" else alg`filter;
+  printf "sort by = %o", alg`sort_key cmpeq false select "none" else alg`sort_key;
+  IndentPop();
 end intrinsic;
 
 intrinsic Start(alg :: PGGAlg_ResChoice_Tranche, parent :: PGGAlgState_ResGroups) -> PGGAlgState_ResChoice_Tranche
@@ -3484,6 +3609,21 @@ intrinsic Reset(s :: PGGAlgState_ResChoice_Tranche)
   Reset(s`tranche_state);
 end intrinsic;
 
+intrinsic TrancheIndex(s :: PGGAlgState_Tranche_All) -> .
+  {The index of the current tranche.}
+  return false;
+end intrinsic;
+
+intrinsic TrancheIndex(s :: PGGAlgState_Tranche_Index) -> .
+  {"}
+  return s`ii;
+end intrinsic;
+
+intrinsic TrancheIndex(s :: PGGAlgState_Tranche_OrbitIndex) -> .
+  {"}
+  return <s`ii, s`si>;
+end intrinsic;
+
 intrinsic InitialState(s :: PGGAlgState_Tranche_All) -> .
   {Gets the initial state of the choice.}
   return false;
@@ -3542,10 +3682,13 @@ end intrinsic;
 intrinsic Subgroup(s :: PGGAlgState_ResChoice_Tranche) -> GrpPerm
   {Selects a subgroup.}
   while true do
+    PGG_GlobalTimer_Push("tranche");
     tranche := Tranche(s`tranche_state);
     assert #tranche gt 0;
+    PGG_GlobalTimer_Swap("prioritize");
     tranche2 := Prioritize(Filter(PGG_ToIter(tranche), func<i | IsUseful(s`parent, i)>), s`algorithm`priority, s`parent);
     ok, i := HasNext(tranche2);
+    PGG_GlobalTimer_Pop();
     if ok then
       Forget(i);
       return Group(i);
@@ -3584,7 +3727,7 @@ intrinsic HasTranche(s :: PGGAlgState_Tranche_Index) -> []
     end if;
     s`ii +:= 1;
     index := s`indices[s`ii];
-    vprint PGG_GaloisGroup: "index =", index;
+    vprint PGG_GaloisGroup, s`algorithm`verbosity: "index =", index;
     if not IsDefined(s`all_groups, s`ii) then
       s`all_groups[s`ii] := [x`subgroup : x in Subgroups(s`conjugacy`group : IndexEqual:=index)];
     end if;
@@ -3604,7 +3747,7 @@ intrinsic HasTranche(s :: PGGAlgState_Tranche_OrbitIndex) -> []
       s`si := 0;
       idx, ridx := Explode(s`indices[s`ii]);
       oidx := xdiv(idx, ridx);
-      vprint PGG_GaloisGroup: "index =", idx, ridx, oidx;
+      vprint PGG_GaloisGroup, s`algorithm`verbosity: "index =", idx, ridx, oidx;
       if not IsDefined(s`all_stabilizers, oidx) then
         s`all_stabilizers[oidx] := [Stabilizer(s`conjugacy`group, os) : os in OrbitsOfSubgroups(s`conjugacy, oidx)];
         assert forall{S : S in s`all_stabilizers[oidx] | Index(s`conjugacy`group, S) eq oidx};
@@ -3634,7 +3777,24 @@ intrinsic TrancheItem(s :: PGGAlgState_Tranche, idx, subgroup :: GrpPerm) -> PGG
   i`state := s;
   i`idx := idx;
   i`subgroup := subgroup;
+  i`tidx := TrancheIndex(s);
   return i;
+end intrinsic;
+
+intrinsic Id(i :: PGGAlgState_TrancheItem) -> .
+  {Identifies this tranche item uniquely.}
+  return <i`idx, i`tidx>;
+end intrinsic;
+
+intrinsic Hash(i :: PGGAlgState_TrancheItem) -> .
+  {Hash.}
+  return Hash(Id(i));
+end intrinsic;
+
+intrinsic 'eq'(i :: PGGAlgState_TrancheItem, j :: PGGAlgState_TrancheItem) -> .
+  {Equality.}
+  require IsIdentical(i`state, j`state): "must be from the same set of tranches";
+  return Id(i) eq Id(j);
 end intrinsic;
 
 intrinsic ForgetTrancheItem(s :: PGGAlgState_Tranche_All, i :: RngIntElt)
@@ -3745,6 +3905,7 @@ end intrinsic;
 
 intrinsic Forget(i :: PGGAlgState_TrancheItem)
   {Don't consider this item again.}
+  require i`tidx eq TrancheIndex(i`state): "state has moved to a different tranche";
   ForgetTrancheItem(i`state, i`idx);
 end intrinsic;
 
