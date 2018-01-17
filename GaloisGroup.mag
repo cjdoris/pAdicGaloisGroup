@@ -108,8 +108,26 @@ function extension(f)
   return certs[1]`Extension;
 end function;
 
+function pol_invmod(g, f)
+  d := Degree(f);
+  // rows are coefficients of g^i mod f
+  M := Matrix([[Coefficient(gg, j) : j in [0..d-1]] where gg := Polynomial([0 : j in [1..i]] cat Coefficients(g)) mod f : i in [0..d-1]]);
+  // rows are linear combinations of g^i summing to x^j
+  ok, Minv := IsInvertible(M);
+  assert ok;
+  // first row is h(x) so that h(x)g(x)=1 mod f(x)
+  return Polynomial(Eltseq(Rows(Minv)[1]));
+end function;
+
 // the factorization of f into pieces corresponding to the slopes of its newton polygon as a sequence
-function newton_polygon_factorization(f : alg:="Cheat")
+function newton_polygon_factorization(f : alg:="Hensel")
+  // special cases
+  d := Degree(f);
+  error if d lt 0, "f must be non-zero";
+  error if IsWeaklyZero(Coefficient(f, d)), "precision error: leading coefficient is weakly zero";
+  if d eq 0 then
+    return [];
+  end if;
   case alg:
   when "Cheat":
     // we cheat and do a full factorization and then aggregate the results
@@ -125,8 +143,50 @@ function newton_polygon_factorization(f : alg:="Cheat")
       end if;
     end for;
     return [&*a[s] : s in Sort([s : s in Keys(a)])];
+  when "Hensel":
+    // use Hensel's lemma
+    R := Parent(f);
+    K := BaseRing(R);
+    pr := Precision(K);
+    assert pr lt Infinity();
+    np := NewtonPolygon(f);
+    vs := ChangeUniverse(Vertices(np), car<Z,Z>);
+    assert #vs ge 2;
+    assert vs[1][1] eq 0;
+    assert vs[#vs][1] eq Degree(f);
+    error if exists{v : v in vs | IsWeaklyZero(Coefficient(f, v[1]))}, "precision error: coefficient weakly zero";
+    factors := [];
+    for n in [2..#vs] do
+      i0, v0 := Explode(vs[n-1]);
+      i1, v1 := Explode(vs[n]);
+      width := i1 - i0;
+      slope := (v1 - v0) / width;
+      h := -Numerator(slope);
+      e := Denominator(slope);
+      g0 := R ! [Coefficient(f, i) / Coefficient(f, i1) : i in [i0..i1]];
+      g := R ! [IsWeaklyZero(c) select 0 else ChangePrecision(c, pr) : c in Coefficients(g0)];
+      assert Degree(g) eq width;
+      assert Valuation(Coefficient(g, 0)) eq v0-v1;
+      assert Valuation(Coefficient(g, width)) eq 0;
+      vprint PGG_GaloisGroup: "hensel lifting slope =", slope;
+      while true do
+        gnew := g + (((f mod g) * pol_invmod(f div g, g)) mod g);
+        assert Degree(gnew) eq width;
+        assert Valuation(Coefficient(g, 0)) eq v0-v1;
+        assert Valuation(Coefficient(g, width)) eq 0;
+        delta := g - gnew;
+        if forall{i : i in [0..width] | IsWeaklyZero(Coefficient(delta, i))} then
+          vprint PGG_GaloisGroup: "f mod g =", f mod g;
+          Append(~factors, g);
+          continue n;
+        else
+          g := R ! [IsWeaklyZero(c) select 0 else ChangePrecision(c, pr) : c in Coefficients(gnew)];
+        end if;
+      end while;
+    end for;
+    return factors;
   else
-    assert false;
+    error "invalid algorithm:", alg;
   end case;
 end function;
 
@@ -358,13 +418,14 @@ function ramification_tower(L, K)
     return [K, U];
   elif U eq K then
     f := DefiningPolynomial(L);
+    R := Parent(f);
     assert is_eisenstein(f);
     pi := L.1;
     assert IsWeaklyZero(Evaluate(f, pi));
     r := Evaluate(f, PolynomialRing(L) ! [pi, 1]);
     assert IsWeaklyZero(Coefficient(r, 0));
     PGG_GlobalTimer_Push("newton polygon factorization");
-    rfacs := newton_polygon_factorization(r);
+    rfacs := [R.1] cat newton_polygon_factorization(r div R.1);
     PGG_GlobalTimer_Swap("get uniformizers");
     assert Degree(rfacs[1]) eq 1;
     assert forall{i : i in [1..#rfacs] | IsDivisibleBy(Degree(f), &+[Degree(rfacs[j]) : j in [1..i]])};
