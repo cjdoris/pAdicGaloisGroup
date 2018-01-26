@@ -169,14 +169,48 @@ function newton_polygon_factorization(f : alg:="Hensel")
       assert Valuation(Coefficient(g, 0)) eq v0-v1;
       assert Valuation(Coefficient(g, width)) eq 0;
       vprint PGG_GaloisGroup: "hensel lifting slope =", slope;
+      niters := 0;
       while true do
-        gnew := g + (((f mod g) * pol_invmod(f div g, g)) mod g);
+        niters +:= 1;
+        if false then
+          // use arithmetic in R mod g instead of reducing things mod g explicitly
+          Q := quo<R | g>;
+          PGG_GlobalTimer_Push("quotrem g");
+          h, fmodg := Quotrem(f, g);
+          PGG_GlobalTimer_Swap("gnew");
+          gnew := g + R!(Q!fmodg/Q!h);
+        else
+          PGG_GlobalTimer_Push("quotrem g");
+          h, fmodg := Quotrem(f, g);
+          if true then
+            // use Newton lifting to find hinv = h^-1 mod g after the first iteration
+            // TODO: even better would be to only do pol_invmod() to limited precision at first, and then do many rounds of Newton lifting
+            if niters eq 1 then
+              PGG_GlobalTimer_Swap("invmod g");
+              hinv := pol_invmod(h, g);
+            else
+              PGG_GlobalTimer_Swap("newton lift");
+              hinv := (hinv * (2 - ((h * hinv) mod g))) mod g;
+            end if;
+          else
+            PGG_GlobalTimer_Swap("invmod g");
+            hinv := pol_invmod(h, g);
+          end if;
+          PGG_GlobalTimer_Swap("mult");
+          tmp := fmodg * hinv;
+          PGG_GlobalTimer_Swap("mod g");
+          tmp := tmp mod g;
+          PGG_GlobalTimer_Swap("add");
+          gnew := g + tmp;
+        end if;
+        PGG_GlobalTimer_Swap("check");
         assert Degree(gnew) eq width;
         assert Valuation(Coefficient(g, 0)) eq v0-v1;
         assert Valuation(Coefficient(g, width)) eq 0;
         delta := g - gnew;
+        PGG_GlobalTimer_Pop();
         if forall{i : i in [0..width] | IsWeaklyZero(Coefficient(delta, i))} then
-          vprint PGG_GaloisGroup: "f mod g =", f mod g;
+          vprint PGG_GaloisGroup: "f mod g =", fmodg;
           Append(~factors, g);
           continue n;
         else
