@@ -1,0 +1,158 @@
+SetQuitOnError(true);
+print "Hello.";
+initial_seed := [x,y] where x,y := GetSeed();
+print "Seed = ", initial_seed;
+
+if not assigned Catch then
+  Catch := true;
+else
+  Catch := eval Catch;
+end if;
+
+if not assigned Quit then
+  Quit := true;
+else
+  Quit := eval Quit;
+end if;
+
+if not assigned Debug then
+  Debug := false;
+else
+  Debug := eval Debug;
+end if;
+Catch and:= not Debug;
+SetDebugOnError(Debug);
+SetQuitOnError(not Debug);
+
+if not assigned Filter then
+  Unfilter := {};
+  Filter := {};
+else
+  Unfilter := {x[2..#x] : x in Split(Filter, ",; ") | x[1] eq "-"};
+  Filter := {x : x in Split(Filter, ",; ") | x[1] ne "-"};
+end if;
+
+Sym := SymmetricGroup;
+Wr := WreathProduct;
+DP := DirectProduct;
+Cyc := CyclicGroup;
+T := TransitiveGroup;
+
+TEST := recformat<name, func, params, filter>;
+RESULT := recformat<success, err>;
+
+Q := RationalField();
+R<x> := PolynomialRing(Q);
+
+// the meanings of the filter terms:
+// unram: unramified
+// tame:  tamely ramified
+// sram:  singly ramified
+// irred: irreducible
+// degN:  degree N
+// 2by:   only for overgroups W=C2wrC2wr... (because OrbitsOfSubgroups is not implemented for other groups)
+
+algs :=
+  [ <"Builtin", {}, {}>
+  , <"SinglyRamified", {}, {"sram","irred"}>
+  , <"ARM[Global[Symmetric],RootsMaximal]", {},{}>
+  , <"ARM[Global[Symmetric[Builtin]],RootsMaximal]", {},{}>
+  , <"ARM[Global[Symmetric[SinglyRamified]],RootsMaximal]", {}, {"sram","irred"}>
+  , <"ARM[Global[RamTower[Symmetric]],RootsMaximal]", {}, {"irred"}>
+  , <"ARM[Global[Factors[Symmetric]],RootsMaximal]", {},{}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],RootsMaximal]",{},{}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[FactorDegrees,All]]",{""},{}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[FactorDegrees,Index]]",{"deg8"},{}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[HasRoot,Index]]",{"deg8"},{}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[NumRoots,Index]]",{"deg8"},{}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[Factors[Tup[Degree,AutGroup]],Index]]",{"deg8"},{}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[FactorDegrees2,Index]]",{"deg8"},{}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[FactorDegrees,OrbitIndex]]",{"deg8","deg16"},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[FactorDegrees,OrbitIndex[If:le[ridx,2]]]]",{"deg8","deg16"},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Eager]]",{"deg8"},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:All]]",{"deg8"},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:Sufficient]]",{"deg8"},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:Necessary]]",{"deg8"},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:Generous]]",{"deg8"},{"2by"}>
+  ]
+;
+
+polys := 
+  [ < 2
+    , [ <x^2 + 2,                  100,             S(2), {}, {"sram","irred","2by"}>
+      , <x^4 + 2*x + 2,            100,             S(4), {}, {"sram","irred","2by"}>
+      , <x^4 + 2,                  100,  Wr([C(2),C(2)]), {}, {"irred","2by"}>
+      , <x^4 - x + 1,              100,             C(4), {}, {"irred","unram","2by"}>
+      , <(x+1)*(x^2 + x + 1),      100, DP([S(1), S(2)]), {}, {"unram","sram","2by"}>
+      , <(x+1)*(x^3-x+1),          100, DP([S(1), C(3)]), {}, {"unram","sram","2by"}>
+      , <(x+1)*(x^3-2),            100, DP([S(1), S(3)]), {}, {"tame","sram","2by"}>
+      , <x^8 + 16*x + 18,          100,         T(8, 35), {"deg8"}, {"irred","2by"}>
+      , <x^8+2*x^7+2*x^6+8*x^3+48, 400,             C(8), {"deg8"}, {"irred"}>
+      , <x^8+20*x^2+4,             400,          T(8,14), {"deg8"}, {"irred","2by"}>
+      , <x^16 + 2,                 800,       T(16, 156), {"deg16"}, {"irred","2by"}>
+      ]
+    >
+  ]
+  where S:=SymmetricGroup
+  where C:=CyclicGroup
+  where T:=TransitiveGroup
+  where Wr:=WreathProduct
+  where DP:=DirectProduct
+;
+
+gg_func := procedure (params)
+  p,f,pr,G,alg := Explode(params);
+  K := pAdicField(p,pr);
+  R<x> := PolynomialRing(K);
+  ans := PGG_GaloisGroup(R ! f : Alg:=alg);
+  assert Degree(f) eq Degree(ans);
+  assert IsConjugate(Sym(Degree(f)), ans, G);
+end procedure;
+
+gg_tests := [rec<TEST | name:="GaloisGroup", func:=gg_func, params:=<p,f,pr,G,alg>, filter:=afilt2 join ffilt1 join {x : x in Split(alg,"[], :") | x in Filter}> : algdata in algs, fdata in pdata[2], pdata in polys | ffilt1 subset afilt1 and afilt2 subset ffilt2 where alg,afilt1,afilt2 := Explode(algdata) where f,pr,G,ffilt1,ffilt2 := Explode(fdata) where p:=pdata[1]];
+
+all_tests := gg_tests;
+
+tests := [t : t in all_tests | (Filter subset t`filter) and #(Unfilter meet t`filter) eq 0];
+
+function run_test(test : do_catch := true, idx := false, total := false)
+  if idx cmpne false then
+    printf "%o", idx;
+    if total cmpne false then
+      printf " of %o", total;
+    end if;
+  end if;
+  printf ": %o: %o... ", test`name, test`filter;
+  success := true;
+  if do_catch then
+    try
+      test`func(test`params);
+    catch e
+      success := false;
+      err := e;
+    end try;
+  else
+    test`func(test`params);
+  end if;
+  if success then
+    print "OK";
+    return rec<RESULT | success:=true>;
+  else
+    print "FAIL";
+    IndentPush();
+    print "  params =", test`params;
+    IndentPop();
+    return rec<RESULT | success:=false, err:=err>;
+  end if;
+end function;
+
+print "Starting tests...";
+results := [run_test(tests[i] : do_catch:=Catch, idx:=i, total:=#tests) : i in [1..#tests]];
+
+print "tests:", #results;
+nfail := #[r : r in results | not r`success];
+print "fails:", nfail;
+
+if Quit or (nfail eq 0) then
+  quit;
+end if;
