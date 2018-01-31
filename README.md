@@ -21,7 +21,7 @@ The following confirms the Galois group in the 12th line of [this table](http://
 >
 > // compute its Galois group with this package
 > // the syntax of the algorithm parameter is explained below
-> time G := PGG_GaloisGroup(f : Alg:="ARM[All[FactorDegrees,Index],Global,RamTower[Symmetric]]");
+> time G := PGG_GaloisGroup(f : Alg:="ARM[Global[RamTower[Symmetric]],All[FactorDegrees,Index]]");
 Time: 0.370
 > GroupName(G);
 S4
@@ -44,10 +44,8 @@ Here we notate the current options for the algorithms. The `Alg` parameter to `P
 ```
 GALOISGROUP
 = "ARM"                   The absolute resolvent method
-  [ Groups: GROUP_ALG         The algorithm used for the group theory parts
-  , Eval: RESEVAL_ALG         The algorithm used to evaluate resolvents
-  , Conj: CONJUGACY           Specifies up to what conjugacy the Galois group will be defined
-  , UseEasyResolvents: BOOL   When true, start by using cheap resolvents
+  [ Eval: RESEVAL_ALG         The algorithm used to evaluate resolvents
+  , Groups: GROUP_ALG         The algorithm used to deduce the Galois group from resolvents
   ]
 | "SinglyRamified"        The algorithm due to Greve for singly ramified extensions
 | "Builtin"               Use Magma's builtin GaloisGroup intrinsic
@@ -91,16 +89,18 @@ GROUP_ALG
 
 RESEVAL_ALG
 = "Global"                Produce a global model for the local fields involved
+  [ GLOBAL_MODEL            Specifies how to construct the global model
+  ]
 
-CONJUGACY
+GLOBAL_MODEL
 = "Symmetric"             The symmetric group
   [ GALOISGROUP               Use this algorithm to compute the actual Galois group
   ]
 | "Factors"               Factorize the polynomial then...
-  [ CONJUGACY                 ... apply this conjugacy to each factor
+  [ GLOBAL_MODEL            ... produce a model from each factor in this manner
   ]
 | "RamTower"              Get the ramification filtration of the extension defined by the polynomial, then...
-  [ CONJUGACY                 ... apply this conjugacy to each sub-extension
+  [ GLOBAL_MODEL            ... produce a model from each sub-extension in this manner
   ]
 
 STATISTIC
