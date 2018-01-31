@@ -207,3 +207,7 @@ Each test has a set of tags associated to it. Here are their meanings:
 - `2by`: the overgroup is of the form C2 wr C2 wr ... (this is because OrbitsOfSubgroup is not implemented in generality yet for wreath products)
 
 Each Galois group test also is given a tag for each component of its algorithm, so `ARM[Global[Symmetric],RootsMaximal]` has tags `ARM`, `Global` etc.
+
+### The tests
+
+Currently, there is one type of test called `GaloisGroup`. An instance of this will compute the Galois group of some polynomial over some field using some algorithm, and check that the results equals some expected answer. There is a built-in list of polynomials and a built-in list of algorithms, and we test every polynomial-algorithm pair which is reasonable (i.e. should be compatible and won't take ages to run).
