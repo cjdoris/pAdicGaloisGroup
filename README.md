@@ -178,3 +178,32 @@ BOOL                      A boolean value
 = "True"                    True
 | "False"                   False
 ```
+
+## Unit testing
+
+The script `unit_tests.mag` can be used to test that most functionality of the package is working. Call it like:
+
+```
+magma -b OPTIONS unit_tests.mag
+```
+
+### Options
+
+- `Debug:=true/false` (default: `false`) when true, errors during tests cause the debugger to open.
+- `Catch:=true/false` (default: `true`) when false, errors during tests are not caught.
+- `Quit:=true/false` (default: `true`) when false, keeps Magma open at the end of the script.
+- `Start:=N` (default: `1`) starts at the `N`th test.
+- `Filter:=STR` STR is a comma-separated list of tags, and we only run the tests which have all of these tags; any tags preceded by a `-` mean that a test must not have this tag.
+
+### Tags
+
+Each test has a set of tags associated to it. Here are their meanings:
+
+- `unram`: unramified
+- `tame`: tamely ramified
+- `sram`: singly ramified
+- `irred`: irreducible
+- `degN`: polynomials of degree `N`
+- `2by`: the overgroup is of the form C2 wr C2 wr ... (this is because OrbitsOfSubgroup is not implemented in generality yet for wreath products)
+
+Each Galois group test also is given a tag for each component of its algorithm, so `ARM[Global[Symmetric],RootsMaximal]` has tags `ARM`, `Global` etc.
