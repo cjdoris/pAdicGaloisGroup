@@ -1,0 +1,109 @@
+declare type PGGIter;
+declare attributes PGGIter: cache;
+
+declare type PGGIter_List: PGGIter;
+declare attributes PGGIter_List: list, idx;
+
+declare type PGGIter_Filter: PGGIter;
+declare attributes PGGIter_Filter: iter, filter;
+
+intrinsic PGG_ToIter(xs :: []) -> PGGIter
+  {Makes an iterator.}
+  X := New(PGGIter_List);
+  X`list := SequenceToList(xs);
+  X`idx := 0;
+  return X;
+end intrinsic;
+
+intrinsic PGG_ToIter(xs :: List) -> PGGIter
+  {Makes an iterator.}
+  X := New(PGGIter_List);
+  X`list := xs;
+  X`idx := 0;
+  return X;
+end intrinsic;
+
+intrinsic HasNext(X :: PGGIter_List) -> BoolElt, .
+  {True if X has a next item.}
+  if X`idx lt #X`list then
+    X`idx +:= 1;
+    return true, X`list[X`idx];
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic ToList(X :: PGGIter) -> List
+  {Converts X to a list.}
+  ret := [];
+  while true do
+    ok, x := HasNext(X);
+    if ok then
+      Append(~ret, x);
+    else
+      return ret;
+    end if;
+  end while;
+end intrinsic;
+
+// we make a specialized version for the common case of just dealing with lists directly
+intrinsic ToList(X :: PGGIter_List) -> List
+  {"}
+  if X`idx eq 0 then
+    return X`list;
+  else
+    return X`list[X`idx+1..#X`list];
+  end if;
+end intrinsic;
+
+intrinsic ToSequence(X :: PGGIter) -> []
+  {Converts X to a sequence.}
+  return [x : x in ToList(X)];
+end intrinsic;
+
+intrinsic Filter(X :: PGGIter, f) -> PGGIter
+  {The x in X such that f(x) is true.}
+  Y := New(PGGIter_Filter);
+  Y`iter := X;
+  Y`filter := f;
+  return Y;
+end intrinsic;
+
+intrinsic HasNext(X :: PGGIter_Filter) -> BoolElt, .
+  {True if X has a next item.}
+  while true do
+    ok, x := HasNext(X`iter);
+    if ok then
+      if X`filter(x) then
+        return true, x;
+      end if;
+    else
+      return false, _;
+    end if;
+  end while;
+end intrinsic;
+
+intrinsic Reverse(X :: PGGIter) -> PGGIter
+  {The reverse.}
+  return PGG_ToIter(Reverse(ToList(X)));
+end intrinsic;
+
+intrinsic Shuffle(X :: PGGIter) -> PGGIter
+  {Randomize the order of X.}
+  xs := ToList(X);
+  if #xs eq 0 then
+    return X;
+  else
+    g := Random(SymmetricGroup(#xs));
+    return PGG_ToIter([* xs[i^g] : i in [1..#xs] *]);
+  end if;
+end intrinsic;
+
+intrinsic SortBy(X :: PGGIter, keyfunc :: UserProgram) -> PGGIter
+  {Sorts X so that keyfunc(x) are naturally sorted.}
+  xs := ToList(X);
+  keys := [keyfunc(x) : x in xs];
+  Sort(~keys, ~permut);
+  return PGG_ToIter([* xs[i^permut] : i in [1..#xs] *]);
+end intrinsic;
+

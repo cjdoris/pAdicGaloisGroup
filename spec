@@ -1,4 +1,25 @@
 {
-  GaloisGroup.mag
   State.mag
+  Utils.mag
+  ArgSpec.mag
+  Timer.mag
+  Subgrpcls.mag
+  Subgrpcls2.mag
+  Attr.mag
+  Iter.mag
+  Expr.mag
+  GrpPerm.mag
+  HomGrpPerm.mag
+  Conj.mag
+  GloMod.mag
+  Stat.mag
+  GaloisGroup.mag
+  GaloisGroup_Builtin.mag
+  GaloisGroup_SinglyRamified.mag
+  GaloisGroup_ARM.mag
+  Tranche.mag
+  ResGroups.mag
+  ResChoice.mag
+  ResEval.mag
+  ResPriority.mag
 }

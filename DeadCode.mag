@@ -1,0 +1,231 @@
+// declare type PGGConj;
+// declare attributes PGGConj
+//   : group           // the group in which the Galois group is defined up to conjugacy
+//   , base_field      // the base field of the Galois group
+//   , parent_subgroup // when part of a larger Galois group, this group is a quotient of a subgroup of the parent group; parent_subgroup is the subgroup
+//   , parent_quotient // the quotient map from parent_subgroup to this group
+//   , is_known        // [* false *] or [* true, G *] where G is the actual Galois group
+//   , is_transitive   // true if the actual Galois group is known to be transitive
+//   , overgroup       // an overgroup of the actual Galois group (a subgroup of `group`)
+//   , orbits_of_subgroups // for cacheing OrbitsOfSubgroups
+//   ;
+
+// declare type PGGConj_Symmetric: PGGConj;
+// declare attributes PGGConj_Symmetric: pol, top_field;
+
+// declare type PGGConj_Factors: PGGConj;
+// declare attributes PGGConj_Factors: factors, orbits_of_subgroups_from;
+
+// declare type PGGConj_Tower: PGGConj;
+// declare attributes PGGConj_Tower: tower, top_field, pol, orbits_of_subgroups_above;
+
+// intrinsic SubgroupTranche(s :: PGGAlgState_ResGroups_All) -> []
+//   {A sequence of subgroups to consider using.}
+//   case s`algorithm`subgroup_tranche:
+//   when "All":
+//     if not assigned s`possible_subgroups then
+//       s`possible_subgroups := enumerate([x`subgroup : x in Subgroups(s`overgroup)]);
+//     end if;
+//     return [x : x in s`possible_subgroups];
+//   when "Index":
+//     if not assigned s`possible_subgroups then
+//       s`possible_subgroups := rec<recformat<i, indices, all_groups, cur_groups> | indices:=Sort(Divisors(Order(s`overgroup))), all_groups:=[], cur_groups:=[]>;
+//     end if;
+//     while #s`possible_subgroups`cur_groups eq 0 do
+//       n := 1+#s`possible_subgroups`all_groups;
+//       error if n gt #s`possible_subgroups`indices, "ran out of possible distinguishing subgroups";
+//       index := s`possible_subgroups`indices[n];
+//       vprint PGG_GaloisGroup: "index =", index;
+//       Append(~s`possible_subgroups`all_groups, [x`subgroup : x in Subgroups(s`overgroup : IndexEqual:=index)]);
+//       s`possible_subgroups`cur_groups := enumerate(s`possible_subgroups`all_groups[n]);
+//     end while;
+//     return [x : x in s`possible_subgroups`cur_groups];
+//   when "OrbitIndex":
+//     if not assigned s`possible_subgroups then
+//       s`possible_subgroups := rec<recformat<indices, ii, all_stabilizers, cur_stabilizers, si, all_groups, cur_groups> | indices:=Sort([<d,e> : e in Divisors(d), d in Divisors(Order(s`overgroup))]), ii:=0, all_stabilizers:=AssociativeArray(), si:=0, all_groups:=AssociativeArray(), cur_stabilizers:=[], cur_groups:=[]>;
+//     end if;
+//     while #s`possible_subgroups`cur_groups eq 0 do
+//       while s`possible_subgroups`si ge #s`possible_subgroups`cur_stabilizers do
+//         s`possible_subgroups`ii +:= 1;
+//         s`possible_subgroups`si := 0;
+//         idx, ridx := Explode(s`possible_subgroups`indices[s`possible_subgroups`ii]);
+//         oidx := xdiv(idx, ridx);
+//         vprint PGG_GaloisGroup: "idx, oidx, ridx =", idx, oidx, ridx;
+//         if not IsDefined(s`possible_subgroups`all_stabilizers, oidx) then
+//           s`possible_subgroups`all_stabilizers[oidx] := [Stabilizer(s`overgroup, os) : os in OrbitsOfSubgroups(s`conjugacy, oidx)];
+//         end if;
+//         s`possible_subgroups`cur_stabilizers := s`possible_subgroups`all_stabilizers[oidx];
+//         assert forall{S : S in s`possible_subgroups`cur_stabilizers | Index(s`overgroup, S) eq oidx};
+//       end while;
+//       s`possible_subgroups`si +:= 1;
+//       vprint PGG_GaloisGroup: "stabilizer", s`possible_subgroups`si, "of", #s`possible_subgroups`cur_stabilizers;
+//       idx, ridx := Explode(s`possible_subgroups`indices[s`possible_subgroups`ii]);
+//       if not IsDefined(s`possible_subgroups`all_groups, <idx, ridx, s`possible_subgroups`si>) then
+//         s`possible_subgroups`all_groups[<idx, ridx, s`possible_subgroups`si>] := [x`subgroup : x in Subgroups(S : IndexEqual:=ridx)]
+//           where S := s`possible_subgroups`cur_stabilizers[s`possible_subgroups`si];
+//       end if;
+//       s`possible_subgroups`cur_groups := enumerate(s`possible_subgroups`all_groups[<idx, ridx, s`possible_subgroups`si>]);
+//       assert forall{U : U in s`possible_subgroups`cur_groups | Index(s`overgroup, U[1]) eq idx};
+//     end while;
+//     return [x : x in s`possible_subgroups`cur_groups];
+//   when "MostUseful":
+//     W := s`overgroup;
+//     if not assigned s`possible_subgroups then
+//       CW := PGG_SubgroupClasses(W);
+//       s`possible_subgroups := rec<recformat<queue, queue_changed, cur_groups, usefulness, ignore_groups, classes> | queue:=[<CW!W, <1, 1>>], queue_changed:=false, cur_groups:=[], usefulness:=AssociativeArray(), classes:=CW>;
+//     else
+//       CW := s`possible_subgroups`classes;
+//     end if;
+//     while #s`possible_subgroups`cur_groups eq 0 do
+//       // ensure the queue is sorted
+//       if s`possible_subgroups`queue_changed then
+//         s`possible_subgroups`queue_changed := false;
+//         isort_by(~s`possible_subgroups`queue, func<x | x[2]>);
+//       end if;
+//       // pop a group class from the queue
+//       pop_start(~item, ~s`possible_subgroups`queue);
+//       class, usefulness := Explode(item);
+//       vprint PGG_GaloisGroup: "usefulness =", usefulness;
+//       // find its maximal subgroups
+//       subclasses := {CW ! x`subgroup : x in MaximalSubgroups(Rep(class))};
+//       // throw out the ones which have been used already, and so have an assigned usefulness
+//       subclasses := [c : c in subclasses | not IsDefined(s`possible_subgroups`usefulness, c)];
+//       s`possible_subgroups`cur_groups := [<Rep(c), i, c, usefulness[1]*Index(Rep(class), Rep(c))> where c:=subclasses[i] : i in [1..#subclasses]];
+//     end while;
+//     return [x : x in s`possible_subgroups`cur_groups];
+//   else
+//     assert false;
+//   end case;
+// end intrinsic;
+
+// intrinsic ScoreSubgroup(s :: PGGAlgState_ResGroups_All, subgroup :: GrpPerm) -> FldReElt
+//   {Scores the given subgroup.}
+//   assert #s`possible_groups gt 0;
+//   stats := [**];
+//   h := CosetAction(s`overgroup, subgroup);
+//   A := AssociativeArray();
+//   for G in s`possible_groups do
+//     stat := GroupStat(s`algorithm`statistic, h(G));
+//     if IsDefined(A, stat) then
+//       Append(~A[stat], G);
+//     else
+//       A[stat] := [G];
+//       if (s`algorithm`subgroup_score eq "IsUseful") and (#A gt 1) then
+//         return 1;
+//       end if;
+//     end if;
+//   end for;
+//   case s`algorithm`subgroup_score:
+//   when "IsUseful":
+//     assert #A le 1;
+//     return -1;
+//   when "Diversity":
+//     return #A le 1 select -1 else #A;
+//   when "Information":
+//     return #A le 1 select -1 else multiplicities_to_information([#A[k] : k in Keys(A)]);
+//   else
+//     assert false;
+//   end case;
+// end intrinsic;
+
+// intrinsic TerminateScoring(s :: PGGAlgState_ResGroups_All, scores :: []) -> BoolElt
+//   {True if we know enough scores to finish.}
+//   case s`algorithm`subgroup_choice:
+//   when "First":
+//     return #scores ge 1;
+//   when "Best":
+//     return false;
+//   else
+//     assert false;
+//   end case;
+// end intrinsic;
+
+// intrinsic OrderSubgroups(s :: PGGAlgState_ResGroups_All, groups :: [Tup]) -> []
+//   {Orders the subgroups.}
+//   case s`algorithm`subgroup_order:
+//   when "None":
+//     return groups;
+//   when "Random":
+//     return [groups[i^r] : i in [1..#groups]] where r:=Random(SymmetricGroup(#groups));
+//   when "Index":
+//     return sort_by(groups, func<G | -#G[1]>);
+//   when "OrbitIndex":
+//     return sort_by(groups, func<G | -#&meet[Stabilizer(s`overgroup, o) : o in Orbits(G[1])]>);
+//   else
+//     assert false;
+//   end case;
+// end intrinsic;
+
+// intrinsic UselessSubgroups(s :: PGGAlgState_ResGroups_All, subgroups :: [Tup])
+//   {Declares we are done considering these groups.}
+//   case s`algorithm`subgroup_tranche:
+//   when "All":
+//     for x in subgroups do
+//       Undefine(~s`possible_subgroups, x[2]);
+//     end for;
+//   when "Index", "OrbitIndex":
+//     for x in subgroups do
+//       Undefine(~s`possible_subgroups`cur_groups, x[2]);
+//     end for;
+//   when "MostUseful":
+//     for x in subgroups do
+//       _, i, c, u := Explode(x);
+//       Undefine(~s`possible_subgroups`cur_groups, i);
+//       s`possible_subgroups`usefulness[c] := u;
+//       Append(~s`possible_subgroups`queue, <c, <u, Index(s`overgroup, Rep(c))>>);
+//       s`possible_subgroups`queue_changed := true;
+//     end for;
+//   else
+//     assert false;
+//   end case;
+// end intrinsic;
+
+// intrinsic UsefulSubgroup(s :: PGGAlgState_ResGroups_All, subgroup :: Tup)
+//   {Declare that we are using the given subgroup.}
+//   case s`algorithm`subgroup_tranche:
+//   when "All", "Index", "OrbitIndex":
+//     UselessSubgroups(s, [subgroup]);
+//   when "MostUseful":
+//     _, i, c, _ := Explode(subgroup);
+//     Undefine(~s`possible_subgroups`cur_groups, i);
+//     s`possible_subgroups`usefulness[c] := 1;
+//     Append(~s`possible_subgroups`queue, <c, <1, Index(s`overgroup, Rep(c))>>);
+//     s`possible_subgroups`queue_changed := true;
+//   else
+//     assert false;
+//   end case;
+// end intrinsic;
+
+// intrinsic Subgroup(s :: PGGAlgState_ResGroups_All) -> GrpPerm
+//   {A subgroup to get a resolvent of.}
+//   while true do
+//     // get the next tranche of groups
+//     groups := SubgroupTranche(s);
+//     // reorder them
+//     groups := Sort(groups, s`algorithm`subgroup_order : Data:=s);
+//     // score them
+//     scores := [car<Universe(groups), RealField()>| ];
+//     useless := [Universe(groups)| ];
+//     for U in groups do
+//       score := ScoreSubgroup(s, U[1]);
+//       if score ge 0 then
+//         Append(~scores, <U, score>);
+//         if TerminateScoring(s, scores) then
+//           break U;
+//         end if;
+//       else
+//         Append(~useless, U);
+//       end if;
+//     end for;
+//     // ignore the useless subgroups
+//     vprint PGG_GaloisGroup: "#useless =", #useless, "of", #groups;
+//     UselessSubgroups(s, useless);
+//     // get the best scoring
+//     if #scores gt 0 then
+//       U := Sort(scores, func<a,b | b[2]-a[2]>)[1][1];
+//       UsefulSubgroup(s, U);
+//       return U[1];
+//     end if;
+//   end while;
+// end intrinsic;
+

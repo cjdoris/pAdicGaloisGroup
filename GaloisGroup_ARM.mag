@@ -1,0 +1,74 @@
+import "Utils.mag": not_implemented;
+
+declare type PGGAlg_GaloisGroup_ARM: PGGAlg_GaloisGroup;
+declare attributes PGGAlg_GaloisGroup_ARM: groups_alg, resolvent_alg, use_easy_resolvents;
+
+intrinsic PGGAlg_GaloisGroup_ARM_Make( : GroupsAlg:=false, ResolventAlg:=false, UseEasyResolvents:=false) -> PGGAlg_GaloisGroup_ARM
+  {The resolvent method algorithm for computing Galois groups.}
+  alg := New(PGGAlg_GaloisGroup_ARM);
+  alg`groups_alg := GroupsAlg cmpne false select GroupsAlg else PGGAlg_ResGroups_All_Make();
+  alg`resolvent_alg := ResolventAlg cmpne false select ResolventAlg else PGGAlg_ResEval_Global_Make();
+  alg`use_easy_resolvents := UseEasyResolvents;
+  return alg;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_GaloisGroup_ARM)
+  {Print.}
+  print "resolvent method";
+  IndentPush();
+  print "groups =", alg`groups_alg;
+  print "resolvents =", alg`resolvent_alg;
+  printf "use easy resolvents = %o", alg`use_easy_resolvents;
+  IndentPop();
+end intrinsic;
+
+intrinsic RamificationGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: RngUPolElt[FldPad], u :: FldRatElt) -> GrpPerm
+  {The u-th ramification group of f.}
+  if u ge 0 then
+    not_implemented("RamificationGroup except GaloisGroup");
+  end if;
+  PGG_GlobalTimer_Push("start resolvent");
+  rst := Start(Alg`resolvent_alg, f);
+  emb := OvergroupEmbedding(rst);
+  vprint PGG_GaloisGroup: "conjugacy group =", Domain(emb);
+  vprint PGG_GaloisGroup: "resolvent overgroup =", Codomain(emb);
+  W := Group(Codomain(emb));
+  PGG_GlobalTimer_Swap("start groups");
+  gst := Start(Alg`groups_alg, emb);
+  // if Alg`use_easy_resolvents then
+  //   vprint PGG_GaloisGroup: "easy resolvents...";
+  //   PGG_GlobalTimer_Swap("easy resolvents");
+  //   RUs := EasyResolvents(conj);
+  //   for RU in RUs do
+  //     if IsDone(gst) then
+  //       break;
+  //     end if;
+  //     R, U := Explode(RU);
+  //     PGG_GlobalTimer_Swap("process resolvent");
+  //     ProcessResolvent(gst, R, U);
+  //   end for;
+  // end if;
+  PGG_GlobalTimer_Swap("check done");
+  if not IsDone(gst) then
+    vprint PGG_GaloisGroup: "main loop...";
+    repeat
+      PGG_GlobalTimer_Swap("subgroup");
+      U := Subgroup(gst);
+      vprint PGG_GaloisGroup: "subgroup index =", Index(W, U);
+      vprint PGG_GaloisGroup: "orbit-relative index =", Index(Stabilizer(W, Orbits(U)), U);
+      PGG_GlobalTimer_Swap("invariant");
+      I := RelativeInvariant(W, U);
+      vprint PGG_GaloisGroup: "invariant =", I;
+      PGG_GlobalTimer_Swap("resolvent");
+      R := Resolvent(rst, I, U);
+      vprint PGG_GaloisGroup: "resolvent =", R;
+      PGG_GlobalTimer_Swap("process resolvent");
+      ProcessResolvent(gst, R, U);
+      PGG_GlobalTimer_Swap("check done");
+    until IsDone(gst);
+  end if;
+  vprint PGG_GaloisGroup: "success";
+  PGG_GlobalTimer_Pop();
+  return TheGroup(gst);
+end intrinsic;
+

@@ -1,0 +1,236 @@
+import "Utils.mag": startswith;
+
+declare type PGGArgSpec;
+declare attributes PGGArgSpec: is_valid;
+
+intrinsic PGG_Parsable(A :: PGGArgSpec, x) -> BoolElt, .
+  {Tries to parse x according to A.}
+  return A`is_valid(x);
+end intrinsic;
+
+intrinsic PGG_Parse(A :: PGGArgSpec, x) -> .
+  {Parses x according to A}
+  ok, y := PGG_Parsable(A, x);
+  error if not ok, "could not parse", x;
+  return y;
+end intrinsic;
+
+intrinsic PGG_ArgSpec(is_valid :: UserProgram) -> PGGArgSpec
+  {The argspec with the given is_valid function.}
+  A := New(PGGArgSpec);
+  A`is_valid := is_valid;
+  return A;
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Union(choices :: [PGGArgSpec]) -> PGGArgSpec
+  {The argspec for the union of the given choices.}
+  return PGG_ArgSpec(function (x)
+    for A in choices do
+      ok, y := PGG_Parsable(A, x);
+      if ok then
+        return true, y;
+      end if;
+    end for;
+    return false, _;
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Transform(A :: PGGArgSpec, tr) -> PGGArgSpec
+  {The argspec A with its output modified by tr.}
+  return PGG_ArgSpec(function (x)
+    ok, y := PGG_Parsable(A, x);
+    if ok then
+      return true, tr(y);
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_ISA(C) -> PGGArgSpec
+  {The argspec testing if the input has the given category.}
+  return PGG_ArgSpec(function (x)
+    if ISA(ExtendedType(x), C) then
+      return true, x;
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Literal(X) -> PGGArgSpec
+  {The argspec matching only X exactly.}
+  return PGG_ArgSpec(function (x)
+    if X cmpeq x then
+      return true, x;
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Attr(name :: MonStgElt) -> PGGArgSpec
+  {The argspec matching the PGGAttr with the given name and no args.}
+  return PGG_ArgSpec_Attr(name, [], func<args | name>);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_AttrList(name :: MonStgElt, arg, transform) -> PGGArgSpec
+  {The argspec matching the PGGAttr with the given name and multiple args matching arg.}
+  return PGG_ArgSpec(function (x)
+    // coerce to a PGGAttr
+    ok, a := PGG_Attribute_IsCoercible(x);
+    if not ok then
+      return false, _;
+    end if;
+    // check the name
+    if Trim(Name(a)) ne name then
+      return false, _;
+    end if;
+    // check the args
+    xs := [**];
+    for aa in Arguments(a) do
+      ok, x := PGG_Parsable(arg, aa);
+      if ok then
+        Append(~xs, x);
+      else
+        return false, _;
+      end if;
+    end for;
+    // apply the transform
+    return true, transform(xs);
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_AttrInt() -> PGGArgSpec
+  {The argspec matching the PGGAttr when it looks like an integer.}
+  return PGG_ArgSpec(function (x)
+    // coerce toa PGGAttr
+    ok, a := PGG_Attribute_IsCoercible(x);
+    if not ok then
+      return false, _;
+    end if;
+    // check it has no arguments
+    if #Arguments(a) ne 0 then
+      return false, _;
+    end if;
+    // check it looks like an integer
+    z := Trim(Name(a));
+    ok, _, groups := Regexp("^-?[0-9]+$", z);
+    if ok then
+      return true, StringToInteger(z);
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Attr(name :: MonStgElt, args, transform) -> PGGArgSpec
+  {The argspec matching the PGGAttr with the given name and args.}
+  return PGG_ArgSpec(function (x)
+    // coerce to a PGGAttr
+    ok, a := PGG_Attribute_IsCoercible(x);
+    if not ok then
+      return false, _;
+    end if;
+    // check the name
+    if Trim(Name(a)) ne name then
+      return false, _;
+    end if;
+    // check the args
+    // pargs := [* arg[3] : arg in args *];
+    pargs := [* #arg ge 3 select <true, arg[3]> else <false> : arg in args *];
+    pos := 1;
+    for aa in Arguments(a) do
+      // try to parse a positional argument
+      for i in [pos..#args] do
+        ok, parg := PGG_Parsable(args[i][1], aa);
+        if ok then
+          pargs[i] := <true, parg>;
+          pos := i+1;
+          continue aa;
+        end if;
+      end for;
+      // try to parse keyword argument
+      for i in [1..#args] do
+        if #args[i] ge 2 then
+          ok, rest := startswith(Name(aa), args[i][2] cat ":");
+          if ok then
+            ok, parg := PGG_Parsable(args[i][1], PGG_Attribute(rest, Arguments(aa)));
+            if ok then
+              pargs[i] := <true, parg>;
+              continue aa;
+            else
+              return false, _;
+            end if;
+          end if;
+        end if;
+      end for;
+      // failed parsing
+      return false, _;
+    end for;
+    // check all the arguments are defined
+    if exists{p : p in pargs | not p[1]} then
+      return false, _;
+    end if;
+    // apply the transform
+    return true, transform([* p[2] : p in pargs *]);
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Recursive(mk :: UserProgram) -> PGGArgSpec
+  {Allows the creation of a PGGArgSpec recursively.}
+  A := New(PGGArgSpec);
+  B := mk(A);
+  A`is_valid := B`is_valid;
+  return A;
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Recursive(n :: RngIntElt, mk :: UserProgram) -> []
+  {Allows the creation of n PGGArgSpecs recursively.}
+  As := [New(PGGArgSpec) : i in [1..n]];
+  Bs := mk(As);
+  require #Bs eq n: "mk must return n PGGArgSpecs";
+  for i in [1..n] do
+    As[i]`is_valid := Bs[i]`is_valid;
+  end for;
+  return As;
+end intrinsic;
+
+intrinsic PGG_ArgSpec_ManyRecursive(mk :: UserProgram) -> Map
+  {Allows the creation of many PGGArgSpecs.}
+  store := NewStore();
+  function set(name, A)
+    ok, B := StoreIsDefined(store, name);
+    if ok then
+      B`is_valid := A`is_valid;
+      return B;
+    else
+      StoreSet(store, name, A);
+      return A;
+    end if;
+  end function;
+  function get(name)
+    ok, A := StoreIsDefined(store, name);
+    if ok then
+      return A;
+    else
+      A := New(PGGArgSpec);
+      StoreSet(store, name, A);
+      return A;
+    end if;
+  end function;
+  mk(set, get);
+  return func<name | StoreGet(store, name)>;
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Predicate(test :: UserProgram) -> PGGArgSpec
+  {The PGGArgSpec passing with the given test.}
+  return PGG_ArgSpec(function (x)
+    if test(x) then
+      return true, x;
+    else
+      return false, _;
+    end if;
+  end function);
+end intrinsic;
+

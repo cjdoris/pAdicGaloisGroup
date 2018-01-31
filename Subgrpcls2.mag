@@ -1,0 +1,210 @@
+declare type _PGGSetSubgrpcls[_PGGSubgrpcls];
+
+declare type PGGSetSubgrpcls2[PGGSubgrpcls2]: _PGGSetSubgrpcls;
+declare attributes PGGSetSubgrpcls2: conjugacy, statistic, tranche, root_node, count;
+declare type PGGSubgrpcls2: _PGGSubgrpcls;
+declare attributes PGGSubgrpcls2: up, stat, parent, group, node, id;
+declare type PGGSetSubgrpcls2_Branch;
+declare attributes PGGSetSubgrpcls2_Branch: up, stat, parent, down, quotient;
+declare type PGGSetSubgrpcls2_Ambig;
+declare attributes PGGSetSubgrpcls2_Ambig: up, stat, parent, down;
+
+intrinsic PGG_SubgroupClasses(conj :: PGGConj : Tranche:=false, Statistic:=false) -> PGGSetSubgrpcls2
+  {The conjugacy classes of subgroups of conj`group.}
+  X := New(PGGSetSubgrpcls2);
+  X`conjugacy := conj;
+  X`tranche := Start(Tranche cmpne false select Tranche else PGGAlg_Tranche_OrbitIndex_Make(:Verbosity:=2, Filter:=PGG_Expression_BinOp('and', PGG_Expression_BinOp('le', PGG_Expression_FreeVariable("idx"), PGG_Expression_Const(8)) ,PGG_Expression_BinOp('le', PGG_Expression_FreeVariable("ridx"), PGG_Expression_Const(2)))), conj);
+  X`statistic := Statistic cmpne false select Statistic else PGGStat_Tup_Make(<PGGStat_Order_Make(), PGGStat_FactorDegrees_Make()>);
+  X`count := 0;
+  X`root_node := MakeLeaf(X, conj`group, X);
+  return X;
+end intrinsic;
+
+intrinsic MakeLeaf(X :: PGGSetSubgrpcls2, G :: GrpPerm, Up : Stat:=false) -> PGGSubgrpcls2
+  {A new leaf node.}
+  N := New(PGGSubgrpcls2);
+  N`parent := X;
+  N`group := G;
+  X`count +:= 1;
+  N`id := X`count;
+  N`up := Up;
+  if Stat cmpne false then
+    N`stat := Stat;
+  end if;
+  return N;
+end intrinsic;
+
+intrinsic 'eq'(X :: PGGSetSubgrpcls2, Y :: PGGSetSubgrpcls2) -> BoolElt
+  {Equality}
+  return IsIdentical(X, Y);
+end intrinsic;
+
+intrinsic Parent(C :: PGGSubgrpcls2) -> PGGSetSubgrpcls2
+  {Parent.}
+  return C`parent;
+end intrinsic;
+
+intrinsic Rep(C :: PGGSubgrpcls2) -> PGGSetSubgrpcls2
+  {Representative.}
+  return C`group;
+end intrinsic;
+
+intrinsic Hash(C :: PGGSubgrpcls2) -> RngIntElt
+  {Hash.}
+  return C`id;
+end intrinsic;
+
+intrinsic 'eq'(C1 :: PGGSubgrpcls2, C2 :: PGGSubgrpcls2) -> BoolElt
+  {Equality.}
+  require Parent(C1) eq Parent(C2): "from different sets";
+  assert IsIdentical(C1, C2) eq (C1`id eq C2`id);
+  // assert IsIdentical(C1, C2) eq IsConjugate(C1`parent`conjugacy`group, C1`group, C2`group);
+  return IsIdentical(C1, C2);
+end intrinsic;
+
+intrinsic IsCoercible(X :: PGGSetSubgrpcls2, C) -> BoolElt, .
+  {True if C is coercible into X.}
+  return false, "wrong type";
+end intrinsic;
+
+intrinsic IsCoercible(X :: PGGSetSubgrpcls2, C :: PGGSubgrpcls2) -> BoolElt, .
+  {"}
+  if Parent(C) eq X then
+    return true, C;
+  else
+    return false, "wrong parent";
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(X :: PGGSetSubgrpcls2, C :: GrpPerm) -> BoolElt, .
+  {"}
+  if C subset X`conjugacy`group then
+    return true, Find(X`root_node, C);
+  else
+    return false, "not a subgroup of the right group";
+  end if;
+end intrinsic;
+
+intrinsic Find(N :: PGGSubgrpcls2, G :: GrpPerm) -> PGGSubgrpcls2
+  {Finds the conjugacy class of G.}
+  if IsConjugate(N`parent`conjugacy`group, N`group, G) then
+    return N;
+  else
+    Reset(N`parent`tranche);
+    while true do
+      ok, t := HasTranche(N`parent`tranche);
+      if ok then
+        for i in Tranche(N`parent`tranche) do
+          q := CosetAction(N`parent`conjugacy`group, Group(i));
+          Nstat := GroupStat(N`parent`statistic, q(N`group));
+          Gstat := GroupStat(N`parent`statistic, q(G));
+          if Nstat ne Gstat then
+            // we have found a distinguishing statistic, so insert a branch here
+            B := New(PGGSetSubgrpcls2_Branch);
+            B`quotient := q;
+            B`up := N`up;
+            N`up := B;
+            if assigned N`stat then
+              B`stat := N`stat;
+            end if;
+            N`stat := Nstat;
+            B`parent := N`parent;
+            B`down := AssociativeArray();
+            B`down[Nstat] := N;
+            M := MakeLeaf(N`parent, G, B : Stat:=Gstat);
+            B`down[Gstat] := M;
+            case Type(B`up):
+            when PGGSetSubgrpcls2:
+              assert B`up eq B`parent;
+              B`up`root_node := B;
+            when PGGSetSubgrpcls2_Branch:
+              B`up`down[B`stat] := B;
+            else
+              assert false;
+            end case;
+            return M;
+          end if;
+          Forget(i);
+        end for;
+      else
+        // we have failed to find a distinguishing statistic, so insert an ambiguous node here
+        B := New(PGGSetSubgrpcls2_Ambig);
+        B`up := N`up;
+        N`up := B;
+        if assigned N`stat then
+          B`stat := N`stat;
+          delete N`stat;
+        end if;
+        B`parent := N`parent;
+        M := MakeLeaf(N`parent, G, B);
+        B`down := [* N, M *];
+        case Type(B`up):
+        when PGGSetSubgrpcls2:
+          assert B`up eq B`parent;
+          B`up`root_node := B;
+        when PGGSetSubgrpcls2_Branch:
+          B`up`down[B`stat] := B;
+        else
+          assert false;
+        end case;
+        return M;
+      end if;
+    end while;
+  end if;
+end intrinsic;
+
+intrinsic Find(B :: PGGSetSubgrpcls2_Branch, G :: GrpPerm) -> PGGSubgrpcls2
+  {"}
+  Gstat := GroupStat(B`parent`statistic, B`quotient(G));
+  ok, N := IsDefined(B`down, Gstat);
+  if ok then
+    return Find(N, G);
+  else
+    M := MakeLeaf(B`parent, G, B : Stat:=Gstat);
+    B`down[Gstat] := M;
+    return M;
+  end if;
+end intrinsic;
+
+intrinsic Find(A :: PGGSetSubgrpcls2_Ambig, G :: GrpPerm) -> PGGSubgrpcls2
+  {"}
+  for N in A`down do
+    if IsConjugate(A`parent`conjugacy`group, N`group, G) then
+      return N;
+    end if;
+  end for;
+  N := MakeLeaf(A`parent, G, A);
+  Append(~A`down, N);
+  return N;
+end intrinsic;
+
+intrinsic Shape(N :: PGGSubgrpcls2) -> .
+  {The shape of the node N.}
+  return 1;
+end intrinsic;
+
+intrinsic Shape(N :: PGGSetSubgrpcls2_Branch) -> .
+  {"}
+  return [* Shape(N`down[k]) : k in Keys(N`down) *];
+end intrinsic;
+
+intrinsic Shape(N :: PGGSetSubgrpcls2_Ambig) -> .
+  {"}
+  return #N`down;
+end intrinsic;
+
+intrinsic Depths(N :: PGGSubgrpcls2) -> .
+  {The depths of the leaves of N.}
+  return {* 0 *};
+end intrinsic;
+
+intrinsic Depths(N :: PGGSetSubgrpcls2_Branch) -> .
+  {"}
+  return &join[{* (d+1)^^Multiplicity(ds, d) : d in MultisetToSet(ds) *} where ds := Depths(N`down[k]) : k in Keys(N`down) ];
+end intrinsic;
+
+intrinsic Depths(N :: PGGSubgrpcls2) -> .
+  {"}
+  return {* 0^^#N`down *};
+end intrinsic;
+

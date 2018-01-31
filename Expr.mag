@@ -1,0 +1,179 @@
+declare type PGGExpr;
+declare attributes PGGExpr: free_vars;
+
+declare type PGGExpr_FreeVar: PGGExpr;
+declare attributes PGGExpr_FreeVar: name;
+
+declare type PGGExpr_Unop: PGGExpr;
+declare attributes PGGExpr_Unop: op, arg1;
+
+declare type PGGExpr_Binop: PGGExpr;
+declare attributes PGGExpr_Binop: op, arg1, arg2;
+
+declare type PGGExpr_Seqop: PGGExpr;
+declare attributes PGGExpr_Seqop: op, args;
+
+declare type PGGExpr_Const: PGGExpr;
+declare attributes PGGExpr_Const: val;
+
+intrinsic Print(x :: PGGExpr_FreeVar)
+  {Print.}
+  printf "%o", x`name;
+end intrinsic;
+
+intrinsic Print(x :: PGGExpr_Unop)
+  {"}
+  printf "%o(%o)", Type(x`op) eq Intrinsic select GetIntrinsicName(x`op) else "<unknown>", x`arg1;
+end intrinsic;
+
+intrinsic Print(x :: PGGExpr_Binop)
+  {"}
+  printf "%o(%o, %o)", Type(x`op) eq Intrinsic select GetIntrinsicName(x`op) else "<unknown>", x`arg1, x`arg2;
+end intrinsic;
+
+intrinsic Print(x :: PGGExpr_Seqop)
+  {"}
+  printf "%o([%o])", Type(x`op) eq Intrinsic select GetIntrinsicName(x`op) else "<unknown>", Join([Sprintf("%o", a) : a in x`args], ", ");
+end intrinsic;
+
+intrinsic Print(x :: PGGExpr_Const)
+  {"}
+  printf "%o", x`val;
+end intrinsic;
+
+intrinsic FreeVariables(x :: PGGExpr) -> {}
+  {The free variables in the expression.}
+  if not assigned x`free_vars then
+    x`free_vars := PowerSet(Strings()) ! _FreeVariables(x);
+  end if;
+  return x`free_vars;
+end intrinsic;
+
+intrinsic PGG_Expression_FreeVariable(name :: MonStgElt) -> PGGExpr_FreeVar
+  {The free variable with the given name.}
+  x := New(PGGExpr_FreeVar);
+  x`name := name;
+  return x;
+end intrinsic;
+
+intrinsic PGG_Expression_UnOp(op, arg1 :: PGGExpr) -> PGGExpr_Unop
+  {The unary operation op (a function or intrinsic) with argument arg1.}
+  x := New(PGGExpr_Unop);
+  x`op := op;
+  x`arg1 := arg1;
+  return x;
+end intrinsic;
+
+intrinsic PGG_Expression_BinOp(op, arg1 :: PGGExpr, arg2 :: PGGExpr) -> PGGExpr_Binop
+  {The binary operation op (a function or intrinsic) with arguments arg1 and arg2.}
+  x := New(PGGExpr_Binop);
+  x`op := op;
+  x`arg1 := arg1;
+  x`arg2 := arg2;
+  return x;
+end intrinsic;
+
+intrinsic PGG_Expression_SeqOp(op, args :: [PGGExpr]) -> PGGExpr_Seqop
+  {The operation op with one argument, the sequence args.}
+  x := New(PGGExpr_Seqop);
+  x`op := op;
+  x`args := args;
+  return x;
+end intrinsic;
+
+intrinsic PGG_Expression_Const(val) -> PGGExpr_Const
+  {The constant expression val.}
+  x := New(PGGExpr_Const);
+  x`val := val;
+  return x;
+end intrinsic;
+
+intrinsic _FreeVariables(x :: PGGExpr_FreeVar) -> {}
+  {"}
+  return {x`name};
+end intrinsic;
+
+intrinsic _FreeVariables(x :: PGGExpr_Unop) -> {}
+  {"}
+  return FreeVariables(x`arg1);
+end intrinsic;
+
+intrinsic _FreeVariables(x :: PGGExpr_Binop) -> {}
+  {"}
+  return FreeVariables(x`arg1) join FreeVariables(x`arg2);
+end intrinsic;
+
+intrinsic _FreeVariables(x :: PGGExpr_Const) -> {}
+  {"}
+  return {};
+end intrinsic;
+
+intrinsic _FreeVariables(x :: PGGExpr_Seqop) -> {}
+  {"}
+  return #x`args eq 0 select {} else &join[FreeVariables(arg) : arg in x`args];
+end intrinsic;
+
+intrinsic Evaluate(x :: PGGExpr, vars :: UserProgram) -> .
+  {Evaluates x.}
+  return _Evaluate(x, vars);
+end intrinsic;
+
+intrinsic Evaluate(x :: PGGExpr, vars :: Assoc) -> .
+  {Evaluates x.}
+  return _Evaluate(x, func<n | vars[n]>);
+end intrinsic;
+
+intrinsic EvaluateLazy(x :: PGGExpr, lazy_vars :: Assoc) -> .
+  {Evaluates x.}
+  store := NewStore();
+  function vars(name)
+    ok, x := StoreIsDefined(store, name);
+    if ok then
+      return x;
+    end if;
+    x := lazy_vars[name]();
+    StoreSet(store, name, x);
+    return x;
+  end function;
+  return _Evaluate(x, vars);
+end intrinsic;
+
+intrinsic EvaluateLazy(x :: PGGExpr, lazy_vars :: UserProgram) -> .
+  {Evaluates x.}
+  store := NewStore();
+  function vars(name)
+    ok, x := StoreIsDefined(store, name);
+    if ok then
+      return x;
+    end if;
+    x := lazy_vars(name);
+    StoreSet(store, name, x);
+    return x;
+  end function;
+  return _Evaluate(x, vars);
+end intrinsic;
+
+intrinsic _Evaluate(x :: PGGExpr_FreeVar, vars) -> .
+  {Evaluates x.}
+  return vars(x`name);
+end intrinsic;
+
+intrinsic _Evaluate(x :: PGGExpr_Unop, vars) -> .
+  {"}
+  return x`op(Evaluate(x`arg1, vars));
+end intrinsic;
+
+intrinsic _Evaluate(x :: PGGExpr_Binop, vars) -> .
+  {"}
+  return x`op(Evaluate(x`arg1, vars), Evaluate(x`arg2, vars));
+end intrinsic;
+
+intrinsic _Evaluate(x :: PGGExpr_Const, vars) -> .
+  {"}
+  return x`val;
+end intrinsic;
+
+intrinsic _Evaluate(x :: PGGExpr_Seqop, vars) -> .
+  {"}
+  return x`op([Evaluate(arg, vars) : arg in x`args]);
+end intrinsic;

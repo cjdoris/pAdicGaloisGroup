@@ -1,0 +1,56 @@
+declare type PGGAlg_ResChoice: PGGAlg;
+declare type PGGAlg_ResChoice_Tranche: PGGAlg_ResChoice;
+declare attributes PGGAlg_ResChoice_Tranche: tranche_alg, priority;
+
+declare type PGGAlgState_ResChoice_Tranche: PGGAlgState;
+declare attributes PGGAlgState_ResChoice_Tranche: tranche_state, parent, overgroup;
+
+intrinsic PGGAlg_ResChoice_Tranche_Make(:Tranche:=false, Priority:=false) -> PGGAlg_ResChoice_Tranche
+  {The "Tranche" subgroups choice.}
+  alg := New(PGGAlg_ResChoice_Tranche);
+  alg`tranche_alg := Tranche cmpne false select Tranche else PGGAlg_Tranche_Index_Make();
+  alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
+  return alg;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResChoice_Tranche)
+  {Print.}
+  print "tranche";
+  IndentPush();
+  print "tranche =", alg`tranche_alg;
+  printf "priority = "; Print(alg`priority);
+  IndentPop();
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_ResChoice_Tranche, parent :: PGGAlgState_ResGroups) -> PGGAlgState_ResChoice_Tranche
+  {Starts alg.}
+  s := New(PGGAlgState_ResChoice_Tranche);
+  s`algorithm := alg;
+  s`parent := parent;
+  s`overgroup := Group(parent`resolvent_overgroup);
+  s`tranche_state := Start(alg`tranche_alg, parent`resolvent_overgroup);
+  return s;
+end intrinsic;
+
+intrinsic Reset(s :: PGGAlgState_ResChoice_Tranche)
+  {Starts the choice from the beginning again.}
+  Reset(s`tranche_state);
+end intrinsic;
+
+intrinsic Subgroup(s :: PGGAlgState_ResChoice_Tranche) -> GrpPerm
+  {Selects a subgroup.}
+  while true do
+    PGG_GlobalTimer_Push("tranche");
+    tranche := Tranche(s`tranche_state);
+    assert #tranche gt 0;
+    PGG_GlobalTimer_Swap("prioritize");
+    tranche2 := Prioritize(Filter(PGG_ToIter(tranche), func<i | IsUseful(s`parent, i)>), s`algorithm`priority, s`parent);
+    ok, i := HasNext(tranche2);
+    PGG_GlobalTimer_Pop();
+    if ok then
+      Forget(i);
+      return Group(i);
+    end if;
+  end while;
+end intrinsic;
+

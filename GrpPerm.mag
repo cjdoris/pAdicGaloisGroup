@@ -1,0 +1,459 @@
+import "Utils.mag": Z, pop_start, xdiv, not_implemented;
+
+declare type PGGGrpPerm;
+declare attributes PGGGrpPerm: group, degree, orbits_of_subgroups;
+
+declare type PGGGrpPerm_Raw: PGGGrpPerm;
+
+declare type PGGGrpPerm_Symmetric: PGGGrpPerm;
+
+declare type PGGGrpPerm_DirProd: PGGGrpPerm;
+declare attributes PGGGrpPerm_DirProd: factors, orbits_of_subgroups_from;
+
+declare type PGGGrpPerm_WrProd: PGGGrpPerm;
+declare attributes PGGGrpPerm_WrProd: factors, orbits_of_subgroups_above;
+
+intrinsic Init(~G :: PGGGrpPerm_Raw, rawG :: GrpPerm)
+  {Initializes G.}
+  G`group := rawG;
+end intrinsic;
+
+intrinsic Init(~G :: PGGGrpPerm_Symmetric, degree :: RngIntElt)
+  {"}
+  require degree ge 1: "degree must be positive";
+  G`degree := degree;
+end intrinsic;
+
+intrinsic Init(~G :: PGGGrpPerm_DirProd, factors :: Tup)
+  {"}
+  require forall{H : H in factors | ISA(Type(H), PGGGrpPerm)}: "factors must be a tuple of PGGGrpPerm";
+  G`factors := factors;
+end intrinsic;
+
+intrinsic Init(~G :: PGGGrpPerm_WrProd, factors :: Tup)
+  {"}
+  require forall{H : H in factors | ISA(Type(H), PGGGrpPerm)}: "factors must be a tuple of PGGGrpPerm";
+  G`factors := factors;
+end intrinsic;
+
+intrinsic PGGGrpPerm_Raw_Make(rawG :: GrpPerm) -> PGGGrpPerm_Raw
+  {Makes a new group.}
+  G := New(PGGGrpPerm_Raw);
+  Init(~G, rawG);
+  return G;
+end intrinsic;
+
+intrinsic PGGGrpPerm_Symmetric_Make(degree :: RngIntElt) -> PGGGrpPerm_Symmetric
+  {"}
+  G := New(PGGGrpPerm_Symmetric);
+  Init(~G, degree);
+  return G;
+end intrinsic;
+
+intrinsic PGGGrpPerm_DirProd_Make(factors :: Tup) -> PGGGrpPerm_DirProd
+  {"}
+  G := New(PGGGrpPerm_DirProd);
+  Init(~G, factors);
+  return G;
+end intrinsic;
+
+intrinsic PGGGrpPerm_WrProd_Make(factors :: Tup) -> PGGGrpPerm_WrProd
+  {"}
+  G := New(PGGGrpPerm_WrProd);
+  G`factors := factors;
+  return G;
+end intrinsic;
+
+intrinsic Group(G :: PGGGrpPerm) -> GrpPerm
+  {The underlying group.}
+  if not assigned G`group then
+    G`group := _Group(G);
+  end if;
+  return G`group;
+end intrinsic;
+
+intrinsic _Group(G :: PGGGrpPerm_Symmetric) -> GrpPerm
+  {"}
+  return SymmetricGroup(G`degree);
+end intrinsic;
+
+intrinsic _Group(G :: PGGGrpPerm_DirProd) -> GrpPerm
+  {"}
+  return #G`factors gt 0 select DirectProduct([Group(H) : H in G`factors]) else SymmetricGroup(1);
+end intrinsic;
+
+intrinsic _Group(G :: PGGGrpPerm_WrProd) -> GrpPerm
+  {"}
+  // NOTE: we choose do define the wreath product in the reverse direction
+  return #G`factors gt 0 select WreathProduct(Reverse([Group(H) : H in G`factors])) else SymmetricGroup(1);
+end intrinsic;
+
+intrinsic Degree(G :: PGGGrpPerm) -> RngIntElt
+  {The degree of the group.}
+  return Degree(Group(G));
+end intrinsic;
+
+intrinsic OrbitsOfSubgroups(G :: PGGGrpPerm, n :: RngIntElt) -> []
+  {All possible orbit systems of subgroups of G of index n, up to conjugacy.}
+  require n ge 1: "n must be positive";
+  if not IsDivisibleBy(#Group(G), n) then
+    return [];
+  end if;
+  if n eq 1 then
+    return [[{x:x in o} : o in Orbits(Group(G))]];
+  end if;
+  if not assigned G`orbits_of_subgroups then
+    G`orbits_of_subgroups := AssociativeArray();
+  end if;
+  if not IsDefined(G`orbits_of_subgroups, n) then
+    G`orbits_of_subgroups[n] := _OrbitsOfSubgroups(G, n);
+  end if;
+  return G`orbits_of_subgroups[n];
+end intrinsic;
+
+intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_Symmetric, n :: RngIntElt) -> []
+  {"}
+  // absolutely any partition of d corresponds to an orbit system for S_d: for such a partition, consider an element whose cycles are this partition, its orbits are precisely the partition.
+  // what is the index of a partition? given partition P=[X_1,...,X_k] with |X_i|=d_i (so sum_i d_i = d) then Stab(P) = prod_i S_(d_i) has order prod_i d_i!, so index d!/prod_i d_i! = multinomial(d; d_1,...,d_k).
+  todo := [<[Z|], Degree(G), Degree(G), n>];
+  ret := [];
+  while #todo gt 0 do
+    // get an item from the todo list
+    pop_start(~item, ~todo);
+    partial, degree, limit, index := Explode(item);
+    // are we done?
+    if degree eq 0 then
+      // are we valid?
+      if index eq 1 then
+        Append(~ret, [{d+1..d+partial[i]} where d:=&+partial[1..i-1] : i in [1..#partial]]);
+      end if;
+      continue;
+    end if;
+    // if not, choose a new element to add to the partition
+    // we consider d and degree-d and the same time
+    for d in [0..degree div 2] do
+      if d gt limit then
+        break;
+      end if;
+      x := Binomial(degree, d);
+      if x gt index then
+        break;
+      end if;
+      ok, y := IsDivisibleBy(index, x);
+      if ok then
+        dd := degree - d;
+        if d gt 0 then
+          Append(~todo, <Append(partial, d), dd, d, y>);
+        end if;
+        if dd le limit and dd ne d then
+          Append(~todo, <Append(partial, dd), d, dd, y>);
+        end if;
+      end if;
+    end for;
+  end while;
+  return ret;
+end intrinsic;
+
+intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_WrProd, n :: RngIntElt) -> []
+  {"}
+  return _OrbitsOfSubgroups(G, n, 1);
+end intrinsic;
+
+// given a sequence ns of integers and an integer m, finds all the sequences of integers cs so that sum_i cs_i * ns_i = m
+function dot_product_inverse(ns, m)
+  todo := [<[Z|], m>];
+  ret := [PowerSequence(Z)|];
+  while #todo gt 0 do
+    pop_start(~item, ~todo);
+    partial, target := Explode(item);
+    // done?
+    if #partial eq #ns then
+      if target eq 0 then
+        Append(~ret, partial);
+      end if;
+      continue;
+    end if;
+    // loop over possible next coefficients
+    n := ns[#partial+1];
+    for c in [0..target div n] do
+      Append(~todo, <Append(partial, c), target - c*n>);
+    end for;
+  end while;
+  return ret;
+end function;
+
+function factorizations_of_length(N, n : Max:=N)
+  if n eq 0 then
+    error if N ne 1, "impossible";
+    return [];
+  elif n eq 1 then
+    return N le Max select [[N]] else [];
+  else
+    assert n gt 1;
+    return &cat[PowerSequence(PowerSequence(Z))| [Append(facs, d) : facs in factorizations_of_length(xdiv(N, d), n-1 : Max:=d)] : d in Divisors(N) | d le Max];
+  end if;
+end function;
+
+intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_WrProd, n :: RngIntElt, m :: RngIntElt) -> []
+  {"}
+  assert m ge 1 and m le #G`factors;
+  if not assigned G`orbits_of_subgroups_above then
+    G`orbits_of_subgroups_above := AssociativeArray();
+  end if;
+  if not IsDefined(G`orbits_of_subgroups_above, <n,m>) then
+    if m eq #G`factors then
+      ans := OrbitsOfSubgroups(G`factors[m], n);
+    elif Degree(G`factors[m]) eq 1 then
+      ans := _OrbitsOfSubgroups(G, n, m+1);
+    elif Degree(G`factors[m]) eq 2 then
+      upper_deg := &*[Z| Degree(G`factors[i]) : i in [m+1..#G`factors]];
+      ans := [];
+      case #G`factors[m]`group:
+      when 1:
+        for n1 in Divisors(n) do
+          n2 := xdiv(n, n1);
+          if n2 lt n1 then 
+            break;
+          elif n2 eq n1 then
+            oss := _OrbitsOfSubgroups(G, n1, m+1);
+            ans cat:= [[{x : x in o} : o in os1] cat [{x+upper_deg : x in o} : o in os2] where os1:=oss[i] where os2:=oss[j] : j in [i+1..#oss], i in [1..#oss]];
+          else
+            oss1 := _OrbitsOfSubgroups(G, n1, m+1);
+            oss2 := _OrbitsOfSubgroups(G, n2, m+1);
+            ans cat:= [[{x : x in o} : o in os1] cat [{x+upper_deg : x in o} : o in os2] : os1 in oss1, os2 in oss2];
+          end if;
+        end for;
+      when 2:
+        ok, nrest := IsDivisibleBy(n, 2);
+        if ok then
+          for n1 in Divisors(nrest) do
+            n2 := xdiv(nrest, n1);
+            if n2 lt n1 then
+              break;
+            elif n2 eq n1 then
+              oss := _OrbitsOfSubgroups(G, n1, m+1);
+              ans cat:= [[{x : x in o} : o in os1] cat [{x+upper_deg : x in o} : o in os2] where os1:=oss[i] where os2:=oss[j] : j in [i..#oss], i in [1..#oss]];
+            else
+              oss1 := _OrbitsOfSubgroups(G, n1, m+1);
+              oss2 := _OrbitsOfSubgroups(G, n2, m+1);
+              ans cat:= [[{x : x in o} : o in os1] cat [{x+upper_deg : x in o} : o in os2] : os1 in oss1, os2 in oss2];
+            end if;
+          end for;
+        end if;
+        ok, nrest := IsSquare(n);
+        if ok then
+          oss := _OrbitsOfSubgroups(G, nrest, m+1);
+          ans cat:= [[{x : x in o} join {x+upper_deg : x in o} : o in os] : os in oss];
+        end if;
+      else
+        assert false;
+      end case;
+    else
+      // TODO: implement this in general
+      //       this is quite tricky if we want to avoid conjugate answers:
+      //       - first find orbits for the base group
+      //       - group these by conjugacy
+      //       - distribute a factorization of the remaining index over the conjugacy classes
+      //       - then distribute over each orbit in each class, but with an ordering enforced
+      //       - group orbits in each class further by the index they just received
+      //       - find orbits for each of these indices
+      //       - distribute these over each class, but with an ordering enforced
+      //       - take the product of all these choices
+      //       maybe it's worth changing the return value of OrbitsOfSubgroups to group the orbits by conjugacy
+      not_implemented("OrbitsOfSubgroups: general towers");
+    end if;
+    G`orbits_of_subgroups_above[<n,m>] := ans;
+  end if;
+  return G`orbits_of_subgroups_above[<n,m>];
+end intrinsic;
+
+intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_DirProd, n :: RngIntElt, m :: RngIntElt) -> []
+  {"}
+  if not assigned G`orbits_of_subgroups_from then
+    G`orbits_of_subgroups_from := AssociativeArray();
+  end if;
+  if not IsDefined(G`orbits_of_subgroups_from, <n, m>) then
+    if m eq #G`factors then
+      oss := OrbitsOfSubgroups(G`factors[m], n);
+    else
+      assert m lt #G`factors;
+      deg := Degree(G`factors[m]);
+      oss := [];
+      for n1 in Divisors(n) do
+        oss1 := OrbitsOfSubgroups(G`factors[m], n1);
+        oss2 := _OrbitsOfSubgroups(G, xdiv(n,n1), m+1);
+        oss2_shifted := [[{x+deg : x in o} : o in os] : os in oss2];
+        for os1 in oss1 do
+          for os2 in oss2_shifted do
+            Append(~oss, os1 cat os2);
+          end for;
+        end for;
+      end for;
+    end if;
+    G`orbits_of_subgroups_from[<n, m>] := oss;
+  end if;
+  return G`orbits_of_subgroups_from[<n, m>];
+end intrinsic;
+
+intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_DirProd, n :: RngIntElt) -> []
+  {"}
+  return _OrbitsOfSubgroups(G, n, 1);
+end intrinsic;
+
+intrinsic Print(G :: PGGGrpPerm_Raw)
+  {Print.}
+  printf "%o", Group(G);
+end intrinsic;
+
+intrinsic Print(G :: PGGGrpPerm_Symmetric)
+  {"}
+  printf "S_%o", G`degree;
+end intrinsic;
+
+intrinsic Print(G :: PGGGrpPerm_DirProd)
+  {"}
+  if #G`factors eq 0 then
+    printf "1";
+  else
+    printf "%o", Join([Sprintf("%o", H) : H in G`factors], " x ");
+  end if;
+end intrinsic;
+
+intrinsic Print(G :: PGGGrpPerm_WrProd)
+  {"}
+  if #G`factors eq 0 then
+    printf "1";
+  else
+    printf "%o", Join(Reverse([Sprintf("%o", H) : H in G`factors]), " wr ");
+  end if;
+end intrinsic;
+
+intrinsic WreathProduct(Gs :: [PGGGrpPerm]) -> PGGGrpPerm_WrProd
+  {Wreath product.}
+  G := New(PGGGrpPerm_WrProd);
+  G`factors := Gs;
+  return G;
+end intrinsic;
+
+intrinsic DirectProduct(Gs :: [PGGGrpPerm]) -> PGGGrpPerm_DirProd
+  {Direct product.}
+  G := New(PGGGrpPerm_DirProd);
+  G`factors := Gs;
+  return G;
+end intrinsic;
+
+intrinsic Quotient(g :: GrpPermElt, G :: PGGGrpPerm_WrProd, i :: RngIntElt, j :: RngIntElt) -> GrpPermElt
+  {The action of g on the jth block in the ith factor of G.}
+  // check i is valid
+  assert 1 le i and i le #G`factors;
+  assert g in Group(G);
+  // check j is valid
+  dbelow := &*[Z| Degree(G`factors[k]) : k in [1..i-1]];
+  dhere := Degree(G`factors[i]);
+  dabove := &*[Z| Degree(G`factors[k]) : k in [i+1..#G`factors]];
+  assert 1 le j and j le dbelow;
+  // check g stabilizes a certain set
+  orbit := {dabove * dhere * (j - 1) + 1 .. dabove * dhere * j};
+  assert forall{k : k in orbit | k^g in orbit};
+  // create the corresponding element
+  h := Group(G`factors[i]) ! [(((k + dhere*(j-1))*dabove)^g - 1) div dabove - dhere*(j-1) + 1 : k in [1..dhere]];
+  return h;
+end intrinsic;
+
+intrinsic Lift(h :: GrpPermElt, G :: PGGGrpPerm_WrProd, i :: RngIntElt, j :: RngIntElt) -> GrpPermElt
+  {The canonical element g of G such that Quotient(g,Q,i,j)=h.}
+  // check i is valid
+  assert 0 le i and i le #G`factors;
+  assert h in Group(G`factors[i]);
+  // check j is valid
+  dbelow := &*[Z| Degree(G`factors[k]) : k in [1..i-1]];
+  dhere := Degree(G`factors[i]);
+  dabove := &*[Z| Degree(G`factors[k]) : k in [i+1..#G`factors]];
+  assert 1 le j and j le dbelow;
+  // create the corresponding element
+  g := Group(G) ! [
+    k lt kmin or k gt kmax
+    select k
+    else (((k-kmin) div dabove + 1)^h - 1)*dabove + ((k-kmin) mod dabove) + kmin
+    where kmin := dabove*dhere*(j-1)+1
+    where kmax := dabove*dhere*j
+    : k in [1..Degree(G)]
+  ];
+  assert Quotient(g, G, i, j) eq h;
+  return g;
+end intrinsic;
+
+intrinsic Decompose(g :: GrpPermElt, G :: PGGGrpPerm_WrProd) -> []
+  {Decomposes g in terms of elements of the factors of the wreath product. Inverse to Compose.}
+  require g in Group(G): "g must be an element of G";
+  hss := [**];
+  n := 1;
+  for i in [1..#G`factors] do
+    H := G`factors[i];
+    d := Degree(H);
+    hs := [Group(H)|];
+    for j in [1..n] do
+      h := Quotient(g, G, i, j);
+      Append(~hs, h);
+      g := g / Lift(h, G, i, j);
+    end for;
+    Append(~hss, hs);
+    n *:= d;
+  end for;
+  assert n eq Degree(G);
+  assert g eq Id(Group(G));
+  return <hs : hs in hss>;
+end intrinsic;
+
+intrinsic Compose(hss, G :: PGGGrpPerm_WrProd) -> GrpPermElt
+  {Composes an element of G from elements of the factors of the wreath product. Inverse to Decompose.}
+  require #hss eq #G`factors: "expecting hss to correspond to factors";
+  g := Id(Group(G));
+  n := Degree(G);
+  for i in [#G`factors..1 by -1] do
+    H := G`factors[i];
+    d := Degree(H);
+    n := xdiv(n, d);
+    hs := hss[i];
+    assert Universe(hs) eq Group(H);
+    assert #hs eq n;
+    for j in [1..n] do
+      h := hs[j];
+      g *:= Lift(h, G, i, j);
+    end for;
+  end for;
+  assert n eq 1;
+  return g;
+end intrinsic;
+
+intrinsic Quotient(g :: GrpPermElt, G :: PGGGrpPerm_DirProd, i :: RngIntElt) -> GrpPermElt
+  {The action of g on the ith factor of G.}
+  assert i ge 1 and i le #G`factors;
+  assert g in Group(G);
+  dbelow := &+[Z| Degree(G`factors[k]) : k in [1..i-1]];
+  dhere := Degree(G`factors[i]);
+  return Group(G`factors[i]) ! [(dbelow+k)^g - dbelow : k in [1..dhere]];
+end intrinsic;
+
+intrinsic Lift(h :: GrpPermElt, G :: PGGGrpPerm_DirProd, i :: RngIntElt) -> GrpPermElt
+  {The canonical element g of G such that Quotient(g,G,i)=h.}
+  assert i ge 1 and i le #G`factors;
+  assert h in Group(G`factors[i]);
+  dbelow := &+[Z| Degree(G`factors[k]) : k in [1..i-1]];
+  dhere := Degree(G`factors[i]);
+  return Group(G) ! [k le dbelow or k gt dbelow+dhere select k else (k-dbelow)^h + dbelow : k in [1..Degree(G)]];
+end intrinsic;
+
+intrinsic Decompose(g :: GrpPermElt, G :: PGGGrpPerm_DirProd) -> Tup
+  {Decomposes g in terms of elements of the factors of the direct product. Inverse to Compose.}
+  require g in Group(G): "g must be an element of G";
+  hs := < Quotient(g, G, i) : i in [1..#G`factors] >;
+  return hs;
+end intrinsic;
+
+intrinsic Compose(hs, G :: PGGGrpPerm_DirProd) -> GrpPermElt
+  {Composes an element of G from elements of the factors of the direct product. Inverse to Decompose.}
+  require #hs eq #G`factors: "expecting hs to correspond to factors";
+  g := &*[Group(G)| Lift(hs[i], G, i) : i in [1..#G`factors]];
+  return g;
+end intrinsic;

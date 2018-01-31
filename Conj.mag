@@ -1,0 +1,280 @@
+import "Utils.mag": not_implemented;
+
+declare type PGGConj: PGGGrpPerm;
+declare attributes PGGConj: pol, base_field, parent_subgroup, parent_quotient, galgrp_is_known, galgrp_is_transitive, galgrp_overgroup;
+
+declare type PGGConj_Symmetric: PGGConj, PGGGrpPerm_Symmetric;
+declare attributes PGGConj_Symmetric: top_field;
+
+declare type PGGConj_Factors: PGGConj, PGGGrpPerm_DirProd;
+declare attributes PGGConj_Factors: pol_factors;
+
+declare type PGGConj_Tower: PGGConj, PGGGrpPerm_WrProd;
+declare attributes PGGConj_Tower: top_field;
+
+intrinsic PGGConj_Symmetric_Make(f :: RngUPolElt[FldPad] : GaloisGroupAlg:=false, TopField:=false, IsTransitive:=false, KnownGroup:=false) -> PGGConj_Symmetric
+  {Makes a conjugacy.}
+  c := New(PGGConj_Symmetric);
+  Init(~c, Degree(f));
+  c`pol := f;
+  c`base_field := BaseRing(f);
+  if TopField cmpne false then
+    c`top_field := TopField;
+  end if;
+  if KnownGroup cmpne false then
+    assert KnownGroup subset Group(c);
+    c`galgrp_is_known := [* true, KnownGroup *];
+  elif Degree(c) eq 1 then
+    c`galgrp_is_known := [* true, Group(c) *];
+  elif GaloisGroupAlg cmpne false then
+    PGG_GlobalTimer_Push("galois group");
+    c`galgrp_is_known := [* true, GaloisGroup(GaloisGroupAlg, f) *];
+    PGG_GlobalTimer_Pop();
+  else
+    c`galgrp_is_known := [* false *];
+  end if;
+  c`galgrp_is_transitive := IsTransitive or assigned c`top_field or Degree(c) eq 1;
+  return c;
+end intrinsic;
+
+intrinsic PGGConj_Factors_Make(f :: RngUPolElt[FldPad], facs :: Tup) -> PGGConj
+  {"}
+  require forall{c : c in facs | ISA(Type(c), PGGConj)}: "facs must be a tuple of PGGConj";
+  c := New(PGGConj_Factors);
+  c`factors := facs;
+  c`base_field := BaseRing(f);
+  offset := 0;
+  for i in [1..#c`factors] do
+    cc := c`factors[i];
+    d := Degree(cc);
+    cc`parent_subgroup := Group(c);
+    cc`parent_quotient := OrbitAction(Group(c), [offset+1..offset+d]);
+    offset +:= d;
+  end for;
+  assert Degree(c) eq offset;
+  return c;
+end intrinsic;
+
+intrinsic PGGConj_Tower_Make(f :: RngUPolElt[FldPad], tower :: Tup) -> PGGConj
+  {"}
+  require forall{c : c in tower | ISA(Type(c), PGGConj)}: "tower must be a tuple of PGGConj";
+  c := New(PGGConj_Tower);
+  c`pol := f;
+  c`factors := tower;
+  c`base_field := BaseRing(f);
+  degree := 1;
+  for i in [#c`factors..1 by -1] do
+    cc := c`factors[i];
+    d := Degree(cc);
+    cc`parent_subgroup := Stabilizer(Group(c), {1..degree*d});
+    oact := OrbitAction(cc`parent_subgroup, [1..degree*d]);
+    bact := BlocksAction(Codomain(oact), [{(i-1)*degree+j : j in [1..degree]} : i in [1..d]]);
+    cc`parent_quotient := oact * bact;
+    degree *:= d;
+  end for;
+  assert Degree(c) eq degree;
+  return c;
+end intrinsic;
+
+// intrinsic EasyResolvents(conj :: PGGConj_Symmetric) -> []
+//   {Some trivial resolvents based on the initial presentation of the problem.}
+//   return [<conj`pol, Stabilizer(conj`group, 1)>];
+// end intrinsic;
+
+// intrinsic EasyResolvents(conj :: PGGConj_Factors) -> []
+//   {Some trivial resolvents based on the initial presentation of the problem.}
+//   // TODO: resolvents corresponding to each factor, and the whole polynomial?
+//   not_implemented("easy resolvents: factors");
+// end intrinsic;
+
+// intrinsic EasyResolvents(conj :: PGGConj_Tower) -> []
+//   {Some trivial resolvents based on the initial presentation of the problem.}
+//   // TODO: more resolvents corresponding to pieces of the tower?
+//   return [<conj`pol, Stabilizer(conj`group, 1)>];
+// end intrinsic;
+
+// intrinsic Print(conj :: PGGConj)
+//   {"}
+//   _Print(conj);
+//   ok, G := IsKnown(conj);
+//   if ok then
+//     if G eq Group(conj) then
+//       printf " exactly";
+//     else
+//       printf " actually %o", GroupName(G);
+//     end if;
+//   else
+//     if IsTransitive(conj) then
+//       printf " transitive";
+//     end if;
+//     if Overgroup(conj) ne Group(conj) then
+//       printf " subgroup of %o", GroupName(Overgroup(conj));
+//     end if;
+//   end if;
+// end intrinsic;
+
+// intrinsic _Print(conj :: PGGConj_Symmetric)
+//   {"}
+//   printf "Symmetric(%o)", Degree(conj);
+// end intrinsic;
+
+// intrinsic _Print(conj :: PGGConj_Factors)
+//   {"}
+//   printf "Factors(%o)", Join([Sprintf("%o", c) : c in conj`factors], ", ");
+// end intrinsic;
+
+// intrinsic _Print(conj :: PGGConj_Tower)
+//   {"}
+//   printf "Tower(%o)", Join([Sprintf("%o", c) : c in conj`tower], ", ");
+// end intrinsic;
+
+intrinsic GalGrpOvergroup(conj :: PGGConj) -> GrpPerm
+  {An overgroup of the Galois group.}
+  if not assigned conj`galgrp_overgroup then
+    ok, G := GalGrpIsKnown(conj);
+    if not ok then
+      G := _GalGrpOvergroup(conj);
+    end if;
+    assert G subset Group(conj);
+    conj`galgrp_overgroup := G;
+  end if;
+  return conj`galgrp_overgroup;
+end intrinsic;
+
+intrinsic _GalGrpOvergroup(conj :: PGGConj_Symmetric) -> GrpPerm
+  {"}
+  return Group(conj);
+end intrinsic;
+
+intrinsic _GalGrpOvergroup(conj :: PGGConj_Factors) -> GrpPerm
+  {"}
+  return DirectProduct([GalGrpOvergroup(c) : c in conj`factors]);
+end intrinsic;
+
+intrinsic _GalGrpOvergroup(conj :: PGGConj_Tower) -> GrpPerm
+  {"}
+  return WreathProduct(Reverse([GalGrpOvergroup(c) : c in conj`factors]));
+end intrinsic;
+
+intrinsic GalGrpIsTransitive(conj :: PGGConj) -> BoolElt
+  {True if the Galois group is known to be transitive on this part of the group.}
+  if not assigned conj`galgrp_is_transitive then
+    conj`galgrp_is_transitive := _GalGrpIsTransitive(conj);
+  end if;
+  return conj`galgrp_is_transitive;
+end intrinsic;
+
+intrinsic _GalGrpIsTransitive(conj :: PGGConj_Factors) -> BoolElt
+  {"}
+  return #conj`factors le 1 and forall{c : c in conj`factors | GalGrpIsTransitive(conj`factors[1])};
+end intrinsic;
+
+intrinsic _GalGrpIsTransitive(conj :: PGGConj_Tower) -> BoolElt
+  {"}
+  assert forall{c : c in conj`factors | GalGrpIsTransitive(c)};
+  return true;
+end intrinsic;
+
+intrinsic GalGrpIsConsistent(conj :: PGGConj, G :: GrpPerm) -> BoolElt
+  {True if G could be the Galois group.}
+  ok, G2 := GalGrpIsKnown(conj);
+  if ok then
+    return IsConjugate(Group(conj), G, G2);
+  else
+    return _GalGrpIsConsistent(conj, G);
+  end if;
+end intrinsic;
+
+intrinsic _GalGrpIsConsistent(conj :: PGGConj_Symmetric, G :: GrpPerm) -> BoolElt
+  {"}
+  return (not GalGrpIsTransitive(conj)) or IsTransitive(G);
+end intrinsic;
+
+intrinsic _GalGrpIsConsistent(conj :: PGGConj_Factors, G :: GrpPerm) -> BoolElt
+  {"}
+  return forall{c : c in conj`factors | GalGrpIsConsistent(c, c`parent_quotient(G meet c`parent_subgroup))};
+end intrinsic;
+
+intrinsic _GalGrpIsConsistent(conj :: PGGConj_Tower, G :: GrpPerm) -> BoolElt
+  {"}
+  return forall{c : c in conj`factors | GalGrpIsConsistent(c, c`parent_quotient(G meet c`parent_subgroup))};
+end intrinsic;
+
+intrinsic GalGrpIsConsistentWithSubgroup(conj :: PGGConj, G :: GrpPerm) -> BoolElt
+  {True if the Galois group could be a subgroup of G.}
+  not_implemented("GalGrpIsConsistentWithSubgroup: ", Type(conj));
+end intrinsic;
+
+intrinsic GalGrpIsConsistentWithSubgroup(conj :: PGGConj_Symmetric, G :: GrpPerm) -> BoolElt
+  {"}
+  return (not GalGrpIsTransitive(conj)) or IsTransitive(G);
+end intrinsic;
+
+intrinsic GalGrpIsConsistentWithSubgroup(conj :: PGGConj_Factors, G :: GrpPerm) -> BoolElt
+  {"}
+  return forall{c : c in conj`factors | GalGrpIsConsistentWithSubgroup(c, c`parent_quotient(G meet c`parent_subgroup))};
+end intrinsic;
+
+intrinsic GalGrpIsConsistentWithSubgroup(conj :: PGGConj_Tower, G :: GrpPerm) -> BoolElt
+  {"}
+  return forall{c : c in conj`factors | GalGrpIsConsistentWithSubgroup(c, c`parent_quotient(G meet c`parent_subgroup))};
+end intrinsic;
+
+intrinsic GalGrpIsKnown(conj :: PGGConj) -> BoolElt, GrpPerm
+  {True if the Galois group is known exactly, and the group.}
+  if not assigned conj`galgrp_is_known then
+    ok, G := _GalGrpIsKnown(conj);
+    if ok then
+      assert G subset Group(conj);
+      conj`galgrp_is_known := [* true, G *];
+    else
+      conj`galgrp_is_known := [* false *];
+    end if;
+  end if;
+  if conj`galgrp_is_known[1] then
+    return true, conj`galgrp_is_known[2];
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic _GalGrpIsKnown(conj :: PGGConj_Factors) -> BoolElt, GrpPerm
+  {"}
+  if #[c : c in conj`factors | Degree(c) gt 1] le 1 then
+    Gs := [];
+    for c in conj`factors do
+      ok, G := GalGrpIsKnown(c);
+      if ok then
+        Append(~Gs, G);
+      else
+        return false, _;
+      end if;
+    end for;
+    return true, DirectProduct(Gs);
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic _GalGrpIsKnown(conj :: PGGConj_Tower) -> BoolElt, GrpPerm
+  {"}
+  if #[c : c in conj`factors | Degree(c) gt 1] le 1 then
+    Gs := [];
+    for c in conj`factors do
+      ok, G := GalGrpIsKnown(c);
+      if ok then
+        Append(~Gs, G);
+      else
+        return false, _;
+      end if;
+    end for;
+    if #Gs eq 0 then
+      return true, SymmetricGroup(1);
+    else
+      return true, WreathProduct(Reverse(Gs));
+    end if;
+  else
+    return false, _;
+  end if;
+end intrinsic;
+

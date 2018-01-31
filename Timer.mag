@@ -1,0 +1,135 @@
+declare type PGGTimer;
+declare attributes PGGTimer: last_time, times, counts, labels, current_label, idxs;
+
+intrinsic PGG_Timer() -> PGGTimer
+  {A new timer.}
+  t := New(PGGTimer);
+  t`last_time := Cputime();
+  t`times := [RealField()|];
+  t`counts := [Integers()|];
+  t`labels := [PowerSequence(Strings())|];
+  t`current_label := [Strings()|];
+  t`idxs := AssociativeArray(PowerSequence(Strings()));
+  return t;
+end intrinsic;
+
+intrinsic FindIndex(t :: PGGTimer, label :: [MonStgElt]) -> RngIntElt
+  {The index of the given label. If it doesn't exist, creates it first.}
+  ok, i := IsDefined(t`idxs, label);
+  if ok then
+    return i;
+  end if;
+  Append(~t`times, 0);
+  Append(~t`counts, 0);
+  Append(~t`labels, label);
+  t`idxs[label] := #t`labels;
+  return #t`labels;
+end intrinsic;
+
+intrinsic Update(t :: PGGTimer, c :: RngIntElt, label :: [MonStgElt])
+  {Assigns the accumulated time to the given label.}
+  i := FindIndex(t, label);
+  now := Cputime();
+  t`times[i] +:= now - t`last_time;
+  t`counts[i] +:= c;
+  t`last_time := now;
+end intrinsic;
+
+intrinsic Update(t :: PGGTimer, label :: [MonStgElt])
+  {"}
+  Update(t, 0, label);
+end intrinsic;
+
+intrinsic Push(t :: PGGTimer, x :: MonStgElt)
+  {Assings time to the current label, then appends x to the label.}
+  Update(t, t`current_label);
+  Append(~t`current_label, x);
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimer, n :: RngIntElt)
+  {Assigns time to the current label, then pops n items from the label.}
+  error if #t`current_label lt n, "n greater than label length";
+  Update(t, 1, t`current_label);
+  t`current_label := t`current_label[1..#t`current_label-n];
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimer, n :: RngIntElt, x :: MonStgElt)
+  {Assigns time to the current label, then pops n items from the label, the nth being x.}
+  error if #t`current_label lt n, "n greater than label length";
+  error if t`current_label[#t`current_label-n+1] ne x, "incorrect label entry";
+  Update(t, 1, t`current_label);
+  t`current_label := t`current_label[1..#t`current_label-n];
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimer, x :: MonStgElt)
+  {Assigns time to the current label, then pops the last item from the label, which must be x.}
+  Pop(t, 1, x);
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimer)
+  {Assigns time to the current label, then pops the last item from the label.}
+  Pop(t, 1);
+end intrinsic;
+
+intrinsic Swap(t :: PGGTimer, x :: MonStgElt)
+  {Assigns time to the current label, then swaps the last item from the label to x.}
+  error if #t`current_label lt 1, "label too short";
+  Update(t, 1, t`current_label);
+  t`current_label[#t`current_label] := x;
+end intrinsic;
+
+intrinsic Log(t :: PGGTimer, x :: MonStgElt)
+  {Assigns time to the current label with x appended.}
+  Update(t, 1, Append(t`current_label, x));
+end intrinsic;
+
+intrinsic Tree(t :: PGGTimer : Total:="TOTAL", Other:="OTHER") -> Tup
+  {A tree representation of t.}
+  procedure insert(~node, label, tm, ct)
+    node[2] +:= tm;
+    if #label gt 0 then
+      for i in [1..#node[4]] do
+        if node[4][i][1] eq label[1] then
+          insert(~node[4][i], label[2..#label], tm, ct);
+          return;
+        end if;
+      end for;
+      Append(~node[4], <label[1], 0.0, 0, [**]>);
+      insert(~node[4][#node[4]], label[2..#label], tm, ct);
+    else
+      node[3] +:= ct;
+    end if;
+  end procedure;
+  procedure rest(~node)
+    if #node[4] gt 0 then
+      Append(~node[4], <Other, node[2] - &+[n[2] : n in node[4]], 0, [**]>);
+      for i in [1..#node[4]] do
+        rest(~node[4][i]);
+      end for;
+    end if;
+  end procedure;
+  root := <Total, 0.0, 0, [**]>;
+  for i in [1..#t`labels] do
+    insert(~root, t`labels[i], t`times[i], t`counts[i]);
+  end for;
+  rest(~root);
+  return root;
+end intrinsic;
+
+intrinsic PrintTree(t :: PGGTimer)
+  {Prints t as a tree.}
+  procedure pr(node, depth)
+    if node[3] ge 1 or node[2] ge 0.01 then
+      printf "%o%6.2o", &cat[Strings() | "  " : i in [1..depth]], node[2];
+      if node[3] ne 0 then
+        printf " (%o)", node[3];
+      end if;
+      printf " %o\n", node[1];
+      for n in node[4] do
+        pr(n, depth+1);
+      end for;
+    end if;
+  end procedure;
+  pr(Tree(t), 0);
+end intrinsic;
+

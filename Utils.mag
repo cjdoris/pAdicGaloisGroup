@@ -1,0 +1,604 @@
+Z := IntegerRing();
+Q := RationalField();
+
+function not_implemented(msg, ...)
+  error "not implemented: " cat Join([Sprintf("%o", x) : x in msg], " ");  
+end function;
+
+function precision_error()
+  error "precision error";
+end function;
+
+procedure isort_by(~xs, key)
+  keys := [key(xs[i]) : i in [1..#xs]];
+  Sort(~keys, ~permutation);
+  xs := [xs[i^permutation] : i in [1..#xs]];
+end procedure;
+
+function sort_by(xs, key)
+  isort_by(~xs, key);
+  return xs;
+end function;
+
+function group_by(xs, key)
+  A := AssociativeArray();
+  for x in xs do
+    k := key(x);
+    if IsDefined(A, k) then
+      Append(~A[k], x);
+    else
+      A[k] := [x];
+    end if;
+  end for;
+end function;
+
+function enumerate(xs)
+  return [<xs[i], i> : i in [1..#xs] | IsDefined(xs, i)];
+end function;
+
+function is_any_coercible(coercers, x)
+  for i in [1..#coercers] do
+    ok, y := coercers[i](x);
+    if ok then
+      return true, i, y;
+    end if;
+  end for;
+  return false, _, _;
+end function;
+
+function all_coercible(dflts, coercers, xs)
+  assert #dflts eq #coercers;
+  dflts := [* d : d in dflts *];
+  for x in xs do
+    ok, i, y := is_any_coercible(coercers, x);
+    if ok then
+      dflts[i] := y;
+    else
+      return false, _;
+    end if;
+  end for;
+  return true, dflts;
+end function;
+
+function the(xs)
+  assert #xs eq 1;
+  return [x : x in xs][1];
+end function;
+
+// the roots of f as a sequence (no multiplicities)
+// f must be squarefree
+function roots(f)
+  rs := Roots(f : IsSquarefree);
+  assert forall{r : r in rs | r[2] eq 1};
+  return [r[1] : r in rs];
+end function;
+
+// true if f has a root
+// f must be squarefree
+// also returns a root
+function has_root(f)
+  rs := roots(f);
+  if #rs eq 0 then
+    return false, _;
+  else
+    return true, rs[1];
+  end if;
+end function;
+
+// the factorization of f as a sequence (no multiplicities)
+// f must be squarefree
+// also the certificates
+function factorization(f : Extensions:=false)
+  slope := Ceiling(Max(Slopes(NewtonPolygon(f))));
+  d := Degree(f);
+  vlc := Valuation(Coefficient(f, d));
+  f2 := Parent(f) ! [ShiftValuation(Coefficient(f, i), (d-i)*slope - vlc) : i in [0..d]];
+  facs, _, certs := Factorization(f2 : IsSquarefree, Certificates, Extensions:=Extensions);
+  assert forall{fac : fac in facs | fac[2] eq 1};
+  return [Parent(g)![ShiftValuation(Coefficient(g,i), (i-d)*slope-vlc) : i in [0..d]] where vlc:=Valuation(Coefficient(g,d)) where d:=Degree(g) where g:=fac[1] : fac in facs], certs;
+end function;
+
+function extension(f)
+  facs, certs := factorization(f : Extensions);
+  error if #facs gt 1, "expecting at most 1 factor";
+  return certs[1]`Extension;
+end function;
+
+function pol_invmod(g, f)
+  d := Degree(f);
+  // rows are coefficients of g^i mod f
+  M := Matrix([[Coefficient(gg, j) : j in [0..d-1]] where gg := Polynomial([0 : j in [1..i]] cat Coefficients(g)) mod f : i in [0..d-1]]);
+  // rows are linear combinations of g^i summing to x^j
+  ok, Minv := IsInvertible(M);
+  assert ok;
+  // first row is h(x) so that h(x)g(x)=1 mod f(x)
+  return Polynomial(Eltseq(Rows(Minv)[1]));
+end function;
+
+// the factorization of f into pieces corresponding to the slopes of its newton polygon as a sequence
+function newton_polygon_factorization(f : alg:="Hensel")
+  // special cases
+  d := Degree(f);
+  error if d lt 0, "f must be non-zero";
+  error if IsWeaklyZero(Coefficient(f, d)), "precision error: leading coefficient is weakly zero";
+  if d eq 0 then
+    return [];
+  end if;
+  case alg:
+  when "Cheat":
+    // we cheat and do a full factorization and then aggregate the results
+    // this will be very inefficient for some polynomials!
+    facs := factorization(f);
+    a := AssociativeArray();
+    for fac in facs do
+      s := the(Slopes(NewtonPolygon(fac)));
+      if IsDefined(a, s) then
+        Append(~a[s], fac);
+      else
+        a[s] := [fac];
+      end if;
+    end for;
+    return [&*a[s] : s in Sort([s : s in Keys(a)])];
+  when "Hensel":
+    // use Hensel's lemma
+    R := Parent(f);
+    K := BaseRing(R);
+    pr := Precision(K);
+    assert pr lt Infinity();
+    np := NewtonPolygon(f);
+    vs := ChangeUniverse(Vertices(np), car<Z,Z>);
+    assert #vs ge 2;
+    assert vs[1][1] eq 0;
+    assert vs[#vs][1] eq Degree(f);
+    error if exists{v : v in vs | IsWeaklyZero(Coefficient(f, v[1]))}, "precision error: coefficient weakly zero";
+    factors := [];
+    for n in [2..#vs] do
+      i0, v0 := Explode(vs[n-1]);
+      i1, v1 := Explode(vs[n]);
+      width := i1 - i0;
+      slope := (v1 - v0) / width;
+      h := -Numerator(slope);
+      e := Denominator(slope);
+      g0 := R ! [Coefficient(f, i) / Coefficient(f, i1) : i in [i0..i1]];
+      g := R ! [IsWeaklyZero(c) select 0 else ChangePrecision(c, pr) : c in Coefficients(g0)];
+      assert Degree(g) eq width;
+      assert Valuation(Coefficient(g, 0)) eq v0-v1;
+      assert Valuation(Coefficient(g, width)) eq 0;
+      vprint PGG_GaloisGroup: "hensel lifting slope =", slope;
+      niters := 0;
+      while true do
+        niters +:= 1;
+        if false then
+          // use arithmetic in R mod g instead of reducing things mod g explicitly
+          Q := quo<R | g>;
+          PGG_GlobalTimer_Push("quotrem g");
+          h, fmodg := Quotrem(f, g);
+          PGG_GlobalTimer_Swap("gnew");
+          gnew := g + R!(Q!fmodg/Q!h);
+        else
+          PGG_GlobalTimer_Push("quotrem g");
+          h, fmodg := Quotrem(f, g);
+          if true then
+            // use Newton lifting to find hinv = h^-1 mod g after the first iteration
+            // TODO: even better would be to only do pol_invmod() to limited precision at first, and then do many rounds of Newton lifting
+            if niters eq 1 then
+              PGG_GlobalTimer_Swap("invmod g");
+              hinv := pol_invmod(h, g);
+            else
+              PGG_GlobalTimer_Swap("newton lift");
+              hinv := (hinv * (2 - ((h * hinv) mod g))) mod g;
+            end if;
+          else
+            PGG_GlobalTimer_Swap("invmod g");
+            hinv := pol_invmod(h, g);
+          end if;
+          PGG_GlobalTimer_Swap("mult");
+          tmp := fmodg * hinv;
+          PGG_GlobalTimer_Swap("mod g");
+          tmp := tmp mod g;
+          PGG_GlobalTimer_Swap("add");
+          gnew := g + tmp;
+        end if;
+        PGG_GlobalTimer_Swap("check");
+        assert Degree(gnew) eq width;
+        assert Valuation(Coefficient(g, 0)) eq v0-v1;
+        assert Valuation(Coefficient(g, width)) eq 0;
+        delta := g - gnew;
+        PGG_GlobalTimer_Pop();
+        if forall{i : i in [0..width] | IsWeaklyZero(Coefficient(delta, i))} then
+          vprint PGG_GaloisGroup: "f mod g =", fmodg;
+          Append(~factors, g);
+          continue n;
+        else
+          g := R ! [IsWeaklyZero(c) select 0 else ChangePrecision(c, pr) : c in Coefficients(gnew)];
+        end if;
+      end while;
+    end for;
+    return factors;
+  else
+    error "invalid algorithm:", alg;
+  end case;
+end function;
+
+function multiplicities_to_information(mults)
+  mults := [m : m in mults | m ne 0];
+  assert forall{m : m in mults | m gt 0};
+  assert #mults gt 0;
+  if #mults eq 1 then
+    return 0.0;
+  end if;
+  total := &+mults;
+  ans := &+[-p*Log(2,p) where p:=m/total : m in mults];
+  assert ans gt 0;
+  return ans;
+end function;
+
+function largest_coefficient(x)
+  if IsPrimeField(Parent(x)) then
+    return Abs(x);
+  else
+    return Max([largest_coefficient(c) : c in Eltseq(x)]);
+  end if;
+end function;
+
+function reduce_coefficients(x, M)
+  if IsPrimeField(Parent(x)) then
+    return Parent(x) ! ((Z!x) mod M);
+  else
+    return Parent(x) ! [reduce_coefficients(c, M) : c in Eltseq(x)];
+  end if;
+end function;
+
+function startswith(x, y)
+  if #x ge #y and x[1..#y] eq y then
+    return true, x[#y+1..#x];
+  else
+    return false, _;
+  end if;
+end function;
+
+procedure seq_idiff(~xs, ys)
+  ys := {y : y in ys};
+  xs := [xs[i] : i in [1..#xs] | xs[i] notin ys];
+end procedure;
+
+// a bound on |f(a_1,...,a_n)| where |a_i| le b.
+// f is a RngSLPolElt
+function slpol_bound(f, b)
+  op := Operator(f);
+  f1, f2 := Operands(f);
+  case op:
+  when "var":
+    return b;
+  when "const":
+    return Abs(f1);
+  when "+", "-":
+    return slpol_bound(f1, b) + slpol_bound(f2, b);
+  when "*":
+    return slpol_bound(f1, b) * slpol_bound(f2, b);
+  when "^":
+    return slpol_bound(f1, b) ^ f2;
+  else
+    assert false;
+  end case;
+end function;
+
+function permute_seq(g, xs)
+  d := Degree(Parent(g));
+  assert d eq #xs;
+  return [xs[i^g] : i in [1..d]];
+end function;
+
+procedure pop_start(~x, ~xs)
+  assert #xs ne 0;
+  x := xs[1];
+  xs := xs[2..#xs];
+end procedure;
+
+function polynomial_with_roots(rs)
+  U := Universe(rs);
+  R := PolynomialRing(U);
+  return &*[R| [-r, 1] : r in rs];
+end function;
+
+function left_coset_representatives(G, H)
+  assert H subset G;
+  cosets, indices := DoubleCosetRepresentatives(G, H, sub<G | 1>);
+  return cosets;
+end function;
+
+function is_extension_of(L, K)
+  if L eq K then
+    return true, [K];
+  elif IsPrimeField(L) then
+    return false, _;
+  else
+    ok, twr := is_extension_of(BaseField(L), K);
+    if ok then
+      return true, Append(twr, L);
+    else
+      return false, _;
+    end if;
+  end if;
+end function;
+
+function tower(L, K)
+  ok, twr := is_extension_of(L, K);
+  assert ok;
+  return twr;
+end function;
+
+function is_in_standard_form(L, K)
+  t := tower(L, K);
+  if #t eq 1 then
+    return true, K;
+  elif #t eq 2 then
+    if RamificationDegree(t[2]) gt 1 then
+      return true, K;
+    elif InertiaDegree(t[2]) gt 1 then
+      return true, L;
+    end if;
+  elif #t eq 3 then
+    U := t[2];
+    if RamificationDegree(L) gt 1 and InertiaDegree(U) gt 1 then
+      return true, U;
+    end if;
+  end if;
+  return false, _;
+end function;
+
+function valuation_eq(c, n)
+  if Valuation(c) gt n then
+    return false;
+  elif IsWeaklyZero(c) then
+    precision_error();
+  else
+    return Valuation(c) eq n;
+  end if;
+end function;
+
+function valuation_ge(c, n)
+  if Valuation(c) ge n then
+    return true;
+  elif IsWeaklyZero(c) then
+    precision_error();
+  else
+    return false;
+  end if;
+end function;
+
+function is_eisenstein(f)
+  d := Degree(f);
+  return (d ge 0) and valuation_eq(Coefficient(f, d), 0) and valuation_eq(Coefficient(f, 0), 1) and forall{i : i in [1..d-1] | valuation_ge(Coefficient(f, i), 1)};
+end function;
+
+function xdiv(x, y)
+  ok, z := IsDivisibleBy(x, y);
+  assert ok;
+  return z;
+end function;
+
+// solves S*M=V for S
+function solve(M, V)
+  return V * M^-1;
+  ok, S := IsSolvable(M, V);
+  if ok then
+    return S;
+  else
+    return V * M^-1;
+  end if;
+end function;
+
+// given L/K and a sequence pis of elements of L which are uniformizing elements of subextensions K(pis[#pis])/.../K(pis[1]), return this tower from the bottom up
+function tower_from_uniformizers(L, K, pis : alg:="LA")
+  assert Universe(pis) eq L;
+  assert not IsPrimeField(L);
+  assert BaseField(L) eq K;
+  t := [];
+  K2 := K;
+  L2 := L;
+  LtoL2 := map<L -> L2 | x :-> x>;
+  f := DefiningPolynomial(L);
+  Lpi := L.1;
+  for i in [1..#pis] do
+    PGG_GlobalTimer_Push("minimal polynomial");
+    pi2 := LtoL2(pis[i]);
+    m := MinimalPolynomial(pi2, K2);
+    PGG_GlobalTimer_Swap("factorization");
+    assert is_eisenstein(m);
+    d := Degree(m);
+    n := xdiv(Degree(L2, K2), d);
+    if d gt 1 then
+      K2new := ext<K2 | ChangePrecision(m, Precision(K2))>;
+      case alg:
+      when "Factorization":
+        f2 := factorization(ChangeRing(f, K2new))[1];
+      when "LA":
+        V := VectorSpace(K2, Degree(L2, K2));
+        vmap := map<L2 -> V | x :-> V!Eltseq(x), y :-> L2!Eltseq(y)>;
+        L2pi := LtoL2(Lpi);
+        vec := vmap(L2pi^n);
+        mat := Matrix([vmap(L2pi^i * pi2^j) : j in [0..d-1], i in [0..n-1]]);
+        coeffs := Eltseq(solve(mat, vec));
+        f2 := Polynomial([K2new| i eq n select 1 else -&+[coeffs[i*d+j+1] * K2new.1^j : j in [0..d-1]] : i in [0..n]]);
+      else
+        assert false;
+      end case;
+      assert Degree(f2) eq n;
+      assert is_eisenstein(f2);
+      L2new := ext<K2new | ChangePrecision(f2, Precision(L2))>;
+      LtoL2new := map<L -> L2new | x :-> &+[L2new| L2new.1^(i-1) * cs[i] : i in [1..#cs]] where cs:=Eltseq(x)>;
+      // rename for iterating
+      K2 := K2new;
+      L2 := L2new;
+      LtoL2 := LtoL2new;
+    end if;
+    Append(~t, K2);
+    PGG_GlobalTimer_Pop();
+  end for;
+  return t;
+end function;
+
+function ramification_tower(L, K)
+  ok, U := is_in_standard_form(L, K);
+  assert ok;
+  if L eq K then
+    return [K];
+  elif L eq U then
+    return [K, U];
+  elif U eq K then
+    f := DefiningPolynomial(L);
+    R := Parent(f);
+    assert is_eisenstein(f);
+    pi := L.1;
+    assert IsWeaklyZero(Evaluate(f, pi));
+    r := Evaluate(f, PolynomialRing(L) ! [pi, 1]);
+    assert IsWeaklyZero(Coefficient(r, 0));
+    PGG_GlobalTimer_Push("newton polygon factorization");
+    rfacs := [R.1] cat newton_polygon_factorization(r div R.1);
+    PGG_GlobalTimer_Swap("get uniformizers");
+    assert Degree(rfacs[1]) eq 1;
+    assert forall{i : i in [1..#rfacs] | IsDivisibleBy(Degree(f), &+[Degree(rfacs[j]) : j in [1..i]])};
+    crfacs := [&*rfacs[1..i] : i in [1..#rfacs]];
+    cffacs := [Evaluate(crfac, PolynomialRing(L) ! [-pi, 1]) : crfac in crfacs];
+    pis := [Coefficient(cffac, 0) : cffac in cffacs];
+    PGG_GlobalTimer_Swap("tower from uniformizers");
+    twr := tower_from_uniformizers(L, K, Reverse(pis));
+    PGG_GlobalTimer_Pop();
+    return twr;
+  else
+    return [K] cat ramification_tower(L, U);
+  end if;
+end function;
+
+function random_element(E, B)
+  if IsPrimeField(E) then
+    return E ! Random(B);
+  else
+    return E ! [random_element(BaseField(E), B) : i in [1..Degree(E)]];
+  end if;
+end function;
+
+function random_primitive_element(E, F)
+  d := Degree(E, F);
+  if d eq 1 then
+    return E!0, PolynomialRing(F)![0,1];
+  end if;
+  B := 1;
+  while true do
+    x := random_element(E, B);
+    minpol := MinimalPolynomial(x, F);
+    if Degree(minpol) eq d then
+      return x, minpol;
+    else
+      B +:= 1;
+    end if;
+  end while;
+end function;
+
+function zero(K, apr)
+  z := (K!1) - (K!1);
+  return ShiftValuation(z, apr - AbsolutePrecision(z));
+end function;
+
+function change_apr(x, apr)
+  if IsWeaklyZero(x) or apr le Valuation(x) then
+    return zero(Parent(x), apr);
+  else
+    return ChangePrecision(x, apr - Valuation(x));
+  end if;
+end function;
+
+function residually_primitive_element(K)
+  F, m := ResidueClassField(Integers(K));
+  return PrimitiveElement(F) @@ m;
+end function;
+
+function primitive_element(L, K)
+  if Degree(L, K) eq 1 then
+    return L!1;
+  elif RamificationDegree(L, K) eq 1 then
+    return residually_primitive_element(L);
+  elif InertiaDegree(L, K) eq 1 then
+    return UniformizingElement(L);
+  else
+    return UniformizingElement(L) + residually_primitive_element(L);
+  end if;
+end function;
+
+// the following works, but looks like it was fixed anyway in V2.23-6
+// function automorphism_group(L, K)
+//   ok, twr := is_extension_of(L, K);
+//   assert ok;
+//   if #twr eq 1 or Degree(L, K) eq 1 then
+//     return SymmetricGroup(1);
+//   end if;
+//   hs := Automorphisms(L, K);
+//   us := [h(u) : h in hs] where u:=primitive_element(L, K);
+//   huss := [[h(u) : u in us] : h in hs];
+//   perms := [[the([i : i in [1..#us] | IsWeaklyEqual(hu, us[i])]) : hu in hus] : hus in huss];
+//   return sub<SymmetricGroup(#us) | perms>;
+// end function;
+
+DEFAULT_TSCHIRNHAUS_TRANSFORMATIONS := [PolynomialRing(Z) | [0,1], [0,0,1], [0,-1,1], [0,1,1], [0,0,0,1], [0,1,0,1], [0,-1,0,1], [0,0,1,1], [0,0,-1,1], [0,1,1,1], [0,-1,-1,1]];
+
+function tschirnhaus_transformation(ntries, degree)
+  assert ntries gt 0;
+  if ntries le #DEFAULT_TSCHIRNHAUS_TRANSFORMATIONS then
+    t := DEFAULT_TSCHIRNHAUS_TRANSFORMATIONS[ntries];
+    if Degree(t) le degree then
+      return t;
+    end if;
+  end if;
+  return PolynomialRing(Z) ! [Random(1,ntries) : i in [1..degree]];
+end function;
+
+function dflt(what, d)
+  return (what cmpne false) select what else d;
+end function;
+
+function dedupe_conjugage_subgroups(G, Hs)
+  CG := PGG_SubgroupClasses(G);
+  return [Rep(c) : c in {CG ! H : H in Hs}];
+end function;
+
+// non-checking version
+// TODO: consider _is_subpartition_of({*1^^9*},{*2,3,4*}); currently we try assigning 1 to each of 2, 3, 4, and then assign 1 again, and keep going; but since we are assigning the same thing over and over, the order that these occur in is unimportant, so we are repeating work; hence, we should do a strategy which assigns all of the same element in one go
+function _is_subpartition_of(P, Q)
+  if #P eq 0 then
+    assert #Q eq 0;
+    return true;
+  end if;
+  assert #P gt 0;
+  assert #Q gt 0;
+  // pick an element of p
+  // hopefully dealing with the largest ones first is optimal
+  p := Max(P);
+  P2 := Exclude(P, p);
+  // pick an element of Q it could come from
+  for q in MultisetToSet(Q) do
+    if p le q then
+      Q2 := Exclude(Q, q);
+      if p lt q then
+        Include(~Q2, q-p);
+      end if;
+      ok := _is_subpartition_of(P2, Q2);
+      if ok then
+        return true;
+      end if;
+    end if;
+  end for;
+  return false;
+end function;
+
+// given two multisets of positive integers, determine if P may be obtained by partitioning each element of Q
+function is_subpartition_of(P, Q)
+  assert Type(P) eq SetMulti;
+  assert Type(Q) eq SetMulti;
+  assert Universe(P) cmpeq Z;
+  assert Universe(Q) cmpeq Z;
+  assert forall{x : x in MultisetToSet(P) | x gt 0};
+  assert forall{x : x in MultisetToSet(Q) | x gt 0};
+  assert ((#P eq 0) and (#Q eq 0)) or ((#P gt 0) and (#Q gt 0) and (&+P eq &+Q));
+  return _is_subpartition_of(P, Q);
+end function;

@@ -1,0 +1,85 @@
+import "Utils.mag": not_implemented;
+
+declare type PGGAlg_ResPriority: PGGAlg;
+declare type PGGAlg_ResPriority_Null: PGGAlg_ResPriority;
+declare type PGGAlg_ResPriority_Random: PGGAlg_ResPriority;
+declare type PGGAlg_ResPriority_Reverse: PGGAlg_ResPriority;
+declare attributes PGGAlg_ResPriority_Reverse: priority;
+declare type PGGAlg_ResPriority_Key: PGGAlg_ResPriority;
+declare attributes PGGAlg_ResPriority_Key: key;
+
+intrinsic PGGAlg_ResPriority_Null_Make() -> PGGAlg_ResPriority_Null_Make
+  {The "Null" subgroups priority.}
+  alg := New(PGGAlg_ResPriority_Null);
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_ResPriority_Random_Make() -> PGGAlg_ResPriority_Random_Make
+  {The "Random" subgroups priority.}
+  alg := New(PGGAlg_ResPriority_Random);
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_ResPriority_Reverse_Make(:Priority:=false) -> PGGAlg_ResPriority_Reverse_Make
+  {The "Reverse" subgroups priority.}
+  alg := New(PGGAlg_ResPriority_Reverse);
+  alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_ResPriority_Key_Make(key :: PGGExpr) -> PGGAlg_ResPriority_Key
+  {The "Key" subgroups priority.}
+  alg := New(PGGAlg_ResPriority_Key);
+  assert FreeVariables(key) subset {"Index", "OrbitIndex", "Diversity", "Information"};
+  alg`key := key;
+  return alg;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResPriority_Null)
+  {Print.}
+  printf "null";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResPriority_Random)
+  {"}
+  printf "random";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResPriority_Reverse)
+  {"}
+  print "reverse of %o", alg`priority;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResPriority_Key)
+  {"}
+  printf "key %o", alg`key;
+end intrinsic;
+
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Null, s :: PGGAlgState_ResGroups) -> .
+  {Prioritizes X.}
+  return X;
+end intrinsic;
+
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Reverse, s :: PGGAlgState_ResGroups) -> .
+  {Prioritizes X.}
+  return Reverse(Prioritize(X, P`priority, s));
+end intrinsic;
+
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Random, s :: PGGAlgState_ResGroups) -> .
+  {Prioritizes X.}
+  return Shuffle(X);
+end intrinsic;
+
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Key, s :: PGGAlgState_ResGroups) -> .
+  {"}
+  return SortBy(X, function (i)
+    return Evaluate(P`key, func<name | case<name |
+      "Index": Index(s`overgroup, i`subgroup),
+      "OrbitIndex": Index(s`overgroup, Stabilizer(s`overgroup, [{x : x in o} : o in Orbits(i`subgroup)])),
+      "Diversity": Diversity(i, s),
+      "Information": Information(i, s),
+      default: not_implemented(name)
+    >>);
+  end function);
+end intrinsic;
+

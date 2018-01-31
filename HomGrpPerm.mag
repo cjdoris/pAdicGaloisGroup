@@ -1,0 +1,131 @@
+import "Utils.mag": not_implemented;
+
+declare type PGGHomGrpPerm;
+declare attributes PGGHomGrpPerm: domain, codomain, hom;
+
+declare type PGGHomGrpPerm_Id: PGGHomGrpPerm;
+
+declare type PGGHomGrpPerm_DirProd: PGGHomGrpPerm;
+declare attributes PGGHomGrpPerm_DirProd: factors;
+
+declare type PGGHomGrpPerm_WrProd: PGGHomGrpPerm;
+declare attributes PGGHomGrpPerm_WrProd: factors;
+
+DOM := Domain;
+CODOM := Codomain;
+
+intrinsic Domain(h :: PGGHomGrpPerm) -> PGGGrpPerm
+  {The domain.}
+  return h`domain;
+end intrinsic;
+
+intrinsic Codomain(h :: PGGHomGrpPerm) -> PGGGrpPerm
+  {The codomain.}
+  return h`codomain;
+end intrinsic;
+
+intrinsic PGGHomGrpPerm_Id_Make(G :: PGGGrpPerm, H :: PGGGrpPerm) -> PGGHomGrpPerm
+  {The identity homomorphism.}
+  require Degree(G) eq Degree(H) and Group(G) subset Group(H): "no such embedding";
+  h := New(PGGHomGrpPerm_Id);
+  h`domain := G;
+  h`codomain := H;
+  return h;
+end intrinsic;
+
+intrinsic IdentityHomomorphism(G :: PGGGrpPerm, H :: PGGGrpPerm) -> PGGHomGrpPerm
+  {"}
+  return PGGHomGrpPerm_Id_Make(G, H);
+end intrinsic;
+
+intrinsic PGGHomGrpPerm_WrProd_Make(hs :: Tup : Domain:=false, Codomain:=false) -> PGGHomGrpPerm_WrProd
+  {The hom from the wreath product of the domains to the wreath product of the codomains.}
+  require forall{h : h in hs | ISA(Type(h), PGGHomGrpPerm)}: "hs must be a tuple of PGGHomGrpPerm";
+  if Domain cmpeq false then
+    Domain := PGGGrpPerm_WrProd_Make(<DOM(h) : h in hs>);
+  end if;
+  assert ISA(Type(Domain), PGGGrpPerm_WrProd);
+  assert #Domain`factors eq #hs;
+  assert forall{i : i in [1..#hs] | Group(DOM(hs[i])) eq Group(Domain`factors[i])};
+  if Codomain cmpeq false then
+    Codomain := PGGGrpPerm_WrProd_Make(<CODOM(h) : h in hs>);
+  end if;
+  assert ISA(Type(Codomain), PGGGrpPerm_WrProd);
+  assert #Codomain`factors eq #hs;
+  assert forall{i : i in [1..#hs] | Group(CODOM(hs[i])) eq Group(Codomain`factors[i])};
+  h := New(PGGHomGrpPerm_WrProd);
+  h`domain := Domain;
+  h`codomain := Codomain;
+  h`factors := hs;
+  return h;
+end intrinsic;
+
+intrinsic WreathProduct(hs :: [PGGHomGrpPerm] : Domain:=false, Codomain:=false) -> PGGHomGrpPerm_WrProd
+  {"}
+  return PGGHomGrpPerm_WrProd_Make(<h : h in hs> : Domain:=Domain, Codomain:=Codomain);
+end intrinsic;
+
+intrinsic PGGHomGrpPerm_DirProd_Make(hs :: Tup : Domain:=false, Codomain:=false) -> PGGHomGrpPerm_DirProd
+  {The hom from the direct product of the domains to the wreath product of the codomains.}
+  require forall{h : h in hs | ISA(Type(h), PGGHomGrpPerm)}: "hs must be a tuple of PGGHomGrpPerm";
+  if Domain cmpeq false then
+    Domain := PGGGrpPerm_DirProd_Make(<DOM(h) : h in hs>);
+  else
+  end if;
+  assert ISA(Type(Domain), PGGGrpPerm_DirProd);
+  assert #Domain`factors eq #hs;
+  assert forall{i : i in [1..#hs] | Group(DOM(hs[i])) eq Group(Domain`factors[i])};
+  if Codomain cmpeq false then
+    Codomain := PGGGrpPerm_DirProd_Make(<CODOM(h) : h in hs>);
+  end if;
+  assert ISA(Type(Codomain), PGGGrpPerm_DirProd);
+  assert #Domain`factors eq #hs;
+  assert forall{i : i in [1..#hs] | Group(CODOM(hs[i])) eq Group(Codomain`factors[i])};
+  h := New(PGGHomGrpPerm_DirProd);
+  h`domain := Domain;
+  h`codomain := Codomain;
+  h`factors := hs;
+  return h;
+end intrinsic;
+
+intrinsic DirectProduct(hs :: [PGGHomGrpPerm] : Domain:=false, Codomain:=false) -> PGGHomGrpPerm_DirProd
+  {"}
+  return PGGHomGrpPerm_DirProd_Make(<h : h in hs> : Domain:=Domain, Codomain:=Codomain);
+end intrinsic;
+
+intrinsic Hom(h :: PGGHomGrpPerm) -> Map
+  {The underlying homomorphism.}
+  if not assigned h`hom then
+    h`hom := _Hom(h);
+  end if;
+  return h`hom;
+end intrinsic;
+
+intrinsic _Hom(h :: PGGHomGrpPerm_Id) -> Map
+  {"}
+  G := Group(Domain(h));
+  H := Group(Codomain(h));
+  return hom<G -> H | [H| G.i : i in [1..Ngens(G)]]>;
+end intrinsic;
+
+intrinsic _Hom(h :: PGGHomGrpPerm_WrProd) -> Map
+  {"}
+  G := Group(Domain(h));
+  H := Group(Codomain(h));
+  gens := [H| Compose(hparts, Codomain(h)) where hparts := <[g @ h`factors[j] : g in gparts[j]] : j in [1..#h`factors]> where gparts := Decompose(g, Domain(h)) where g := G.i : i in [1..Ngens(G)]];
+  return hom<G -> H | gens>;
+end intrinsic;
+
+intrinsic _Hom(h :: PGGHomGrpPerm_DirProd) -> Map
+  {"}
+  G := Group(Domain(h));
+  H := Group(Codomain(h));
+  gens := [H | Compose(hparts, Codomain(h)) where hparts := <gparts[i] @ h`factors[i] : i in [1..#gparts]> where gparts := Decompose(g, Domain(h)) where g := G.i : i in [1..Ngens(G)]];
+  return hom<G -> H | gens>;
+end intrinsic;
+
+intrinsic '@'(x, h :: PGGHomGrpPerm) -> GrpPermElt
+  {Application.}
+  return x @ Hom(h);
+end intrinsic;
+

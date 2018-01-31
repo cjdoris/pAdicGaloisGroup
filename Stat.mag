@@ -1,0 +1,325 @@
+import "Utils.mag": has_root, roots, factorization, extension, not_implemented, is_subpartition_of;
+
+declare type PGGStat;
+declare type PGGStat_HasRoot: PGGStat;
+declare type PGGStat_NumRoots: PGGStat;
+declare type PGGStat_FactorDegrees: PGGStat;
+declare type PGGStat_FactorDegrees2: PGGStat;
+declare type PGGStat_Degree: PGGStat;
+declare type PGGStat_Order: PGGStat;
+declare type PGGStat_AutGroup: PGGStat;
+declare attributes PGGStat_AutGroup: conjugacy_classes;
+declare type PGGStat_Tup: PGGStat;
+declare attributes PGGStat_Tup: stats;
+declare type PGGStat_Factors: PGGStat;
+declare attributes PGGStat_Factors: stat;
+
+declare type PGGStatVal;
+declare attributes PGGStatVal: stat, value, hash;
+
+intrinsic MakeValue(S :: PGGStat, value) -> PGGStatVal
+  {A value for the statistic S.}
+  x := New(PGGStatVal);
+  x`stat := S;
+  x`value := value;
+  return x;
+end intrinsic;
+
+intrinsic Hash(v :: PGGStatVal) -> .
+  {Hash of v.}
+  if not assigned v`hash then
+    v`hash := _Hash(v`stat, v);
+  end if;
+  return v`hash;
+end intrinsic;
+
+intrinsic 'eq'(S1 :: PGGStat, S2 :: PGGStat) -> BoolElt
+  {Equality.}
+  return IsIdentical(S1, S2);
+end intrinsic;
+
+intrinsic 'eq'(v1 :: PGGStatVal, v2 :: PGGStatVal) -> BoolElt
+  {Equality.}
+  require v1`stat eq v2`stat: "must be values of the same statistic";
+  return 'eq'(v1`stat, v1, v2);
+end intrinsic;
+
+intrinsic 'subset'(v1 :: PGGStatVal, v2 :: PGGStatVal) -> BoolElt
+  {True if v1 is possibly a statistic for a subgroup of the group v2 is a subset for.}
+  require v1`stat eq v2`stat: "must be values of the same statistic";
+  return 'subset'(v1`stat, v1, v2);
+end intrinsic;
+
+intrinsic Print(v :: PGGStatVal)
+  {Prints.}
+  _Print(v`stat, v);
+end intrinsic;
+
+intrinsic PGGStat_HasRoot_Make() -> PGGStat_HasRoot
+  {Makes a new PGGStat.}
+  return New(PGGStat_HasRoot);
+end intrinsic;
+
+intrinsic PGGStat_NumRoots_Make() -> PGGStat_NumRoots
+  {Makes a new PGGStat.}
+  return New(PGGStat_NumRoots);
+end intrinsic;
+
+intrinsic PGGStat_FactorDegrees_Make() -> PGGStat_FactorDegrees
+  {Makes a new PGGStat.}
+  return New(PGGStat_FactorDegrees);
+end intrinsic;
+
+intrinsic PGGStat_FactorDegrees2_Make() -> PGGStat_FactorDegrees2
+  {"}
+  return New(PGGStat_FactorDegrees2);
+end intrinsic;
+
+intrinsic PGGStat_AutGroup_Make() -> PGGStat_AutGroup
+  {"}
+  return New(PGGStat_AutGroup);
+end intrinsic;
+
+intrinsic PGGStat_Degree_Make() -> PGGStat_Degree
+  {Makes a new PGGStat.}
+  return New(PGGStat_Degree);
+end intrinsic;
+
+intrinsic PGGStat_Order_Make() -> PGGStat_Order
+  {"}
+  return New(PGGStat_Order);
+end intrinsic;
+
+intrinsic PGGStat_Factors_Make(:Stat:=false) -> PGGStat_Factors
+  {Makes a new PGGStat.}
+  S := New(PGGStat_Factors);
+  S`stat := Stat cmpne false select Stat else PGGStat_Degree_Make();
+  return S;
+end intrinsic;
+
+intrinsic PGGStat_Tup_Make(args) -> PGGStat_Tup
+  {Makes a new PGGStat.}
+  S := New(PGGStat_Tup);
+  S`stats := args;
+  return S;
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_HasRoot)
+  {Print.}
+  printf "has root";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_NumRoots)
+  {"}
+  printf "number of roots";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_FactorDegrees)
+  {"}
+  printf "degrees of factors";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_FactorDegrees2)
+  {"}
+  printf "degrees of factors of factors";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_AutGroup)
+  {"}
+  printf "automorphism group";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_Degree)
+  {"}
+  printf "degree";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_Factors)
+  {"}
+  printf "factors -> %o", S`stat;
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_Tup)
+  {"}
+  if #S`stats eq 0 then
+    printf "tuple (empty)";
+  else
+    print "tuple";
+    IndentPush();
+    for i in [1..#S`stats-1] do
+      print S`stats[i];
+    end for;
+    printf "%o", S`stats[#S`stats];
+    IndentPop();
+  end if;
+end intrinsic;
+intrinsic ConjugacyClasses(S :: PGGStat_AutGroup, d :: RngIntElt) -> PGGSetSubgrpcls
+  {The conjugacy classes of Sym(d).}
+  if not assigned S`conjugacy_classes then
+    S`conjugacy_classes := AssociativeArray();
+  end if;
+  if not IsDefined(S`conjugacy_classes, d) then
+    S`conjugacy_classes[d] := PGG_SubgroupClasses(SymmetricGroup(d));
+  end if;
+  return S`conjugacy_classes[d];
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_HasRoot, G :: GrpPerm) -> PGGStatVal
+  {The value of the statistic on the group.}
+  return MakeValue(S, exists{o : o in Orbits(G) | #o eq 1});
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_NumRoots, G :: GrpPerm) -> PGGStatVal
+  {The value of the statistic on the group.}
+  return MakeValue(S, #[o : o in Orbits(G) | #o eq 1]);
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_FactorDegrees, G :: GrpPerm) -> PGGStatVal
+  {The value of the statistic on the group.}
+  return MakeValue(S, {* #o : o in Orbits(G) *});
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_FactorDegrees2, G :: GrpPerm) -> PGGStatVal
+  {"}
+  return MakeValue(S, {* <#o, {*#o : o in Orbits(S)*}> where S:=Stabilizer(G, Rep(o)) : o in Orbits(G)*});
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_Degree, G :: GrpPerm) -> PGGStatVal
+  {The value of the statistic on the group.}
+  return MakeValue(S, Degree(G));
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_Order, G :: GrpPerm) -> PGGStatVal
+  {"}
+  return MakeValue(S, #G);
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_AutGroup, G :: GrpPerm) -> PGGStatVal
+  {"}
+  assert IsTransitive(G);
+  stab := Stabilizer(G, 1);
+  norm := Normalizer(G, stab);
+  aut := CosetImage(norm, stab);
+  return MakeValue(S, ConjugacyClasses(S, Degree(aut)) ! aut);
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_Tup, G :: GrpPerm) -> PGGStatVal
+  {The value of the statistic on the group.}
+  return MakeValue(S, <GroupStat(S2, G) : S2 in S`stats>);
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_Factors, G :: GrpPerm) -> PGGStatVal
+  {The value of the statistic on the group.}
+  return MakeValue(S, {* GroupStat(S`stat, OrbitImage(G, o)) : o in Orbits(G) *});
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_HasRoot, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {The value of the statistic on the resolvent.}
+  return MakeValue(S, has_root(R));
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_NumRoots, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {The value of the statistic on the resolvent.}
+  return MakeValue(S, #roots(R));
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_FactorDegrees, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {The value of the statistic on the resolvent.}
+  return MakeValue(S, {* Degree(fac) : fac in factorization(R) *});
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_FactorDegrees2, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {"}
+  return MakeValue(S, {* <Degree(fac), {* Degree(fac) : fac in factorization(ChangeRing(R, L)) *}> where L:=certs[i]`Extension where fac:=facs[i] : i in [1..#facs] *} where facs,certs:=factorization(R : Extensions));
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_Degree, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {The value of the statistic on the resolvent.}
+  return MakeValue(S, Degree(R));
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_AutGroup, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {"}
+  K := BaseRing(R);
+  L := extension(R);
+  aut := AutomorphismGroup(L, K);
+  return MakeValue(S, ConjugacyClasses(S, Degree(aut)) ! aut);
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_Tup, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {The value of the statistic on the resolvent.}
+  return MakeValue(S, <ResolventStat(S2, R) : S2 in S`stats>);
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_Factors, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {The value of the statistic on the resolvent.}
+  return MakeValue(S, {* ResolventStat(S`stat, fac) : fac in factorization(R) *});
+end intrinsic;
+
+intrinsic 'eq'(S :: PGGStat, v1, v2) -> BoolElt
+  {Equality.}
+  return v1`value eq v2`value;
+end intrinsic;
+
+intrinsic 'eq'(S :: PGGStat_AutGroup, v1, v2) -> BoolElt
+  {"}
+  return Degree(Rep(v1`value)) eq Degree(Rep(v2`value)) and v1`value eq v2`value;
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat, v1, v2) -> BoolElt
+  {True if v1 is a refinement of v2.}
+  not_implemented("subset: ", Type(S));
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_HasRoot, v1, v2) -> BoolElt
+  {"}
+  return (not v2`value) or (v1`value);
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_NumRoots, v1, v2) -> BoolElt
+  {"}
+  return v1`value ge v2`value;
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_FactorDegrees, v1, v2) -> BoolElt
+  {"}
+  return is_subpartition_of(v1`value, v2`value);
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_Degree, v1, v2) -> BoolElt
+  {"}
+  return v1`degree eq v2`degree;
+end intrinsic;
+
+// Is it true that if H<G then N_G(Stab_G(1))/Stab_G(1) < N_H(Stab_H(1))/Stab_H(1)?
+// AG < AH <=> NG/SG < NH/SH = NH/(SG meet NH) ~ (NH SG)/SG <=> NG < NH SG ?
+// It is true for all transitive groups of degree up to 15.
+// 
+// SG = {s in G : s(1)=1}
+// SH = {s in H : s(1)=1} = SG meet H
+// NG = {n in G : s in SG => s^n in SG} = {n in G : s in G, s(1)=1 => (s^n)(1)=1 i.e. s(n(1))=n(1)}
+// 
+// intrinsic 'subset'(S :: PGGStat_AutGroup, v1, v2) -> BoolElt
+//   {"}
+// end intrinsic;
+
+intrinsic _Hash(S :: PGGStat, v) -> .
+  {Hash.}
+  return Hash(v`value);
+end intrinsic;
+
+intrinsic _Hash(S :: PGGStat_AutGroup, v) -> .
+  {"}
+  return Hash(<Degree(Rep(v`value)), v`value>);
+end intrinsic;
+
+intrinsic _Print(S :: PGGStat, v)
+  {"}
+  printf "%o", v`value;
+end intrinsic;
+
+intrinsic _Print(S :: PGGStat_AutGroup, v)
+  {"}
+  printf "%o", GroupName(Rep(v`value));
+end intrinsic;
+

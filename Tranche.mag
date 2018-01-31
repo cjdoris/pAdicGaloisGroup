@@ -1,0 +1,320 @@
+import "Utils.mag": not_implemented, sort_by, xdiv;
+
+declare type PGGAlg_Tranche: PGGAlg;
+declare attributes PGGAlg_Tranche: verbosity;
+declare type PGGAlg_Tranche_All: PGGAlg_Tranche;
+declare type PGGAlg_Tranche_Index: PGGAlg_Tranche;
+declare attributes PGGAlg_Tranche_Index: filter, sort_key;
+declare type PGGAlg_Tranche_OrbitIndex: PGGAlg_Tranche;
+declare attributes PGGAlg_Tranche_OrbitIndex: filter, sort_key;
+
+declare type PGGAlgState_Tranche: PGGAlgState;
+declare attributes PGGAlgState_Tranche: overgroup;
+declare type PGGAlgState_Tranche_All: PGGAlgState_Tranche;
+declare attributes PGGAlgState_Tranche_All: all_groups, tranche;
+declare type PGGAlgState_Tranche_Index: PGGAlgState_Tranche;
+declare attributes PGGAlgState_Tranche_Index: indices, ii, all_groups, tranche;
+declare type PGGAlgState_Tranche_OrbitIndex: PGGAlgState_Tranche;
+declare attributes PGGAlgState_Tranche_OrbitIndex: indices, ii, si, all_groups, all_stabilizers, cur_stabilizers, tranche;
+
+declare type PGGAlgState_TrancheItem;
+declare attributes PGGAlgState_TrancheItem: state, idx, tidx, subgroup;
+
+intrinsic PGGAlg_Tranche_All_Make(:Verbosity:=1) -> PGGAlg_Tranche_All
+  {The "All" subgroups choice.}
+  alg := New(PGGAlg_Tranche_All);
+  alg`verbosity := Verbosity;
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_Tranche_Index_Make(:Filter:=false, SortKey:=false, Verbosity:=1) -> PGGAlg_Tranche_Index
+  {The "Index" subgroups choice.}
+  alg := New(PGGAlg_Tranche_Index);
+  alg`verbosity := Verbosity;
+  alg`filter := Filter;
+  alg`sort_key := SortKey;
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_Tranche_OrbitIndex_Make(:Filter:=false, SortKey:=false, Verbosity:=1) -> PGGAlg_Tranche_OrbitIndex
+  {The "Index" subgroups choice.}
+  alg := New(PGGAlg_Tranche_OrbitIndex);
+  alg`verbosity := Verbosity;
+  alg`filter := Filter;
+  alg`sort_key := SortKey;
+  return alg;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Tranche_All)
+  {Print.}
+  printf "all";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Tranche_Index)
+  {"}
+  print "index";
+  IndentPush();
+  print "filter =", alg`filter cmpeq false select "none" else alg`filter;
+  printf "sort by = %o", alg`sort_key cmpeq false select "none" else alg`sort_key;
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Tranche_OrbitIndex)
+  {"}
+  print "orbit index";
+  IndentPush();
+  print "filter =", alg`filter cmpeq false select "none" else alg`filter;
+  printf "sort by = %o", alg`sort_key cmpeq false select "none" else alg`sort_key;
+  IndentPop();
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_Tranche_All, overgroup :: PGGGrpPerm) -> PGGAlgState_Tranche_All
+  {Starts alg.}
+  s := New(PGGAlgState_Tranche_All);
+  s`algorithm := alg;
+  s`overgroup := overgroup;
+  return s;
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_Tranche_Index, overgroup :: PGGGrpPerm) -> PGGAlgState_Tranche_Index
+  {"}
+  s := New(PGGAlgState_Tranche_Index);
+  s`algorithm := alg;
+  s`overgroup := overgroup;
+  s`indices := Divisors(#Group(overgroup));
+  if alg`filter cmpne false then
+    s`indices := [n : n in s`indices | Evaluate(alg`filter, func<name | case<name | "idx": n, default: not_implemented()>>)];
+  end if;
+  if alg`sort_key cmpne false then
+    s`indices := sort_by(s`indices, func<n | Evaluate(alg`filter, func<name | case<name | "idx": n, default: not_implemented()>>)>);
+  else
+    s`indices := Sort(s`indices);
+  end if;
+  s`all_groups := [];
+  Reset(s);
+  return s;
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_Tranche_OrbitIndex, overgroup :: PGGGrpPerm) -> PGGAlgState_Tranche_OrbitIndex
+  {"}
+  s := New(PGGAlgState_Tranche_OrbitIndex);
+  s`algorithm := alg;
+  s`overgroup := overgroup;
+  s`indices := [<idx,ridx> : ridx in Divisors(idx), idx in Divisors(#Group(overgroup))];
+  if alg`filter cmpne false then
+    s`indices := [nr : nr in s`indices | Evaluate(alg`filter, func<name | case<name | "idx": nr[1], "ridx": nr[2], "oidx": nr[1] div nr[2], default: not_implemented()>>)];
+  end if;
+  if alg`sort_key cmpne false then
+    s`indices := sort_by(s`indices, func<nr | Evaluate(alg`filter, func<name | case<name | "idx": nr[1], "ridx": nr[2], "oidx": nr[1] div nr[2], default: not_implemented()>>)>);
+  else
+    s`indices := Sort(s`indices);
+  end if;
+  vprint PGG_GaloisGroup: "indices =", s`indices;
+  s`all_groups := AssociativeArray();
+  s`all_stabilizers := [];
+  Reset(s);
+  return s;
+end intrinsic;
+
+intrinsic Reset(s :: PGGAlgState_Tranche)
+  {Starts choosing from the beginning again.}
+  SetState(s, InitialState(s));
+end intrinsic;
+
+intrinsic TrancheIndex(s :: PGGAlgState_Tranche_All) -> .
+  {The index of the current tranche.}
+  return false;
+end intrinsic;
+
+intrinsic TrancheIndex(s :: PGGAlgState_Tranche_Index) -> .
+  {"}
+  return s`ii;
+end intrinsic;
+
+intrinsic TrancheIndex(s :: PGGAlgState_Tranche_OrbitIndex) -> .
+  {"}
+  return <s`ii, s`si>;
+end intrinsic;
+
+intrinsic InitialState(s :: PGGAlgState_Tranche_All) -> .
+  {Gets the initial state of the choice.}
+  return false;
+end intrinsic;
+
+intrinsic InitialState(s :: PGGAlgState_Tranche_Index) -> .
+  {"}
+  return <0, []>;
+end intrinsic;
+
+intrinsic InitialState(s :: PGGAlgState_Tranche_OrbitIndex) -> .
+  {"}
+  return <0, 0, [], []>;
+end intrinsic;
+
+intrinsic CurrentState(s :: PGGAlgState_Tranche_All) -> .
+  {Gets the current state of the choice.}
+  return assigned s`tranche select s`tranche else false;
+end intrinsic;
+
+intrinsic CurrentState(s :: PGGAlgState_Tranche_Index) -> .
+  {"}
+  return <s`ii, s`tranche>;
+end intrinsic;
+
+intrinsic CurrentState(s :: PGGAlgState_Tranche_OrbitIndex) -> .
+  {"}
+  return <s`ii, s`si, s`tranche, s`cur_stabilizers>;
+end intrinsic;
+
+intrinsic SetState(s :: PGGAlgState_Tranche_All, x)
+  {Sets the state of the choice.}
+  if x cmpeq false then
+    if assigned s`tranche then
+      delete s`tranche;
+    end if;
+  else
+    s`tranche := x;
+  end if;
+end intrinsic;
+
+intrinsic SetState(s :: PGGAlgState_Tranche_Index, x)
+  {"}
+  s`ii := x[1];
+  s`tranche := x[2];
+end intrinsic;
+
+intrinsic SetState(s :: PGGAlgState_Tranche_OrbitIndex, x)
+  {"}
+  s`ii := x[1];
+  s`si := x[2];
+  s`tranche := x[3];
+  s`cur_stabilizers := x[4];
+end intrinsic;
+
+intrinsic Tranche(s :: PGGAlgState_Tranche) -> []
+  {Gets a tranche of potential subgroups}
+  ok, t := HasTranche(s);
+  require ok: "no more tranches";
+  assert #t gt 0;
+  return t;
+end intrinsic;
+
+intrinsic HasTranche(s :: PGGAlgState_Tranche_All) -> []
+  {Gets a tranche of potential subgroups.}
+  if not assigned s`tranche then
+    if not assigned s`all_groups then
+      s`all_groups := [x`subgroup : x in Subgroups(Group(s`overgroup))];
+    end if;
+    s`tranche := MakeTranche(s, s`all_groups);
+  end if;
+  if #s`tranche gt 0 then
+    return true, [i : i in s`tranche];
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic HasTranche(s :: PGGAlgState_Tranche_Index) -> []
+  {"}
+  while #s`tranche eq 0 do
+    if s`ii ge #s`indices then
+      return false, _;
+    end if;
+    s`ii +:= 1;
+    index := s`indices[s`ii];
+    vprint PGG_GaloisGroup, s`algorithm`verbosity: "index =", index;
+    if not IsDefined(s`all_groups, s`ii) then
+      s`all_groups[s`ii] := [x`subgroup : x in Subgroups(Group(s`overgroup) : IndexEqual:=index)];
+    end if;
+    s`tranche := MakeTranche(s, s`all_groups[s`ii]);
+  end while;
+  return true, [i : i in s`tranche];
+end intrinsic;
+
+intrinsic HasTranche(s :: PGGAlgState_Tranche_OrbitIndex) -> []
+  {"}
+  while #s`tranche eq 0 do
+    while s`si ge #s`cur_stabilizers do
+      if s`ii ge #s`indices then
+        return false, _;
+      end if;
+      s`ii +:= 1;
+      s`si := 0;
+      idx, ridx := Explode(s`indices[s`ii]);
+      oidx := xdiv(idx, ridx);
+      vprint PGG_GaloisGroup, s`algorithm`verbosity: "index =", idx, ridx, oidx;
+      if not IsDefined(s`all_stabilizers, oidx) then
+        s`all_stabilizers[oidx] := [Stabilizer(Group(s`overgroup), os) : os in OrbitsOfSubgroups(s`overgroup, oidx)];
+        assert forall{S : S in s`all_stabilizers[oidx] | Index(Group(s`overgroup), S) eq oidx};
+      end if;
+      s`cur_stabilizers := s`all_stabilizers[oidx];
+    end while;
+    s`si +:= 1;
+    idx, ridx := Explode(s`indices[s`ii]);
+    k := <idx, ridx, s`si>;
+    if not IsDefined(s`all_groups, k) then
+      s`all_groups[k] := [x`subgroup : x in Subgroups(s`cur_stabilizers[s`si] : IndexEqual:=ridx)];
+      assert forall{U : U in s`all_groups[k] | Index(Group(s`overgroup), U) eq idx};
+    end if;
+    s`tranche := MakeTranche(s, s`all_groups[k]);
+  end while;
+  return true, [i : i in s`tranche];
+end intrinsic;
+
+intrinsic MakeTranche(s :: PGGAlgState_Tranche, groups :: [GrpPerm]) -> .
+  {Makes a new tranche.}
+  return [TrancheItem(s, i, groups[i]) : i in [1..#groups]];
+end intrinsic;
+
+intrinsic TrancheItem(s :: PGGAlgState_Tranche, idx, subgroup :: GrpPerm) -> PGGAlgState_TrancheItem
+  {An item in a tranche.}
+  i := New(PGGAlgState_TrancheItem);
+  i`state := s;
+  i`idx := idx;
+  i`subgroup := subgroup;
+  i`tidx := TrancheIndex(s);
+  return i;
+end intrinsic;
+
+intrinsic Id(i :: PGGAlgState_TrancheItem) -> .
+  {Identifies this tranche item uniquely.}
+  return <i`idx, i`tidx>;
+end intrinsic;
+
+intrinsic Hash(i :: PGGAlgState_TrancheItem) -> .
+  {Hash.}
+  return Hash(Id(i));
+end intrinsic;
+
+intrinsic 'eq'(i :: PGGAlgState_TrancheItem, j :: PGGAlgState_TrancheItem) -> .
+  {Equality.}
+  require IsIdentical(i`state, j`state): "must be from the same set of tranches";
+  return Id(i) eq Id(j);
+end intrinsic;
+
+intrinsic ForgetTrancheItem(s :: PGGAlgState_Tranche_All, i :: RngIntElt)
+  {Don't consider this item again.}
+  Undefine(~s`tranche, i);
+end intrinsic;
+
+intrinsic ForgetTrancheItem(s :: PGGAlgState_Tranche_Index, i :: RngIntElt)
+  {"}
+  Undefine(~s`tranche, i);
+end intrinsic;
+
+intrinsic ForgetTrancheItem(s :: PGGAlgState_Tranche_OrbitIndex, i :: RngIntElt)
+  {"}
+  Undefine(~s`tranche, i);
+end intrinsic;
+
+intrinsic Group(i :: PGGAlgState_TrancheItem) -> GrpPerm
+  {The group.}
+  return i`subgroup;
+end intrinsic;
+
+intrinsic Forget(i :: PGGAlgState_TrancheItem)
+  {Don't consider this item again.}
+  require i`tidx eq TrancheIndex(i`state): "state has moved to a different tranche";
+  ForgetTrancheItem(i`state, i`idx);
+end intrinsic;
+

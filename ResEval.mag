@@ -1,0 +1,133 @@
+import "Utils.mag": Q, Z, tschirnhaus_transformation, slpol_bound, left_coset_representatives, permute_seq, polynomial_with_roots, not_implemented;
+
+declare type PGGAlg_ResEval: PGGAlg;
+
+declare type PGGAlg_ResEval_Global: PGGAlg_ResEval;
+declare attributes PGGAlg_ResEval_Global: model;
+
+declare type PGGAlgState_ResEval_Global: PGGAlgState;
+declare attributes PGGAlgState_ResEval_Global: base_field_model, pol_model, precision, complex_roots, overgroup_embedding;
+
+declare type PGGAlg_ResEval_Global_Model: PGGAlg;
+
+declare type PGGAlg_ResEval_Global_Model_Symmetric: PGGAlg_ResEval_Global_Model;
+declare attributes PGGAlg_ResEval_Global_Model_Symmetric: galois_group_alg;
+
+declare type PGGAlg_ResEval_Global_Model_Factors: PGGAlg_ResEval_Global_Model;
+declare attributes PGGAlg_ResEval_Global_Model_Factors: next;
+
+declare type PGGAlg_ResEval_Global_Model_RamTower: PGGAlg_ResEval_Global_Model;
+declare attributes PGGAlg_ResEval_Global_Model_RamTower: next;
+
+intrinsic Start(alg :: PGGAlg_ResEval_Global, f :: RngUPolElt[FldPad]) -> PGGAlgState_ResEval_Global
+  {Starts the algorithm and returns its state.}
+  s := New(PGGAlgState_ResEval_Global);
+  s`algorithm := alg;
+  PGG_GlobalTimer_Push("base field model");
+  s`base_field_model := GlobalModel(BaseRing(f));
+  PGG_GlobalTimer_Swap("polynomial model");
+  s`pol_model, s`overgroup_embedding := GlobalModel(alg`model, f, s`base_field_model);
+  s`precision := -Infinity();
+  PGG_GlobalTimer_Pop();
+  return s;
+end intrinsic;
+
+intrinsic OvergroupEmbedding(s :: PGGAlgState_ResEval_Global) -> PGGHomGrpPerm
+  {The overgroup we can evaluate resolvents in.}
+  return s`overgroup_embedding;
+end intrinsic;
+
+intrinsic ComplexRoots(s :: PGGAlgState_ResEval_Global, pr :: RngIntElt) -> []
+  {A sequence of complex roots, one for each embedding of the base field.}
+  C := ComplexField(pr);
+  if pr gt s`precision then
+    vprint PGG_GaloisGroup: "complex precision =", pr;
+    s`complex_roots := ComplexRoots(s`pol_model, ComplexEmbeddings(s`base_field_model, [map<Q -> C | x :-> C!x>]));
+    s`precision := pr;
+  end if;
+  return PowerSequence(PowerSequence(C)) ! s`complex_roots;
+end intrinsic;
+
+intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, I, U :: GrpPerm) -> RngUPolElt
+  {The resolvent associated to the invariant I.}
+  W := Group(Codomain(s`overgroup_embedding));
+  assert U subset W;
+  ntries := 0;
+  while true do
+    ntries +:= 1;
+    trans := tschirnhaus_transformation(ntries, Index(W, U));
+    rss0 := ComplexRoots(s, 30);
+    trss0 := [[Evaluate(trans, r) : r in rs] : rs in rss0];
+    rbound := Max([Abs(r) : r in rs, rs in trss0]);
+    pr := Ceiling(Log(10, slpol_bound(I, rbound)) * Index(W, U) * 2 + 30);
+    rss := ComplexRoots(s, pr);
+    trss := [[Evaluate(trans, r) : r in rs] : rs in rss];
+    Rxrss := [[Evaluate(I, permute_seq(g, rs)) : g in left_coset_representatives(W, U)] : rs in trss];
+    Rxs := [polynomial_with_roots(rs) : rs in Rxrss];
+    if #Rxs eq 1 then
+      R := Polynomial([Round(Real(c)) : c in Coefficients(Rxs[1])]);
+      err := Max([Abs(c) : c in Coefficients(R - Rxs[1])] cat [0]);
+      assert err lt 1e-20;
+      if IsSquarefree(R) then
+        return ChangeRing(R, s`base_field_model`local_field);
+      end if;
+    else
+      not_implemented("Resolvent: only implemented over Q");
+    end if;
+  end while;
+end intrinsic;
+
+intrinsic PGGAlg_ResEval_Global_Model_Symmetric_Make( : GaloisGroupAlg:=false) -> PGGAlg_ResEval_Global_Model_Symmetric
+  {The "Symmetric" conjugacy algorithm.}
+  alg := New(PGGAlg_ResEval_Global_Model_Symmetric);
+  alg`galois_group_alg := GaloisGroupAlg;
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_ResEval_Global_Model_Factors_Make(:Next:=false) -> PGGAlg_ResEval_Global_Model_Factors
+  {The "Factors" conjugacy algorithm.}
+  a := New(PGGAlg_ResEval_Global_Model_Factors);
+  a`next := Next cmpne false select Next else PGGAlg_ResEval_Global_Model_Symmetric_Make();
+  return a;
+end intrinsic;
+
+intrinsic PGGAlg_ResEval_Global_Model_RamTower_Make(:Next:=false) -> PGGAlg_ResEval_Global_Model_RamTower
+  {The "RamTower" conjugacy algorithm.}
+  a := New(PGGAlg_ResEval_Global_Model_RamTower);
+  a`next := Next cmpne false select Next else PGGAlg_ResEval_Global_Model_Symmetric_Make();
+  return a;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_Symmetric)
+  {Print.}
+  print "symmetric";
+  IndentPush();
+  printf "galois group = %o", alg`galois_group_alg cmpne false select alg`galois_group_alg else "unset";
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_Factors)
+  {"}
+  printf "factors -> "; Print(alg`next);
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_RamTower)
+  {"}
+  printf "ramification tower -> "; Print(alg`next);
+end intrinsic;
+
+intrinsic PGGAlg_ResEval_Global_Make(:Model:=false) -> PGGAlg_ResEval_Global
+  {The "Absolute" resolvent evaluation algorithm.}
+  alg := New(PGGAlg_ResEval_Global);
+  alg`model := Model cmpne false select Model else PGGAlg_ResEval_Global_Model_Symmetric_Make();
+  return alg;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResEval_Global)
+  {Print.}
+  print "global";
+  IndentPush();
+  printf "model = "; Print(alg`model);
+  IndentPop();
+end intrinsic;
+

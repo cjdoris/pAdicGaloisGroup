@@ -1,0 +1,108 @@
+declare type PGGSetSubgrpcls[PGGSubgrpcls]: _PGGSetSubgrpcls;
+declare attributes PGGSetSubgrpcls: overgroup, class_function, eq_op, subset_op;
+declare type PGGSubgrpcls: _PGGSubgrpcls;
+declare attributes PGGSubgrpcls: subgroup, parent, class_function_value, hash;
+
+intrinsic PGG_SubgroupClasses(G :: GrpPerm : ClassFunction:=4) -> PGGSetSubgrpcls
+  {The conjugacy classes of subgroups of G.}
+  X := New(PGGSetSubgrpcls);
+  X`overgroup := G;
+  case ClassFunction:
+  when 1:
+    X`class_function := func<H | <#H, Hash(H), {*cf(x[3])^^x[2] : x in Classes(H)*}>>
+      where cf := ClassMap(G);
+  when 2:
+    X`class_function := func<H | <#H, GroupName(H)>>;
+  when 3:
+    X`class_function := func<H | <#H, {* /* #o eq 32 select <#o, -1, "", Trans32Identify(Go)> else */ #o le TransitiveGroupDatabaseLimit() and #o ne 32 select <#o, TransitiveGroupIdentification(Go), "", <-1,-1,-1,-1>> else <#o, -1, GroupName(Go),<-1,-1,-1,-1>> where Go:=OrbitImage(G,o) : o in Orbits(H)*}>>;
+  when 4:
+    X`class_function := func<H | <#H, [#(N meet H) : N in Ns]>>
+      where Ns := #all_Ns le limit select all_Ns else ([all_Ns[i^s] : i in [1..limit]] where s := Random(SymmetricGroup(#all_Ns)))
+      where limit := Infinity()
+      where all_Ns := [x`subgroup : x in NormalSubgroups(G : IndexLimit:=index_limit)]
+      where index_limit := 2;
+  else
+    assert false;
+  end case;
+  X`eq_op := func<x, y | (x`hash eq y`hash) and (x`class_function_value eq y`class_function_value) and IsConjugate(Parent(x)`overgroup, x`subgroup, y`subgroup)>;
+  X`subset_op := func<x, y | IsConjugateSubgroup(x`parent`overgroup, y`subgroup, x`subgroup)>;
+  return X;
+end intrinsic;
+
+intrinsic PGG_Subgroups(G :: GrpPerm : RandomClass:=false) -> PGGSetSubgrpcls
+  {The subgroups of G, as classes.}
+  X := New(PGGSetSubgrpcls);
+  X`overgroup := G;
+  X`class_function := RandomClass select func<H | Random(1000000000)> else func<H | H>;
+  X`eq_op := func<x, y | x`subgroup eq y`subgroup>;
+  X`subset_op := func<x, y | x`subgroup subset y`subgroup>;
+  return X;
+end intrinsic;
+
+intrinsic Group(X :: PGGSetSubgrpcls) -> GrpPerm
+  {The group.}
+  return X`overgroup;
+end intrinsic;
+
+intrinsic 'eq'(X :: PGGSetSubgrpcls, Y :: PGGSetSubgrpcls) -> BoolElt
+  {Equality.}
+  return IsIdentical(X, Y);
+end intrinsic;
+
+intrinsic IsCoercible(X :: PGGSetSubgrpcls, H) -> BoolElt, .
+  {IsCoercible.}
+  return false, "wrong type";
+end intrinsic;
+
+intrinsic IsCoercible(X :: PGGSetSubgrpcls, H :: GrpPerm) -> BoolElt, .
+  {"}
+  if H subset X`overgroup then
+    x := New(PGGSubgrpcls);
+    x`subgroup := H;
+    x`parent := X;
+    x`class_function_value := x`parent`class_function(H);
+    x`hash := Hash(x`class_function_value);
+    return true, x;
+  else
+    return false, "not a subgroup of the right group";
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(X :: PGGSetSubgrpcls, H :: PGGSubgrpcls) -> BoolElt, .
+  {"}
+  if Parent(H) eq X then
+    return true, H;
+  elif Parent(H)`overgroup subset X`overgroup then
+    return true, X ! Rep(H);
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic Parent(x :: PGGSubgrpcls) -> PGGSetSubgrpcls
+  {The parent set.}
+  return x`parent;
+end intrinsic;
+
+intrinsic Hash(x :: PGGSubgrpcls) -> RngIntElt
+  {Hash.}
+  return x`hash;
+end intrinsic;
+
+intrinsic Rep(x :: PGGSubgrpcls) -> GrpPerm
+  {A representative.}
+  return x`subgroup;
+end intrinsic;
+
+intrinsic 'eq'(x :: PGGSubgrpcls, y :: PGGSubgrpcls) -> BoolElt
+  {Equality.}
+  assert Parent(x) eq Parent(y);
+  return Parent(x)`eq_op(x, y);
+end intrinsic;
+
+intrinsic 'subset'(x :: PGGSubgrpcls, y :: PGGSubgrpcls) -> BoolElt
+  {Subset.}
+  assert Parent(x) eq Parent(y);
+  return Parent(x)`subset_op(x, y);
+end intrinsic;
+
