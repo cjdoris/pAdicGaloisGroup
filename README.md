@@ -102,7 +102,7 @@ GLOBAL_MODEL
 | "RamTower"              Get the ramification filtration of the extension defined by the polynomial, then...
   [ GLOBAL_MODEL            ... produce a model from each sub-extension in this manner
   ]
-| "RootsOfUnity"          Adjoin a root of unity to make an unramified extension
+| "RootOfUnity"           Adjoin a root of unity to make an unramified extension
   [ Minimize: BOOL          When true, minimize the degree of the extension
   ]
 | "Select"                Select between several global models
