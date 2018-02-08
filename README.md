@@ -60,8 +60,8 @@ How to compute a Galois group.
 
 How to deduce the Galois group using resolvents.
 
-- **`All [Stat:STATISTIC, Choice:SUBGROUP_CHOICE]`**: Enumerate all possible Galois groups, then eliminate possibilities until only one remains. `Stat` is the statistic used to distinguish between possible Galois groups. `Choice` determines how to choose which subgroups to form resolvents from.
-- **`Maximal [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, Descend, Useful, Reprocess:BOOL, Reset:BOOL, Blacklist:BOOL, Dedupe:BOOL]`** Work down the graph of possible Galois groups by maximal inclusion. `Stat` is the statistic used to distinguish between possible Galois groups. `Choice` determines how to choose which subgroups to form resolvents from.
+- `All [Stat:STATISTIC, Choice:SUBGROUP_CHOICE]`: Enumerate all possible Galois groups, then eliminate possibilities until only one remains. `Stat` is the statistic used to distinguish between possible Galois groups. `Choice` determines how to choose which subgroups to form resolvents from.
+- `Maximal [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, Descend, Useful, Reprocess:BOOL, Reset:BOOL, Blacklist:BOOL, Dedupe:BOOL]` Work down the graph of possible Galois groups by maximal inclusion. `Stat` is the statistic used to distinguish between possible Galois groups. `Choice` determines how to choose which subgroups to form resolvents from.
   - `Descend` How to descend through the graph. One of:
     - `Eager`: As soon as a top node is known not to be the Galois group, move on to its children.
     - `Steady`: When all top nodes are known to not be the Galois group, move on to their children.
@@ -83,7 +83,7 @@ How to deduce the Galois group using resolvents.
 
 How to evaluate resolvents.
 
-- **`Global [GLOBAL_MODEL]`**: Produce a global model for the local fields involved.
+- `Global [GLOBAL_MODEL]`: Produce a global model for the local fields involved.
 
 ### `GLOBAL_MODEL`
 
