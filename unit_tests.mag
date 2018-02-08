@@ -80,6 +80,8 @@ algs :=
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:Sufficient]]",{"deg8"},{"2by"}>
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:Necessary]]",{"deg8"},{"2by"}>
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:Generous]]",{"deg8"},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:True]][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg8"},{}>
+  , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:False]][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg8"},{}>
   ]
 ;
 
@@ -101,6 +103,7 @@ polys :=
       , <x^8+4*x^5+4,              400,          T(8,36), {"deg8"}, {"irred"}>
       , <x^8+4*x^5+6*x^4+4,        400,          T(8,42), {"deg8"}, {"irred"}>
       , <x^8+20*x^2+12,            400,          T(8,44), {"deg8"}, {"irred"}>
+      , <x^8+28*x^4+144,           400,           T(8,2), {"deg8"}, {"irred"}>
       , <x^16 + 2,                 800,       T(16, 156), {"deg16"}, {"irred","2by"}>
       ]
     >

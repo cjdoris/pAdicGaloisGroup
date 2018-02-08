@@ -1,12 +1,16 @@
-import "Utils.mag": Q, not_implemented, largest_coefficient, reduce_coefficients, change_apr, has_root, factorization, ramification_tower, random_primitive_element;
+import "Utils.mag": Q, not_implemented, largest_coefficient, reduce_coefficients, change_apr, maximize_apr, has_root, factorization, ramification_tower, random_primitive_element, fldpad_has_isomorphism, seq_shuffle, roots, fldpad_eltseq;
 
 declare type PGGGloMod;
 
-declare type PGGGloMod_Rational: PGGGloMod;
-declare attributes PGGGloMod_Rational: local_field, global_field, embedding;
+declare type PGGGloMod_Fld: PGGGloMod;
+declare attributes PGGGloMod_Fld: local_field, global_field, embeddings, primes;
 
-declare type PGGGloMod_Symmetric: PGGGloMod;
-declare attributes PGGGloMod_Symmetric: local_pol, global_pol, local_field, global_field, embedding;
+declare type PGGGloMod_UPol: PGGGloMod;
+declare attributes PGGGloMod_UPol: local_pol, global_pol;
+
+declare type PGGGloMod_Rational: PGGGloMod_Fld;
+
+declare type PGGGloMod_Symmetric: PGGGloMod_Fld, PGGGloMod_UPol;
 
 declare type PGGGloMod_Factors: PGGGloMod;
 declare attributes PGGGloMod_Factors: factors;
@@ -14,13 +18,42 @@ declare attributes PGGGloMod_Factors: factors;
 declare type PGGGloMod_Tower: PGGGloMod;
 declare attributes PGGGloMod_Tower: tower, global_pol, global_pol_root, global_field;
 
+declare type PGGGloMod_RootOfUnity: PGGGloMod_Fld, PGGGloMod_UPol;
+declare attributes PGGGloMod_RootOfUnity: primitive_root, root_powers;
+
+intrinsic Approximation(m :: PGGGloMod_Fld, x :: FldPadElt) -> FldElt
+  {Takes a global approximation to x across all embeddings.}
+  return Approximation(m, x, {1..#m`embeddings});
+end intrinsic;
+
+intrinsic Approximation(m :: PGGGloMod_Fld, x :: FldPadElt, idxs :: {RngIntElt}) -> FldElt
+  {A global approximation to x across a set of embeddings.}
+  require idxs subset {1..#m`embeddings}: "idxs out of range";
+  idxs := SetToSequence(idxs);
+  if #idxs eq 0 then
+    return m`global_field ! 0;
+  elif #idxs eq 1 then
+    return Approximation(m, x, idxs[1]);
+  else
+    k := AbsolutePrecision(x);
+    return m`global_field ! CRT([Integers(m`global_field) | x @@ m`embeddings[i] : i in idxs], [m`primes[i]^k : i in idxs]);
+  end if;
+end intrinsic;
+
+intrinsic Approximation(m :: PGGGloMod_Fld, x :: FldPadElt, i :: RngIntElt) -> FldElt
+  {A global approximation to x in its ith embedding.}
+  require i in {1..#m`embeddings}: "i out of range";
+  return x @@ m`embeddings[i];
+end intrinsic;
+
 intrinsic GlobalModel(F :: FldPad) -> PGGGloMod
   {A global model for F.}
   if IsPrimeField(F) then
     m := New(PGGGloMod_Rational);
     m`local_field := F;
     m`global_field := Q;
-    m`embedding := map<Q -> F | x :-> x, y :-> y>;
+    m`embeddings := [map<Q -> F | x :-> x, y :-> y>];
+    m`primes := [ideal<Integers(Q) | Prime(F)>];
     return m;
   else
     not_implemented("global_model: non-prime field");
@@ -33,12 +66,12 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: RngUPol
   gloW := PGGGrpPerm_Symmetric_Make(Degree(f));
   Whom := IdentityHomomorphism(locW, gloW);
   m := New(PGGGloMod_Symmetric);
-  e := bm`embedding;
   locpol := f;
   m`local_pol := locpol;
   PGG_GlobalTimer_Push("global polynomial");
-  glopol0 := Polynomial([c@@e : c in Coefficients(locpol)]);
+  glopol0 := Polynomial([Approximation(bm, c) : c in Coefficients(locpol)]);
   if assigned locW`top_field then
+    nembs := #bm`embeddings;
     PGG_GlobalTimer_Swap("minimize coefficients");
     locext := locW`top_field;
     assert IsWeaklyEqual(DefiningPolynomial(locext), locpol);
@@ -47,38 +80,50 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: RngUPol
     pr := Precision(K);
     glopol := glopol0;
     root := locext.1;
-    locext2 := locext;
-    isom := map<locext -> locext2 | x :-> x, y :-> y>;
+    locext2s := [locext : i in [1..nembs]];
+    isoms := [map<locext -> locext2s[i] | x :-> x, y :-> y> : i in [1..nembs]];
     pr := Ceiling(Log(Prime(K), Max([largest_coefficient(c) : c in Coefficients(glopol)])));
+    vprint PGG_GaloisGroup, 1: "pr =", pr;
+    vprint PGG_GaloisGroup, 2: "glopol =", glopol;
     while true do
       pr div:= 2;
+      vprint PGG_GaloisGroup, 1: "pr =", pr;
       if pr lt 2 then
         break;
       end if;
       PGG_GlobalTimer_Push("reduce coefficients");
       glopol2 := Polynomial([reduce_coefficients(c, Prime(K)^pr) : c in Coefficients(glopol)]);
-      locpol2 := Polynomial([change_apr(c@e, Precision(K)) : c in Coefficients(glopol2)]);
-      locext2new := ext<K | locpol2>;
-      PGG_GlobalTimer_Swap("has root");
-      ok1, root := has_root(ChangeRing(locpol, locext2new));
-      ok2, root2 := has_root(ChangeRing(locpol2, locext));
+      vprint PGG_GaloisGroup, 2: "glopol =", glopol2;
+      locpol2s := [Polynomial([change_apr(c@e, Precision(K)) : c in Coefficients(glopol2)]) : e in bm`embeddings];
+      locext2news := [ext<K | pol> : pol in locpol2s];
+      PGG_GlobalTimer_Swap("isomorphic");
+      isom2s := [**];
+      for locext2new in locext2news do
+        ok, isom2 := fldpad_has_isomorphism(locext, locext2new, K);
+        if ok then
+          Append(~isom2s, isom2);
+        else
+          break;
+        end if;
+      end for;
       PGG_GlobalTimer_Pop();
-      if ok1 and ok2 then
-        locext2 := locext2new;
-        isom := map<locext -> locext2 | x :-> &+[cs[i] * root^(i-1) : i in [1..#cs]] where cs:=Eltseq(x), y :-> &+[cs[i] * root2^(i-1) : i in [1..#cs]] where cs:=Eltseq(y)>;
+      if ok then
+        locext2s := locext2news;
+        isoms := isom2s;
         glopol := glopol2;
       else
         break;
       end if;
     end while;
-    // make the embedding
-    m`global_pol := glopol;
+    // make the embeddings
     gloext := ext<BaseRing(glopol) | glopol>;
-    ee := map<gloext -> locext | x :-> (locext2![c@e : c in Eltseq(x)]) @@ isom, y :-> gloext![c@@e : c in Eltseq(y @ isom)]>;
     m`local_field := locext;
+    m`global_pol := glopol;
     m`global_field := gloext;
-    m`embedding := ee;
+    m`embeddings := [map<gloext -> locext | x :-> (locext2![c@e : c in Eltseq(x)]) @@ isom, y :-> gloext![c@@e : c in fldpad_eltseq(y @ isom)]> where locext2:=locext2s[i] where isom:=isoms[i] where e:=bm`embeddings[i] : i in [1..nembs]];
+    m`primes := [Factorization(Integers(m`global_field) !! p)[1][1] : p in bm`primes];
   else
+    vprint PGG_GaloisGroup: "WARNING: not minimizing global coefficients (if the complex precision explodes, or complex root finding fails, this might be why)";
     m`global_pol := glopol0;
   end if;
   PGG_GlobalTimer_Pop();
@@ -127,6 +172,170 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RamTower, f :: RngUPolE
   return m, hom;
 end intrinsic;
 
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Select, f :: RngUPolElt[FldPad], bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+  {"}
+  PGG_GlobalTimer_Push("predicates");
+  K := BaseRing(f);
+  L := TopField;
+  for i in [1..#alg`models] do
+    if (i gt #alg`predicates)
+    or EvaluateLazy(
+        alg`predicates[i],
+        func<n, v | case<n
+          | "p": Prime(BaseRing(f))
+          , "faccerts": certs where _,certs := factorization(f : Extensions)
+          , "irr": L cmpne false or #v("faccerts") eq 1
+          , "deg": Degree(f)
+          , "unram": L cmpne false select RamificationDegree(L,K) eq 1 else forall{c : c in v("faccerts") | c`E eq 1}
+          , "tame": (L cmpne false select not IsDivisibleBy(RamificationDegree(L,K), p) else forall{c : c in v("faccerts") | not IsDivisibleBy(c`E, p)}) where p:=Prime(BaseRing(f))
+          , "ram": not v("Unram")
+          , "wild": not v("Tame")
+          , "totram": L cmpne false select InertiaDegree(L,K) eq 1 else forall{c : c in v("faccerts") | c`F eq 1}
+          , "totwild": (L cmpne false select InertiaDegree(L,K) eq 1 and IsPowerOf(RamificationDegree(L,K),p) else forall{c : c in v("faccerts") | c`F eq 1 and IsPowerOf(c`E, p)}) where p:=Prime(BaseRing(f))
+          , default: not_implemented()
+          >
+        > : Recursive)
+    then
+      PGG_GlobalTimer_Swap("recurse");
+      m, h := GlobalModel(alg`models[i], f, bm : TopField:=TopField);
+      PGG_GlobalTimer_Pop();
+      return m, h;
+    end if;
+  end for;
+  PGG_GlobalTimer_Pop();
+  error "cases were not exhaustive";
+end intrinsic;
+
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUnity, f :: RngUPolElt[FldPad], bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+  {"}
+  // check the inputs
+  K := BaseRing(f);
+  L := TopField;
+  if L cmpeq false then
+    not_implemented("expecting f to be irreducible");
+  end if;
+  if RamificationDegree(L, K) ne 1 then
+    not_implemented("ramified extensions");
+  end if;
+
+  // choose n such that we are adjoining an nth root of unity
+  d := Degree(L, K);
+  assert InertiaDegree(L, K) eq d;
+  p := Prime(K);
+  q := p^AbsoluteInertiaDegree(K);
+  n0 := q^d-1;
+  if alg`minimize then
+    n := Min([n : n in Divisors(n0) | forall{i : i in [1..d-1] | not IsDivisibleBy(q^i-1, n)}]);
+  else
+    n := n0;
+  end if;
+  // choose a factor of the nth cyclotomic polynomial over the global field
+  Cn := CyclotomicPolynomial(n);
+  gK := Domain(bm`embeddings[1]);
+  assert forall{e : e in bm`embeddings | Domain(e) eq gK and Codomain(e) eq K};
+  C := Factorization(ChangeRing(Cn, gK))[1][1];
+  d2 := Degree(C);
+  ok, s := IsDivisibleBy(d2, d);
+  assert ok;
+  // extend by this factor, so z is a primitive nth root of unity
+  gL<z> := ext<gK | C>;
+  assert Evaluate(C, z) eq 0;
+  assert Degree(gL, gK) eq d2;
+  // make the intermediate field which embeds into the local base field
+  if s eq 1 then
+    gM := gK;
+  else
+    gM<w> := sub<gL | &+[z^(q^i) : i in [0..d-1]]>;
+  end if;
+  assert Degree(gM, gK) eq s;
+  // choose a factor of C over M
+  C2 := Factorization(ChangeRing(C, gM))[1][1];
+  assert Degree(C2) eq d;
+  // choose primes of L above the primes of K
+  p0s := [Factorization(Integers(gL) !! p)[1][1] : p in bm`primes];
+  // find the i such that z->z^i are automorphisms
+  auts := {@ i : i in [0..n-1 by q-1] | Evaluate(C,z^i) eq 0 @};
+  assert #auts eq d2;
+  assert forall{i : i in [0..d-1] | ((q^i) mod n) in auts};
+  // put these into orbits under z->z^q, corresponding to the local Galois group (each orbit corresponds to an embedding of gM into K)
+  auts_todo := {i : i in auts};
+  orbits := [];
+  for j in [1..s] do
+    orbit := [];
+    i := Min(auts_todo);
+    for k in [1..d] do
+      assert i in auts_todo;
+      Exclude(~auts_todo, i);
+      Append(~orbit, i);
+      i := (q*i) mod n;
+    end for;
+    Append(~orbits, orbit);
+  end for;
+  // put the automorphisms into orbit order
+  auts2 := {@ i : i in orbit, orbit in orbits @};
+  vprint PGG_GaloisGroup, 2: "auts =", auts2;
+  // embed gM into K
+  if s eq 1 then
+    Membs := bm`embeddings;
+  else
+    Membs := [];
+    for e in bm`embeddings do
+      pol := Polynomial([K| c@e : c in Coefficients(MinimalPolynomial(w, gK))]);
+      ok, root := has_root(pol);
+      assert ok;
+      root := maximize_apr(root);
+      Append(~Membs, map<gM -> K
+        | x :-> &+[(cs[i] @ e) * root^(i-1) : i in [1..#cs]] where cs:=Eltseq(x)
+      >);
+    end for;
+  end if;
+  // make automorphisms of gL corresponding to the orbits
+  gLauts := [hom<gL -> gL | z^o[1]> : o in orbits];
+  // make primes of gL corresponding to embeddings
+  ps := [ideal<Integers(gL) | [gen @ aut : gen in Generators(p0)]> : aut in gLauts, p0 in p0s];
+  // make representative embeddings of gL to L
+  Lembs0 := [];
+  for i in [1..#bm`embeddings] do
+    e := bm`embeddings[i];
+    e0 := Membs[i];
+    C3 := Polynomial([K| maximize_apr(c @ e0) : c in Coefficients(C2)]);
+    L2 := ext<K | C3>;
+    ok, isom := fldpad_has_isomorphism(L, L2, K);
+    assert ok;
+    Append(~Lembs0, map<gL -> L
+      | x :-> (&+[L2| (L2.1)^(i-1) * (cs[i]@e) : i in [1..#cs]])@@isom where cs:=Eltseq(x)
+      , y :-> &+[gL| (gL.1)^(i-1) * (cs[i]@@e) : i in [1..#cs]] where cs:=fldpad_eltseq(y@isom)
+    >);
+  end for;
+  // make all embeddings
+  Lembs := [map<gL -> L | x :-> x @ aut @ e, y :-> y @@ e @@ aut> : aut in gLauts, e in Lembs0];
+
+  // create the model
+  m := New(PGGGloMod_RootOfUnity);
+  m`embeddings := Lembs;
+  m`primes := ps;
+  m`local_field := L;
+  m`global_field := gL;
+  // m`local_pol := C2;
+  m`global_pol := C;
+  m`primitive_root := n;
+  m`root_powers := auts2;
+
+  // create the corresponding groups
+  // W is cyclic of order d
+  W := PGGConj_Unramified_Make(f : TopField:=L);
+  // W2wr = S_d wr S_s
+  W2wr := PGGGrpPerm_WrProd_Make(<PGGGrpPerm_Symmetric_Make(s), PGGGrpPerm_Symmetric_Make(d)>);
+  // W2 is the subgroup of W2wr corresponding to the global Galois group (identifying (i->z^i) with the index of i in auts2)
+  W2 := PGGGrpPerm_RawSubgroup_Make(W2wr, sub<Group(W2wr) | [[Index(auts2, (i*j) mod n) : j in auts2] : i in auts2]>);
+  // the diagonal embedding of W into W2
+  Whom := PGGHomGrpPerm_WrDiagonal_Make(W, W2);
+  assert #Group(W2) eq d2;
+  assert IsAbelian(Group(W2));
+  vprint PGG_GaloisGroup: "W2 =", GroupName(Group(W2));
+  return m, Whom;
+end intrinsic;
+
 intrinsic ComplexEmbeddings(m :: PGGGloMod_Rational, embs :: [Map]) -> []
   {The complex embeddings of m extending embs.}
   return embs;
@@ -138,9 +347,23 @@ intrinsic ComplexEmbeddings(m :: PGGGloMod_Symmetric, embs :: [Map]) -> []
   return [map<m`global_field -> C | x :-> &+[(cs[j] @ e) * r^(j-1) : j in [1..#cs]] where cs:=Eltseq(x)> where C:=Codomain(e) where e:=embs[i] : r in rss[i], i in [1..#embs]];
 end intrinsic;
 
+intrinsic ComplexEmbeddings(m :: PGGGloMod_RootOfUnity, embs :: [Map]) -> []
+  {"}
+  rss := ComplexRoots(m, embs);
+  return [map<m`global_field -> C | x :-> &+[(cs[j] @ e) * r^(j-1) : j in [1..#cs]] where cs:=Eltseq(x)> where C:=Codomain(e) where e:=embs[i] : r in rss[i], i in [1..#embs]];
+end intrinsic;
+
 intrinsic ComplexRoots(m :: PGGGloMod_Symmetric, embs :: [Map]) -> []
   {The complex roots of the polynomial model.}
   return [[r[1] : r in Roots(Polynomial([c@e : c in Coefficients(m`global_pol)]))] : e in embs];
+end intrinsic;
+
+intrinsic ComplexRoots(m :: PGGGloMod_RootOfUnity, embs :: [Map]) -> []
+  {"}
+  rs := [Roots(Polynomial([c@e : c in Coefficients(m`global_pol)]))[1][1] : e in embs];
+  assert forall{r : r in rs | Abs(Abs(r)-1) lt 1e-10};
+  assert forall{r : r in rs | Abs(r^m`primitive_root-1) lt 1e-10};
+  return [[r^i : i in m`root_powers] : r in rs];
 end intrinsic;
 
 intrinsic ComplexRoots(m :: PGGGloMod_Factors, embs :: [Map]) -> []
@@ -155,7 +378,7 @@ intrinsic ComplexRoots(m :: PGGGloMod_Tower, embs :: [Map]) -> []
   for m2 in m`tower do
     es := ComplexEmbeddings(m2, es);
   end for;
-  d := #m`tower eq 0 select 1 else Degree(m`tower[#m`tower]`local_field, BaseRing(m`tower[1]`local_pol));
+  d := #m`tower eq 0 select 1 else Degree(m`tower[#m`tower]`global_field, BaseRing(m`tower[1]`global_pol));
   assert #es eq #embs * d;
   // todo: also find complex roots of the global_pol, which should be more accurate but unordered, and pair them up
   return [[e(m`global_pol_root) : e in es[1+d*(i-1)..d*i]] : i in [1..#embs]];

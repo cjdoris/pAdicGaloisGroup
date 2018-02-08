@@ -9,6 +9,10 @@ function precision_error()
   error "precision error";
 end function;
 
+function user_error(msg, ...)
+  error "error: " cat Join([Sprintf("%o", x) : x in msg], " ");
+end function;
+
 procedure isort_by(~xs, key)
   keys := [key(xs[i]) : i in [1..#xs]];
   Sort(~keys, ~permutation);
@@ -34,6 +38,15 @@ end function;
 
 function enumerate(xs)
   return [<xs[i], i> : i in [1..#xs] | IsDefined(xs, i)];
+end function;
+
+function fldpad_eltseq(x)
+  if AbsolutePrecision(x) eq Infinity() then
+    assert IsWeaklyZero(x);
+    return [BaseField(Parent(x))| 0 : i in [1..Degree(Parent(x))]];
+  else
+    return Eltseq(x);
+  end if;
 end function;
 
 function is_any_coercible(coercers, x)
@@ -164,7 +177,7 @@ function newton_polygon_factorization(f : alg:="Hensel")
       assert Degree(g) eq width;
       assert Valuation(Coefficient(g, 0)) eq v0-v1;
       assert Valuation(Coefficient(g, width)) eq 0;
-      vprint PGG_GaloisGroup: "hensel lifting slope =", slope;
+      vprint PGG_GaloisGroup, 2: "hensel lifting slope =", slope;
       niters := 0;
       while true do
         niters +:= 1;
@@ -206,7 +219,7 @@ function newton_polygon_factorization(f : alg:="Hensel")
         delta := g - gnew;
         PGG_GlobalTimer_Pop();
         if forall{i : i in [0..width] | IsWeaklyZero(Coefficient(delta, i))} then
-          vprint PGG_GaloisGroup: "f mod g =", fmodg;
+          vprint PGG_GaloisGroup, 2: "f mod g =", fmodg;
           Append(~factors, g);
           continue n;
         else
@@ -303,7 +316,13 @@ end function;
 
 function left_coset_representatives(G, H)
   assert H subset G;
-  cosets, indices := DoubleCosetRepresentatives(G, H, sub<G | 1>);
+  cosets, indices := DoubleCosetRepresentatives(G, H, sub<G | Id(G)>);
+  return cosets;
+end function;
+
+function right_coset_representatives(G, H)
+  assert H subset G;
+  cosets, indices := DoubleCosetRepresentatives(G, sub<G | Id(G)>, H);
   return cosets;
 end function;
 
@@ -509,6 +528,14 @@ function change_apr(x, apr)
   end if;
 end function;
 
+function maximize_apr(x)
+  if IsWeaklyZero(x) then
+    return Parent(x) ! 0;
+  else
+    return ChangePrecision(x, Precision(Parent(x)));
+  end if;
+end function;
+
 function residually_primitive_element(K)
   F, m := ResidueClassField(Integers(K));
   return PrimitiveElement(F) @@ m;
@@ -601,4 +628,91 @@ function is_subpartition_of(P, Q)
   assert forall{x : x in MultisetToSet(Q) | x gt 0};
   assert ((#P eq 0) and (#Q eq 0)) or ((#P gt 0) and (#Q gt 0) and (&+P eq &+Q));
   return _is_subpartition_of(P, Q);
+end function;
+
+function sprint_with_parens(x : Level:="Default", Chars:=" \t\n")
+  str := Sprintf("%O", x, Level);
+  if exists{i : i in [1..#Chars] | Chars[i] in str} then
+    return "(" cat str cat ")";
+  else
+    return str;
+  end if;
+end function;
+
+function fldpad_has_isomorphism(L1, L2, K : MaximizeAPr:=true)
+  // check inputs
+  ok, t1 := is_extension_of(L1, K);
+  assert ok;
+  ok, t2 := is_extension_of(L2, K);
+  assert ok;
+
+  // case degrees unequal
+  if Degree(L1, K) ne Degree(L2, K) then
+    return false, _;
+  end if;
+  d := Degree(L1, K);
+
+  // case d=1
+  assert d eq Degree(L2, K);
+  if d eq 1 then
+    return true, map<L1 -> L2 | x :-> L2!K!x, y :-> L1!K!y>;
+  end if;
+
+  // case K is the direct base field
+  if #t1 eq 2 and #t2 eq 2 then
+    assert BaseField(L1) eq K;
+    assert BaseField(L2) eq K;
+    f1 := DefiningPolynomial(L1);
+    f2 := DefiningPolynomial(L2);
+    ok, root1 := has_root(ChangeRing(f1, L2));
+    if not ok then
+      return false, _;
+    end if;
+    roots2 := roots(ChangeRing(f2, L1));
+    assert #roots2 gt 0;
+    idxs := [i : i in [1..#roots2] | IsWeaklyEqual(L1.1, &+[L1| cs[i] * r^(i-1) : i in [1..#cs]] where cs:=fldpad_eltseq(root1)) where r:=roots2[i]];
+    assert #idxs eq 1;
+    root2 := roots2[idxs[1]];
+    if MaximizeAPr then
+      root1 := maximize_apr(root1);
+      root2 := maximize_apr(root2);
+    end if;
+    return true, map<L1 -> L2 |
+      x :-> &+[L2| cs[i] * root1^(i-1) : i in [1..#cs]] where cs:=fldpad_eltseq(x),
+      y :-> &+[L1| cs[i] * root2^(i-1) : i in [1..#cs]] where cs:=fldpad_eltseq(y)>;
+  end if;
+
+  // general case
+  not_implemented("fldpad_has_isom: general towers of extensions");
+end function;
+
+procedure print_recursive(x)
+  if ISA(Type(x), MonStgElt) then
+    printf "%o", x;
+  elif ISA(Type(x), {List,SeqEnum,Tup}) then
+    for y in x do
+      print_recursive(y);
+    end for;
+  else
+    Print(x);
+  end if;
+end procedure;
+
+procedure print_header_then_indent(hdr, xs)
+  print_recursive(hdr);
+  if #xs gt 0 then
+    print "";
+    IndentPush();
+    for i in [1..#xs] do
+      print_recursive(xs[i]);
+      if i ne #xs then
+        print "";
+      end if;
+    end for;
+    IndentPop();
+  end if;
+end procedure;
+
+function seq_shuffle(xs)
+  return [xs[i^g] : i in [1..#xs]] where g:=Random(SymmetricGroup(#xs));
 end function;

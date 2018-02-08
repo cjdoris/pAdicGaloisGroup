@@ -101,6 +101,44 @@ intrinsic PGG_ArgSpec_AttrList(name :: MonStgElt, arg, transform) -> PGGArgSpec
   end function);
 end intrinsic;
 
+intrinsic PGG_ArgSpec_AttrSelect(name :: MonStgElt, parg, rarg, transform) -> PGGArgSpec
+  {The argspec matching the PGGAttr with the given name, and arguments [parg,rarg,parg,rarg,...,parg,rarg] (the final parg is optional). The pargs are predicates, and the rargs are results, so this is like select-else-select-else.}
+  return PGG_ArgSpec(function (x)
+    // coerce to a PGGAttr
+    ok, a := PGG_Attribute_IsCoercible(x);
+    if not ok then
+      return false, _;
+    end if;
+    // check the name
+    if Trim(Name(a)) ne name then
+      return false, _;
+    end if;
+    // check the args
+    args := Arguments(a);
+    ps := [**];
+    rs := [**];
+    for i in [1..#args] do
+      if i eq #args or ((i mod 2) eq 0) then
+        ok, x := PGG_Parsable(rarg, args[i]);
+        if ok then
+          Append(~rs, x);
+        else
+          return false, _;
+        end if;
+      else
+        ok, x := PGG_Parsable(parg, args[i]);
+        if ok then
+          Append(~ps, x);
+        else
+          return false, _;
+        end if;
+      end if;
+    end for;
+    // apply the transform
+    return true, transform(ps, rs);
+  end function);
+end intrinsic;
+
 intrinsic PGG_ArgSpec_AttrInt() -> PGGArgSpec
   {The argspec matching the PGGAttr when it looks like an integer.}
   return PGG_ArgSpec(function (x)

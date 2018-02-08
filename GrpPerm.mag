@@ -1,4 +1,4 @@
-import "Utils.mag": Z, pop_start, xdiv, not_implemented;
+import "Utils.mag": Z, pop_start, xdiv, not_implemented, sprint_with_parens;
 
 declare type PGGGrpPerm;
 declare attributes PGGGrpPerm: group, degree, orbits_of_subgroups;
@@ -12,6 +12,11 @@ declare attributes PGGGrpPerm_DirProd: factors, orbits_of_subgroups_from;
 
 declare type PGGGrpPerm_WrProd: PGGGrpPerm;
 declare attributes PGGGrpPerm_WrProd: factors, orbits_of_subgroups_above;
+
+declare type PGGGrpPerm_Cyclic: PGGGrpPerm;
+
+declare type PGGGrpPerm_RawSubgroup: PGGGrpPerm_Raw;
+declare attributes PGGGrpPerm_RawSubgroup: overgroup;
 
 intrinsic Init(~G :: PGGGrpPerm_Raw, rawG :: GrpPerm)
   {Initializes G.}
@@ -34,6 +39,19 @@ intrinsic Init(~G :: PGGGrpPerm_WrProd, factors :: Tup)
   {"}
   require forall{H : H in factors | ISA(Type(H), PGGGrpPerm)}: "factors must be a tuple of PGGGrpPerm";
   G`factors := factors;
+end intrinsic;
+
+intrinsic Init(~G :: PGGGrpPerm_Cyclic, degree :: RngIntElt)
+  {"}
+  require degree ge 1: "degree must be positive";
+  G`degree := degree;
+end intrinsic;
+
+intrinsic Init(~H :: PGGGrpPerm_RawSubgroup, G :: PGGGrpPerm, rawH :: GrpPerm)
+  {"}
+  require Degree(rawH) eq Degree(Group(G)) and rawH subset Group(G): "rawH must be a subgroup of G";
+  H`group := rawH;
+  H`overgroup := G;
 end intrinsic;
 
 intrinsic PGGGrpPerm_Raw_Make(rawG :: GrpPerm) -> PGGGrpPerm_Raw
@@ -60,8 +78,22 @@ end intrinsic;
 intrinsic PGGGrpPerm_WrProd_Make(factors :: Tup) -> PGGGrpPerm_WrProd
   {"}
   G := New(PGGGrpPerm_WrProd);
-  G`factors := factors;
+  Init(~G, factors);
   return G;
+end intrinsic;
+
+intrinsic PGGGrpPerm_Cyclic_Make(degree :: RngIntElt) -> PGGGrpPerm_Cyclic
+  {"}
+  G := New(PGGGrpPerm_Cyclic);
+  Init(~G, degree);
+  return G;
+end intrinsic;
+
+intrinsic PGGGrpPerm_RawSubgroup_Make(G :: PGGGrpPerm, rawH :: GrpPerm) -> PGGGrpPerm_RawSubgroup
+  {"}
+  H := New(PGGGrpPerm_RawSubgroup);
+  Init(~H, G, rawH);
+  return H;
 end intrinsic;
 
 intrinsic Group(G :: PGGGrpPerm) -> GrpPerm
@@ -79,13 +111,28 @@ end intrinsic;
 
 intrinsic _Group(G :: PGGGrpPerm_DirProd) -> GrpPerm
   {"}
-  return #G`factors gt 0 select DirectProduct([Group(H) : H in G`factors]) else SymmetricGroup(1);
+  return Group(G, [1..#G`factors]);
 end intrinsic;
 
 intrinsic _Group(G :: PGGGrpPerm_WrProd) -> GrpPerm
   {"}
-  // NOTE: we choose do define the wreath product in the reverse direction
-  return #G`factors gt 0 select WreathProduct(Reverse([Group(H) : H in G`factors])) else SymmetricGroup(1);
+  return Group(G, [1..#G`factors]);
+end intrinsic;
+
+intrinsic _Group(G :: PGGGrpPerm_Cyclic) -> GrpPerm
+  {"}
+  return CyclicGroup(G`degree);
+end intrinsic;
+
+intrinsic Group(G :: PGGGrpPerm_WrProd, idxs :: [RngIntElt]) -> GrpPerm
+  {The group formed from the given factors.}
+  // NOTE: we choose do define the wreath product in the reverse direction to Magma (i.e. C_2 wr C_3 is defined right-to-left)
+  return #idxs eq 0 select SymmetricGroup(1) else WreathProduct(Reverse([Group(G`factors[i]) : i in idxs]));
+end intrinsic;
+
+intrinsic Group(G :: PGGGrpPerm_DirProd, idxs :: [RngIntElt]) -> GrpPerm
+  {The group formed from the given factors.}
+  return #idxs eq 0 select SymmetricGroup(1) else DirectProduct([Group(G`factors[i]) : i in idxs]);
 end intrinsic;
 
 intrinsic Degree(G :: PGGGrpPerm) -> RngIntElt
@@ -302,7 +349,12 @@ end intrinsic;
 
 intrinsic Print(G :: PGGGrpPerm_Raw)
   {Print.}
-  printf "%o", Group(G);
+  printf "group of degree %o order %o name %o", Degree(Group(G)), #Group(G), GroupName(Group(G));
+end intrinsic;
+
+intrinsic Print(G :: PGGGrpPerm_RawSubgroup)
+  {"}
+  printf "subgroup of %o order %o name %o", sprint_with_parens(G`overgroup), #Group(G), GroupName(Group(G));
 end intrinsic;
 
 intrinsic Print(G :: PGGGrpPerm_Symmetric)
@@ -310,12 +362,19 @@ intrinsic Print(G :: PGGGrpPerm_Symmetric)
   printf "S_%o", G`degree;
 end intrinsic;
 
+intrinsic Print(G :: PGGGrpPerm_Cyclic)
+  {"}
+  printf "C_%o", G`degree;
+end intrinsic;
+
 intrinsic Print(G :: PGGGrpPerm_DirProd)
   {"}
   if #G`factors eq 0 then
     printf "1";
+  elif #G`factors eq 1 then
+    printf "%o", G`factors[1];
   else
-    printf "%o", Join([Sprintf("%o", H) : H in G`factors], " x ");
+    printf "%o", Join([sprint_with_parens(H) : H in G`factors], " x ");
   end if;
 end intrinsic;
 
@@ -323,8 +382,10 @@ intrinsic Print(G :: PGGGrpPerm_WrProd)
   {"}
   if #G`factors eq 0 then
     printf "1";
+  elif #G`factors eq 1 then
+    printf "%o", G`factors[1];
   else
-    printf "%o", Join(Reverse([Sprintf("%o", H) : H in G`factors]), " wr ");
+    printf "%o", Join(Reverse([sprint_with_parens(H) : H in G`factors]), " wr ");
   end if;
 end intrinsic;
 

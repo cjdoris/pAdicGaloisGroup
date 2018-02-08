@@ -1,6 +1,8 @@
 declare type PGGTimer;
 declare attributes PGGTimer: last_time, times, counts, labels, current_label, idxs;
 
+declare verbose PGG_Timer, 2;
+
 intrinsic PGG_Timer() -> PGGTimer
   {A new timer.}
   t := New(PGGTimer);
@@ -33,6 +35,7 @@ intrinsic Update(t :: PGGTimer, c :: RngIntElt, label :: [MonStgElt])
   t`times[i] +:= now - t`last_time;
   t`counts[i] +:= c;
   t`last_time := now;
+  vprint PGG_Timer: "PGG_Timer", label, c, now;
 end intrinsic;
 
 intrinsic Update(t :: PGGTimer, label :: [MonStgElt])

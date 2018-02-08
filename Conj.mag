@@ -12,6 +12,9 @@ declare attributes PGGConj_Factors: pol_factors;
 declare type PGGConj_Tower: PGGConj, PGGGrpPerm_WrProd;
 declare attributes PGGConj_Tower: top_field;
 
+declare type PGGConj_Unramified: PGGConj, PGGGrpPerm_Cyclic;
+declare attributes PGGConj_Unramified: top_field;
+
 intrinsic PGGConj_Symmetric_Make(f :: RngUPolElt[FldPad] : GaloisGroupAlg:=false, TopField:=false, IsTransitive:=false, KnownGroup:=false) -> PGGConj_Symmetric
   {Makes a conjugacy.}
   c := New(PGGConj_Symmetric);
@@ -34,6 +37,21 @@ intrinsic PGGConj_Symmetric_Make(f :: RngUPolElt[FldPad] : GaloisGroupAlg:=false
     c`galgrp_is_known := [* false *];
   end if;
   c`galgrp_is_transitive := IsTransitive or assigned c`top_field or Degree(c) eq 1;
+  return c;
+end intrinsic;
+
+intrinsic PGGConj_Unramified_Make(f :: RngUPolElt[FldPad] : TopField:=false) -> PGGConj_Unramified
+  {"}
+  require TopField cmpne false: "f must be known to be irreducible";
+  c := New(PGGConj_Unramified);
+  Init(~c, Degree(f));
+  c`pol := f;
+  c`base_field := BaseRing(f);
+  c`top_field := TopField;
+  assert Degree(c`top_field, c`base_field) eq Degree(f);
+  assert RamificationDegree(c`top_field, c`base_field) eq 1;
+  c`galgrp_is_known := [* true, Group(c) *];
+  c`galgrp_is_transitive := true;
   return c;
 end intrinsic;
 
@@ -202,20 +220,30 @@ end intrinsic;
 
 intrinsic GalGrpIsConsistentWithSubgroup(conj :: PGGConj, G :: GrpPerm) -> BoolElt
   {True if the Galois group could be a subgroup of G.}
+  ok, G2 := GalGrpIsKnown(conj);
+  if ok then
+    return IsConjugateSubgroup(Group(conj), G, G2);
+  else
+    return _GalGrpIsConsistentWithSubgroup(conj, G);
+  end if;
+end intrinsic;
+
+intrinsic _GalGrpIsConsistentWithSubgroup(conj :: PGGConj, G :: GrpPerm) -> BoolElt
+  {True if the Galois group could be a subgroup of G.}
   not_implemented("GalGrpIsConsistentWithSubgroup: ", Type(conj));
 end intrinsic;
 
-intrinsic GalGrpIsConsistentWithSubgroup(conj :: PGGConj_Symmetric, G :: GrpPerm) -> BoolElt
+intrinsic _GalGrpIsConsistentWithSubgroup(conj :: PGGConj_Symmetric, G :: GrpPerm) -> BoolElt
   {"}
   return (not GalGrpIsTransitive(conj)) or IsTransitive(G);
 end intrinsic;
 
-intrinsic GalGrpIsConsistentWithSubgroup(conj :: PGGConj_Factors, G :: GrpPerm) -> BoolElt
+intrinsic _GalGrpIsConsistentWithSubgroup(conj :: PGGConj_Factors, G :: GrpPerm) -> BoolElt
   {"}
   return forall{c : c in conj`factors | GalGrpIsConsistentWithSubgroup(c, c`parent_quotient(G meet c`parent_subgroup))};
 end intrinsic;
 
-intrinsic GalGrpIsConsistentWithSubgroup(conj :: PGGConj_Tower, G :: GrpPerm) -> BoolElt
+intrinsic _GalGrpIsConsistentWithSubgroup(conj :: PGGConj_Tower, G :: GrpPerm) -> BoolElt
   {"}
   return forall{c : c in conj`factors | GalGrpIsConsistentWithSubgroup(c, c`parent_quotient(G meet c`parent_subgroup))};
 end intrinsic;
@@ -258,7 +286,7 @@ end intrinsic;
 
 intrinsic _GalGrpIsKnown(conj :: PGGConj_Tower) -> BoolElt, GrpPerm
   {"}
-  if #[c : c in conj`factors | Degree(c) gt 1] le 1 then
+  if #<c : c in conj`factors | Degree(c) gt 1> le 1 then
     Gs := [];
     for c in conj`factors do
       ok, G := GalGrpIsKnown(c);

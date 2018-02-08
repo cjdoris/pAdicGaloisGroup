@@ -1,7 +1,7 @@
-import "Utils.mag": not_implemented;
+import "Utils.mag": not_implemented, Z, sprint_with_parens;
 
 declare type PGGHomGrpPerm;
-declare attributes PGGHomGrpPerm: domain, codomain, hom;
+declare attributes PGGHomGrpPerm: domain, codomain, hom, shape;
 
 declare type PGGHomGrpPerm_Id: PGGHomGrpPerm;
 
@@ -9,7 +9,13 @@ declare type PGGHomGrpPerm_DirProd: PGGHomGrpPerm;
 declare attributes PGGHomGrpPerm_DirProd: factors;
 
 declare type PGGHomGrpPerm_WrProd: PGGHomGrpPerm;
-declare attributes PGGHomGrpPerm_WrProd: factors;
+declare attributes PGGHomGrpPerm_WrProd: factors, cumulative_shapes;
+
+declare type PGGHomGrpPerm_Cyclic: PGGHomGrpPerm;
+declare attributes PGGHomGrpPerm_Cyclic: genimg;
+
+declare type PGGHomGrpPerm_WrDiagonal: PGGHomGrpPerm;
+declare attributes PGGHomGrpPerm_WrDiagonal: nfactors, parent_hom;
 
 DOM := Domain;
 CODOM := Codomain;
@@ -93,6 +99,56 @@ intrinsic DirectProduct(hs :: [PGGHomGrpPerm] : Domain:=false, Codomain:=false) 
   return PGGHomGrpPerm_DirProd_Make(<h : h in hs> : Domain:=Domain, Codomain:=Codomain);
 end intrinsic;
 
+intrinsic PGGHomGrpPerm_Cyclic_Make(G :: PGGGrpPerm_Cyclic, H :: PGGGrpPerm, genimg :: GrpPermElt) -> PGGHomGrpPerm_Cyclic
+  {The hom sending the generator of G to genimg in H.}
+  require genimg in Group(H): "genimg must be an element of H";
+  h := New(PGGHomGrpPerm_Cyclic);
+  h`domain := G;
+  h`codomain := H;
+  h`genimg := genimg;
+  return h;
+end intrinsic;
+
+intrinsic PGGHomGrpPerm_WrDiagonal_Make(G :: PGGGrpPerm, H :: PGGGrpPerm_WrProd : NumFactors:=false) -> PGGHomGrpPerm_WrDiagonal
+  {Diagonally embeds G into H.}
+  deg := Degree(G);
+  facdegs := Reverse([Z| Degree(fac) : fac in H`factors]);
+  if NumFactors cmpeq false then
+    for i in [0..#facdegs] do
+      d := &*facdegs[1..i];
+      if d eq deg then
+        nfactors := i;
+        break;
+      elif (d gt deg) or (i eq #facdegs) then
+        require false: "degree of G does not equal a partial degree of H";
+      end if;
+    end for;
+  else
+    require NumFactors ge 0 and NumFactors le #facdegs: "NumFactors out of range";
+    nfactors := NumFactors;
+    require &*facdegs[1..nfactors] eq deg: "degree of G does not equal the NumFactors'th partial degree of H";
+  end if;
+  partial := Group(H, [#H`factors-nfactors+1..#H`factors]);
+  assert Degree(partial) eq Degree(G);
+  require Group(G) subset partial: "G is not a subgroup of the corresponding partial factor of H";
+  h := New(PGGHomGrpPerm_WrDiagonal);
+  h`domain := G;
+  h`codomain := H;
+  h`nfactors := nfactors;
+  return h;
+end intrinsic;
+
+intrinsic PGGHomGrpPerm_WrDiagonal_Make(G :: PGGGrpPerm, H :: PGGGrpPerm_RawSubgroup : NumFactors:=false) -> PGGHomGrpPerm_WrDiagonal
+  {"}
+  h0 := PGGHomGrpPerm_WrDiagonal_Make(G, H`overgroup : NumFactors:=NumFactors);
+  require Image(Hom(h0)) subset Group(H): "G does not embed diagonally into H";
+  h := New(PGGHomGrpPerm_WrDiagonal);
+  h`domain := G;
+  h`codomain := H;
+  h`parent_hom := h0;
+  return h;
+end intrinsic;
+
 intrinsic Hom(h :: PGGHomGrpPerm) -> Map
   {The underlying homomorphism.}
   if not assigned h`hom then
@@ -112,7 +168,9 @@ intrinsic _Hom(h :: PGGHomGrpPerm_WrProd) -> Map
   {"}
   G := Group(Domain(h));
   H := Group(Codomain(h));
-  gens := [H| Compose(hparts, Codomain(h)) where hparts := <[g @ h`factors[j] : g in gparts[j]] : j in [1..#h`factors]> where gparts := Decompose(g, Domain(h)) where g := G.i : i in [1..Ngens(G)]];
+  cshs := CumulativeShapes(h);
+  cds := [i eq 0 select 1 else Degree(Codomain(h`factors[i])) * Self(i) : i in [0..#h`factors]];
+  gens := [H| Compose(hparts, Codomain(h)) where hparts := <[IsDefined(sh, k) select (gs[sh[k]] @ fac) else Id(Codomain(fac)) : k in [1..cds[j]]] where sh:=cshs[j] where gs:=gparts[j] where fac:=h`factors[j] : j in [1..#h`factors]> where gparts := Decompose(g, Domain(h)) where g := G.i : i in [1..Ngens(G)]];
   return hom<G -> H | gens>;
 end intrinsic;
 
@@ -124,8 +182,137 @@ intrinsic _Hom(h :: PGGHomGrpPerm_DirProd) -> Map
   return hom<G -> H | gens>;
 end intrinsic;
 
+intrinsic _Hom(h :: PGGHomGrpPerm_Cyclic) -> Map
+  {"}
+  return hom<Group(Domain(h)) -> Group(Codomain(h)) | h`genimg>;
+end intrinsic;
+
+intrinsic _Hom(h :: PGGHomGrpPerm_WrDiagonal) -> Map
+  {"}
+  G := Group(Domain(h));
+  H := Group(Codomain(h));
+  if assigned h`parent_hom then
+    h0 := Hom(h`parent_hom);
+    return hom<G -> H | [H| h0(G.i) : i in [1..Ngens(G)]]>;
+  else
+    dG := Degree(G);
+    dH := Degree(H);
+    return hom<G -> H | [H| [(((j-1) mod dG)+1)^g + ((j-1) div dG)*dG : j in [1..dH]] where g:=G.i : i in [1..Ngens(G)]]>;
+  end if;
+end intrinsic;
+
 intrinsic '@'(x, h :: PGGHomGrpPerm) -> GrpPermElt
   {Application.}
   return x @ Hom(h);
 end intrinsic;
 
+intrinsic Shape(h :: PGGHomGrpPerm) -> []
+  {Sequence of length up to Degree(Codomain(h)) where each defined element is an integer up to Degree(Domain(h)) giving the correspondence between the actions. Elements may be unset, signifying no action.}
+  if not assigned h`shape then
+    h`shape := _Shape(h);
+    assert #h`shape le Degree(Codomain(h));
+    assert forall{x : x in h`shape | x ge 1 and x le Degree(Domain(h))};
+  end if;
+  return h`shape;
+end intrinsic;
+
+intrinsic _Shape(h :: PGGHomGrpPerm) -> []
+  {"}
+  not_implemented("Shape:", Type(h));
+end intrinsic;
+
+intrinsic _Shape(h :: PGGHomGrpPerm_Id) -> []
+  {"}
+  return [1..Degree(Domain(h))];
+end intrinsic;
+
+intrinsic _Shape(h :: PGGHomGrpPerm_WrDiagonal) -> []
+  {"}
+  return [((i-1) mod Degree(Domain(h)))+1 : i in [1..Degree(Codomain(h))]];
+end intrinsic;
+
+intrinsic _Shape(h :: PGGHomGrpPerm_WrProd) -> []
+  {"}
+  n := #h`factors;
+  shs := CumulativeShapes(h);
+  assert #shs eq n+1;
+  return shs[n+1];
+end intrinsic;
+
+intrinsic CumulativeShapes(h :: PGGHomGrpPerm_WrProd) -> []
+  {The cumulative shape of each factor.}
+  if not assigned h`cumulative_shapes then
+    csh := [Z|1];
+    ret := [csh];
+    deg := 1;
+    for fac in h`factors do
+      d0 := Degree(Domain(fac));
+      d := Degree(Codomain(fac));
+      sh := Shape(fac);
+      newsh := [Z|];
+      for i in [1..deg] do
+        if IsDefined(csh, i) then
+          for j in [1..d] do
+            if IsDefined(sh, j) then
+              newsh[(i-1)*d + j] := sh[j] + d0*(csh[i]-1);
+            end if;
+          end for;
+        end if;
+      end for;
+      Append(~ret, newsh);
+      csh := newsh;
+      deg *:= d;
+    end for;
+    h`cumulative_shapes := ret;
+  end if;
+  return h`cumulative_shapes;
+end intrinsic;
+
+intrinsic Print(h :: PGGHomGrpPerm)
+  {Print.}
+  printf "homomorphism from %o to %o", sprint_with_parens(Domain(h)), sprint_with_parens(Codomain(h));
+end intrinsic;
+
+intrinsic Print(h :: PGGHomGrpPerm_Id)
+  {"}
+  printf "identity homomorphism from %o to %o", sprint_with_parens(Domain(h)), sprint_with_parens(Codomain(h));
+end intrinsic;
+
+intrinsic Print(h :: PGGHomGrpPerm_WrProd)
+  {"}
+  print "wreath product homomorphism:";
+  IndentPush();
+  if #h`factors eq 0 then
+    printf "(null)";
+  else
+    for i in [1..#h`factors] do
+      Print(h`factors[i]);
+      if i lt #h`factors then
+        print "";
+      end if;
+    end for;
+  end if;
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(h :: PGGHomGrpPerm_DirProd)
+  {"}
+  print "direct product homomorphism:";
+  IndentPush();
+  if #h`factors eq 0 then
+    printf "(null)";
+  else
+    for i in [1..#h`factors] do
+      Print(h`factors[i]);
+      if i lt #h`factors then
+        print "";
+      end if;
+    end for;
+  end if;
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(h :: PGGHomGrpPerm_WrDiagonal)
+  {"}
+  printf "diagonal embedding from %o to %o", sprint_with_parens(Domain(h)), sprint_with_parens(Codomain(h));
+end intrinsic;

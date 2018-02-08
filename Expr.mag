@@ -123,34 +123,58 @@ intrinsic Evaluate(x :: PGGExpr, vars :: Assoc) -> .
   return _Evaluate(x, func<n | vars[n]>);
 end intrinsic;
 
-intrinsic EvaluateLazy(x :: PGGExpr, lazy_vars :: Assoc) -> .
+intrinsic EvaluateLazy(x :: PGGExpr, lazy_vars :: Assoc : Recursive:=false) -> ., .
   {Evaluates x.}
   store := NewStore();
-  function vars(name)
-    ok, x := StoreIsDefined(store, name);
-    if ok then
+  if Recursive then
+    function vars(name)
+      ok, x := StoreIsDefined(store, name);
+      if ok then
+        return x;
+      end if;
+      x := lazy_vars[name](vars);
+      StoreSet(store, name, x);
       return x;
-    end if;
-    x := lazy_vars[name]();
-    StoreSet(store, name, x);
-    return x;
-  end function;
-  return _Evaluate(x, vars);
+    end function;
+  else
+    function vars(name)
+      ok, x := StoreIsDefined(store, name);
+      if ok then
+        return x;
+      end if;
+      x := lazy_vars[name]();
+      StoreSet(store, name, x);
+      return x;
+    end function;
+  end if;
+  return _Evaluate(x, vars), vars;
 end intrinsic;
 
-intrinsic EvaluateLazy(x :: PGGExpr, lazy_vars :: UserProgram) -> .
+intrinsic EvaluateLazy(x :: PGGExpr, lazy_vars :: UserProgram : Recursive:=false) -> ., .
   {Evaluates x.}
   store := NewStore();
-  function vars(name)
-    ok, x := StoreIsDefined(store, name);
-    if ok then
+  if Recursive then
+    function vars(name)
+      ok, x := StoreIsDefined(store, name);
+      if ok then
+        return x;
+      end if;
+      x := lazy_vars(name, vars);
+      StoreSet(store, name, x);
       return x;
-    end if;
-    x := lazy_vars(name);
-    StoreSet(store, name, x);
-    return x;
-  end function;
-  return _Evaluate(x, vars);
+    end function;
+  else
+    function vars(name)
+      ok, x := StoreIsDefined(store, name);
+      if ok then
+        return x;
+      end if;
+      x := lazy_vars(name);
+      StoreSet(store, name, x);
+      return x;
+    end function;
+  end if;
+  return _Evaluate(x, vars), vars;
 end intrinsic;
 
 intrinsic _Evaluate(x :: PGGExpr_FreeVar, vars) -> .

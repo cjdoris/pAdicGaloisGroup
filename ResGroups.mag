@@ -394,10 +394,10 @@ end intrinsic;
 intrinsic IsUseful(s :: PGGAlgState_ResGroups_All, i :: PGGAlgState_TrancheItem) -> BoolElt
   {"}
   Gs := s`possible_groups;
-  h := Hom(s`overgroup_embedding) * CosetAction(Group(s`resolvent_overgroup), i`subgroup);
+  h := CosetAction(Group(s`resolvent_overgroup), i`subgroup);
   statalg := s`algorithm`statistic;
-  stat1 := GroupStat(statalg, h(Gs[1]));
-  is_useful := exists{G : G in Gs[2..#Gs] | GroupStat(statalg, h(G)) ne stat1};
+  stat1 := GroupStat(statalg, Gs[1] @ s`overgroup_embedding @ h);
+  is_useful := exists{G : G in Gs[2..#Gs] | GroupStat(statalg, G @ s`overgroup_embedding @ h) ne stat1};
   if not is_useful then
     Forget(i);
   end if;

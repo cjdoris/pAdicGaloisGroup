@@ -37,9 +37,31 @@ function parse_algorithm(alg)
   specs := PGG_ArgSpec_ManyRecursive(procedure (set, get)
 
     BOOL := PGG_ArgSpec_Union([
+      PGG_ArgSpec_ISA(BoolElt),
       PGG_ArgSpec_Attr("True", [], func<args | true>),
       PGG_ArgSpec_Attr("False", [], func<args | false>)
     ]);
+
+    EXPRESSION := func<vars | PGG_ArgSpec_Recursive(function (X)
+      return PGG_ArgSpec_Union([
+        PGG_ArgSpec_Attr(var, [], func<args | PGG_Expression_FreeVariable(var)>)
+        : var in vars
+      ] cat [
+        PGG_ArgSpec_Attr("le", [<X>,<X>], func<args | PGG_Expression_BinOp('le', args[1], args[2])>),
+        PGG_ArgSpec_Attr("lt", [<X>,<X>], func<args | PGG_Expression_BinOp('lt', args[1], args[2])>),
+        PGG_ArgSpec_Attr("ge", [<X>,<X>], func<args | PGG_Expression_BinOp('ge', args[1], args[2])>),
+        PGG_ArgSpec_Attr("gt", [<X>,<X>], func<args | PGG_Expression_BinOp('gt', args[1], args[2])>),
+        PGG_ArgSpec_Attr("eq", [<X>,<X>], func<args | PGG_Expression_BinOp('eq', args[1], args[2])>),
+        PGG_ArgSpec_Attr("ne", [<X>,<X>], func<args | PGG_Expression_BinOp('ne', args[1], args[2])>),
+        PGG_ArgSpec_AttrList("and", X, func<args | PGG_Expression_SeqOp('&and', [x : x in args])>),
+        PGG_ArgSpec_AttrList("or", X, func<args | PGG_Expression_SeqOp('&or', [x : x in args])>),
+        PGG_ArgSpec_Attr("-", [<X>], func<args | PGG_Expression_UnOp('-', args[1])>),
+        PGG_ArgSpec_Attr("-", [<X>,<X>], func<args | PGG_Expression_BinOp('-', args[1], args[2])>),
+        PGG_ArgSpec_AttrList("+", X, func<args | PGG_Expression_SeqOp('&+', [x : x in args])>),
+        PGG_ArgSpec_AttrList("*", X, func<args | PGG_Expression_SeqOp('&*', [x : x in args])>),
+        PGG_ArgSpec_Transform(PGG_ArgSpec_AttrInt(), func<x | PGG_Expression_Const(x)>)
+      ]);
+    end function)>;
 
     GLOBAL_MODEL := set("GLOBAL_MODEL", PGG_ArgSpec_Union([
       PGG_ArgSpec_ISA(PGGAlg_ResEval_Global_Model),
@@ -58,6 +80,17 @@ function parse_algorithm(alg)
         "RamTower",
         [<get("GLOBAL_MODEL"),"Next",false>],
         func<args | PGGAlg_ResEval_Global_Model_RamTower_Make(:Next:=args[1])>
+      ),
+      PGG_ArgSpec_AttrSelect(
+        "Select",
+        EXPRESSION(["p","faccerts","irr","unram","tame","ram","wild","totram","totwild"]),
+        get("GLOBAL_MODEL"),
+        func<pargs, rargs | PGGAlg_ResEval_Global_Model_Select_Make(:Predicates:=pargs, Models:=rargs)>
+      ),
+      PGG_ArgSpec_Attr(
+        "RootOfUnity",
+        [<BOOL, "Minimize", false>],
+        func<args | PGGAlg_ResEval_Global_Model_RootOfUnity_Make(:Minimize:=args[1])>
       )
     ]));
 
@@ -96,27 +129,6 @@ function parse_algorithm(alg)
     // ]);
 
     // SUBGROUP_PRIORITY_EXPRESSION := PGG_ArgSpec_AttrExpr(["Index","OrbitIndex","Diversity","Information"]);
-
-    EXPRESSION := func<vars | PGG_ArgSpec_Recursive(function (X)
-      return PGG_ArgSpec_Union([
-        PGG_ArgSpec_Attr(var, [], func<args | PGG_Expression_FreeVariable(var)>)
-        : var in vars
-      ] cat [
-        PGG_ArgSpec_Attr("le", [<X>,<X>], func<args | PGG_Expression_BinOp('le', args[1], args[2])>),
-        PGG_ArgSpec_Attr("lt", [<X>,<X>], func<args | PGG_Expression_BinOp('lt', args[1], args[2])>),
-        PGG_ArgSpec_Attr("ge", [<X>,<X>], func<args | PGG_Expression_BinOp('ge', args[1], args[2])>),
-        PGG_ArgSpec_Attr("gt", [<X>,<X>], func<args | PGG_Expression_BinOp('gt', args[1], args[2])>),
-        PGG_ArgSpec_Attr("eq", [<X>,<X>], func<args | PGG_Expression_BinOp('eq', args[1], args[2])>),
-        PGG_ArgSpec_Attr("ne", [<X>,<X>], func<args | PGG_Expression_BinOp('ne', args[1], args[2])>),
-        PGG_ArgSpec_AttrList("and", X, func<args | PGG_Expression_SeqOp('&and', [x : x in args])>),
-        PGG_ArgSpec_AttrList("or", X, func<args | PGG_Expression_SeqOp('&or', [x : x in args])>),
-        PGG_ArgSpec_Attr("-", [<X>], func<args | PGG_Expression_UnOp('-', args[1])>),
-        PGG_ArgSpec_Attr("-", [<X>,<X>], func<args | PGG_Expression_BinOp('-', args[1], args[2])>),
-        PGG_ArgSpec_AttrList("+", X, func<args | PGG_Expression_SeqOp('&+', [x : x in args])>),
-        PGG_ArgSpec_AttrList("*", X, func<args | PGG_Expression_SeqOp('&*', [x : x in args])>),
-        PGG_ArgSpec_Transform(PGG_ArgSpec_AttrInt(), func<x | PGG_Expression_Const(x)>)
-      ]);
-    end function)>;
 
     SUBGROUP_PRIORITY := set("SUBGROUP_PRIORITY", PGG_ArgSpec_Union([
       PGG_ArgSpec_ISA(PGGAlg_ResPriority),

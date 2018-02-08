@@ -32,6 +32,7 @@ intrinsic RamificationGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: RngUPolElt[FldPa
   emb := OvergroupEmbedding(rst);
   vprint PGG_GaloisGroup: "conjugacy group =", Domain(emb);
   vprint PGG_GaloisGroup: "resolvent overgroup =", Codomain(emb);
+  vprint PGG_GaloisGroup: "overgroup embedding =", emb;
   W := Group(Codomain(emb));
   PGG_GlobalTimer_Swap("start groups");
   gst := Start(Alg`groups_alg, emb);

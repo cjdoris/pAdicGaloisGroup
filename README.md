@@ -93,7 +93,7 @@ RESEVAL_ALG
   ]
 
 GLOBAL_MODEL
-= "Symmetric"             The symmetric group
+= "Symmetric"             Use a global approximation of the defining polynomial, assume the global group is symmetric
   [ GALOISGROUP               Use this algorithm to compute the actual Galois group
   ]
 | "Factors"               Factorize the polynomial then...
@@ -101,6 +101,16 @@ GLOBAL_MODEL
   ]
 | "RamTower"              Get the ramification filtration of the extension defined by the polynomial, then...
   [ GLOBAL_MODEL            ... produce a model from each sub-extension in this manner
+  ]
+| "RootsOfUnity"          Adjoin a root of unit to make an unramified extension
+  [ Minimize: BOOL          When true, minimize the degree of the extension
+  ]
+| "Select"                Select between several global models
+  [ EXPRESSION              An expression evaluating to true or false in the following variables:
+                              "p", "irr", "deg", "unram", "tame", "ram", "wild", "totram", "totwild"
+  , GLOBAL_MODEL            When the expression is true, use this model.
+  ] ...                     More expression-model pairs to select between.
+  [ GLOBAL_MODEL            Use this model if no other is used.
   ]
 
 STATISTIC

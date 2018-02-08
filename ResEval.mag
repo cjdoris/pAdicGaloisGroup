@@ -1,4 +1,4 @@
-import "Utils.mag": Q, Z, tschirnhaus_transformation, slpol_bound, left_coset_representatives, permute_seq, polynomial_with_roots, not_implemented;
+import "Utils.mag": Q, Z, tschirnhaus_transformation, slpol_bound, left_coset_representatives, right_coset_representatives, permute_seq, polynomial_with_roots, not_implemented, print_header_then_indent;
 
 declare type PGGAlg_ResEval: PGGAlg;
 
@@ -18,6 +18,12 @@ declare attributes PGGAlg_ResEval_Global_Model_Factors: next;
 
 declare type PGGAlg_ResEval_Global_Model_RamTower: PGGAlg_ResEval_Global_Model;
 declare attributes PGGAlg_ResEval_Global_Model_RamTower: next;
+
+declare type PGGAlg_ResEval_Global_Model_Select: PGGAlg_ResEval_Global_Model;
+declare attributes PGGAlg_ResEval_Global_Model_Select: predicates, models;
+
+declare type PGGAlg_ResEval_Global_Model_RootOfUnity: PGGAlg_ResEval_Global_Model;
+declare attributes PGGAlg_ResEval_Global_Model_RootOfUnity: minimize;
 
 intrinsic Start(alg :: PGGAlg_ResEval_Global, f :: RngUPolElt[FldPad]) -> PGGAlgState_ResEval_Global
   {Starts the algorithm and returns its state.}
@@ -98,6 +104,25 @@ intrinsic PGGAlg_ResEval_Global_Model_RamTower_Make(:Next:=false) -> PGGAlg_ResE
   return a;
 end intrinsic;
 
+intrinsic PGGAlg_ResEval_Global_Model_Select_Make(:Predicates:=false, Models:=false) -> PGGAlg_ResEval_Global_Model_Select
+  {The "Select" global model algorithm.}
+  preds := Predicates cmpne false select Predicates else [**];
+  models := Models cmpne false select Models else [**];
+  require #models ge 1: "There must be at least 1 model";
+  require (#models-#preds) in [0,1]: "There must be 0 or 1 more Models than Predicates";
+  a := New(PGGAlg_ResEval_Global_Model_Select);
+  a`predicates := preds;
+  a`models := models;
+  return a;
+end intrinsic;
+
+intrinsic PGGAlg_ResEval_Global_Model_RootOfUnity_Make(:Minimize:=false) -> PGGAlg_ResEval_Global_Model_RootOfUnity
+  {The "RootOfUnity" global model algorithm.}
+  a := New(PGGAlg_ResEval_Global_Model_RootOfUnity);
+  a`minimize := Minimize;
+  return a;
+end intrinsic;
+
 intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_Symmetric)
   {Print.}
   print "symmetric";
@@ -114,6 +139,29 @@ end intrinsic;
 intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_RamTower)
   {"}
   printf "ramification tower -> "; Print(alg`next);
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_Select)
+  {"}
+  print "select";
+  IndentPush();
+  for i in [1..#alg`models] do
+    printf "%o => ", i le #alg`predicates select alg`predicates[i] else "else";
+    Print(alg`models[i]);
+    if i lt #alg`models then
+      print "";
+    end if;
+  end for;
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_RootOfUnity)
+  {"}
+  // print_header_then_indent("root of unity", alg`minimize select [*"minimize"*] else [**]);
+  print "root of unity";
+  IndentPush();
+  printf "minimize = %o", alg`minimize;
+  IndentPop();
 end intrinsic;
 
 intrinsic PGGAlg_ResEval_Global_Make(:Model:=false) -> PGGAlg_ResEval_Global
