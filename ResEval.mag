@@ -25,6 +25,8 @@ declare attributes PGGAlg_ResEval_Global_Model_Select: predicates, models;
 declare type PGGAlg_ResEval_Global_Model_RootOfUnity: PGGAlg_ResEval_Global_Model;
 declare attributes PGGAlg_ResEval_Global_Model_RootOfUnity: minimize;
 
+declare type PGGAlg_ResEval_Global_Model_RootOfUniformizer: PGGAlg_ResEval_Global_Model;
+
 intrinsic Start(alg :: PGGAlg_ResEval_Global, f :: RngUPolElt[FldPad]) -> PGGAlgState_ResEval_Global
   {Starts the algorithm and returns its state.}
   s := New(PGGAlgState_ResEval_Global);
@@ -123,6 +125,12 @@ intrinsic PGGAlg_ResEval_Global_Model_RootOfUnity_Make(:Minimize:=false) -> PGGA
   return a;
 end intrinsic;
 
+intrinsic PGGAlg_ResEval_Global_Model_RootOfUniformizer_Make() -> PGGAlg_ResEval_Global_Model_RootOfUniformizer
+  {The "RootOfUniformizer" global model algorithm.}
+  a := New(PGGAlg_ResEval_Global_Model_RootOfUniformizer);
+  return a;
+end intrinsic;
+
 intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_Symmetric)
   {Print.}
   print "symmetric";
@@ -162,6 +170,11 @@ intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_RootOfUnity)
   IndentPush();
   printf "minimize = %o", alg`minimize;
   IndentPop();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer)
+  {"}
+  printf "root of uniformizer";
 end intrinsic;
 
 intrinsic PGGAlg_ResEval_Global_Make(:Model:=false) -> PGGAlg_ResEval_Global

@@ -21,6 +21,9 @@ declare attributes PGGGloMod_Tower: tower, global_pol, global_pol_root, global_f
 declare type PGGGloMod_RootOfUnity: PGGGloMod_Fld, PGGGloMod_UPol;
 declare attributes PGGGloMod_RootOfUnity: primitive_root, root_powers;
 
+declare type PGGGloMod_RootOfUniformizer: PGGGloMod_Fld, PGGGloMod_UPol;
+declare attributes PGGGloMod_RootOfUniformizer: degree, global_uniformizer, unity_powers;
+
 intrinsic Approximation(m :: PGGGloMod_Fld, x :: FldPadElt) -> FldElt
   {Takes a global approximation to x across all embeddings.}
   return Approximation(m, x, {1..#m`embeddings});
@@ -336,6 +339,78 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUnity, f :: RngUP
   return m, Whom;
 end intrinsic;
 
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer, f :: RngUPolElt[FldPad], bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+  {"}
+
+  // check the inputs
+  if TopField cmpeq false then
+    not_implemented("f must be known irreducible");
+  end if;
+  L := TopField;
+  K := BaseRing(f);
+  d := Degree(f);
+  p := Prime(K);
+  assert Degree(L, K) eq d;
+  if (InertiaDegree(L, K) ne 1) or IsDivisibleBy(d, p) then
+    not_implemented("expecting a totally tame extension");
+  end if;
+
+  // get the global base field
+  gK := Domain(bm`embeddings[1]);
+  assert forall{e : e in bm`embeddings | Domain(e) eq gK};
+  assert forall{e : e in bm`embeddings | Codomain(e) eq K};
+
+  // find Aut(gK(zeta_d)/gK) in terms of i s.t. zeta -> zeta^i
+  C := Factorization(ChangeRing(CyclotomicPolynomial(d), gK))[1][1];
+  gM<z> := ext<gK | C>;
+  zauts := {@ i : i in [1..d-1] | Evaluate(C, z^i) eq 0 @};
+  vprint PGG_GaloisGroup, 1: "zauts =", zauts;
+  assert 1 in zauts;
+  assert IsDivisibleBy(EulerPhi(d), #zauts);
+
+  // the global field
+  piK := Coefficient(DefiningPolynomial(L, K), 0);
+  assert AbsolutePrecision(piK) ge 2;
+  assert Valuation(piK) eq 1;
+  gpiK0 := Approximation(bm, piK);
+  gpiK := reduce_coefficients(gpiK0, p^2);
+  gL := ext<gK | Polynomial([case<i | 0:gpiK, d:1, default: 0> : i in [0..d]])>;
+
+  // extend each embedding
+  Lembs := [];
+  for e in bm`embeddings do
+    L2 := ext<K | Polynomial([case<i | 0:e(gpiK), d:1, default: 0> : i in [0..d]])>;
+    ok, isom := fldpad_has_isomorphism(L, L2, K);
+    assert ok;
+    Append(~Lembs, map<gL -> L
+      | x :-> (&+[L2| (cs[i]@e) * (L2.1)^(i-1) : i in [1..#cs]])@@isom where cs:=Eltseq(x)
+      , y :-> &+[gL| (cs[i]@@e) * (gL.1)^(i-1) : i in [1..#cs]] where cs:=fldpad_eltseq(y@isom)>);
+  end for;
+
+  // extend each prime
+  ps := [Factorization(Integers(gL) !! p)[1][1] : p in bm`primes];
+
+  // make the model
+  m := New(PGGGloMod_RootOfUniformizer);
+  m`embeddings := Lembs;
+  m`primes := ps;
+  m`local_field := L;
+  m`global_field := gL;
+  m`global_pol := DefiningPolynomial(gL);
+  m`global_uniformizer := -gpiK;
+  m`degree := d;
+  m`unity_powers := zauts;
+
+  // the Galois groups
+  Sd := PGGGrpPerm_Symmetric_Make(d);
+  gW := PGGGrpPerm_RawSubgroup_Make(Sd, sub<Group(Sd) | [[(((k-1)*j+i) mod d)+1 : k in [1..d]] : j in zauts, i in [0..d-1]]>);
+  assert #Group(gW) eq d*#zauts;
+  W := PGGConj_TotRam_Make(f : TopField:=L);
+  Whom := PGGHomGrpPerm_Id_Make(W, gW);
+
+  return m, Whom;
+end intrinsic;
+
 intrinsic ComplexEmbeddings(m :: PGGGloMod_Rational, embs :: [Map]) -> []
   {The complex embeddings of m extending embs.}
   return embs;
@@ -353,6 +428,12 @@ intrinsic ComplexEmbeddings(m :: PGGGloMod_RootOfUnity, embs :: [Map]) -> []
   return [map<m`global_field -> C | x :-> &+[(cs[j] @ e) * r^(j-1) : j in [1..#cs]] where cs:=Eltseq(x)> where C:=Codomain(e) where e:=embs[i] : r in rss[i], i in [1..#embs]];
 end intrinsic;
 
+intrinsic ComplexEmbeddings(m :: PGGGloMod_RootOfUniformizer, embs :: [Map]) -> []
+  {"}
+  rss := ComplexRoots(m, embs);
+  return [map<m`global_field -> C | x :-> &+[(cs[j] @ e) * r^(j-1) : j in [1..#cs]] where cs:=Eltseq(x)> where C:=Codomain(e) where e:=embs[i] : r in rss[i], i in [1..#embs]];
+end intrinsic;
+
 intrinsic ComplexRoots(m :: PGGGloMod_Symmetric, embs :: [Map]) -> []
   {The complex roots of the polynomial model.}
   return [[r[1] : r in Roots(Polynomial([c@e : c in Coefficients(m`global_pol)]))] : e in embs];
@@ -364,6 +445,17 @@ intrinsic ComplexRoots(m :: PGGGloMod_RootOfUnity, embs :: [Map]) -> []
   assert forall{r : r in rs | Abs(Abs(r)-1) lt 1e-10};
   assert forall{r : r in rs | Abs(r^m`primitive_root-1) lt 1e-10};
   return [[r^i : i in m`root_powers] : r in rs];
+end intrinsic;
+
+intrinsic ComplexRoots(m :: PGGGloMod_RootOfUniformizer, embs :: [Map]) -> []
+  {"}
+  // rs := [Roots(Polynomial([c@e : c in Coefficients(m`global_pol)]))[1][1] : e in embs];
+  rs := [(m`global_uniformizer @ e)^(1/m`degree) : e in embs];
+  if m`degree eq 1 then
+    return [[r] : r in rs];
+  else
+    return [[j eq 0 select r else r * z^j : j in [0..m`degree-1]] where z:=((C!-1)^(1/m`degree))^2 where C:=Codomain(e) where e:=embs[i] where r:=rs[i] : i in [1..#embs]];
+  end if;
 end intrinsic;
 
 intrinsic ComplexRoots(m :: PGGGloMod_Factors, embs :: [Map]) -> []
