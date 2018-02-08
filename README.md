@@ -90,8 +90,8 @@ How to evaluate resolvents.
 How to produce a global model, a global number field which completes to a given local field.
 
 - `Symmetric [GALOISGROUP]`: Use a global approximation of the defining polynomial, with its coefficients minimized if possible. Assume the global Galois group is the full symmetric group. The `GALOISGROUP` algorithm is used to compute the actual Galois group; this doesn't change the global model, but it can cut down the possibilities for the overall Galois group.
-- `Factors [GLOBAL_MODEL]`: Factorize the polynomial and produce a global model for each factor. Corresponds to a direct product at the group level.
-- `RamTower [GLOBAL_MODEL]`: Get the ramification filtration of the extension defined by the polynomial, and produce a global model for each piece. Corresponds to a wreath product at the group level.
+- `Factors [GLOBAL_MODEL]`: Factorize the polynomial and produce a global model for each factor. Corresponds to a direct product of groups.
+- `RamTower [GLOBAL_MODEL]`: Get the ramification filtration of the extension defined by the polynomial, and produce a global model for each piece. Corresponds to a wreath product of groups.
 - `RootOfUnity [Minimize:BOOL]`: Adjoin a root of unity to make an unramified extension. The local Galois group is cyclic and the global one is abelian and known. By default, we adjoin a `(q^d-1)`th root of unity; when `Minimize` is true, we minimize the degree of the extension by choosing a suitable divisor of this. **Note:** The global model may be of higher degree than the local extension, which in a wreath product can make the overall group size exponentially larger.
 - `RootOfUniformizer`: Adjoin a root of a uniformizer to make a totally tamely ramified extension. The local and global Galois groups are known.
 - `Select [EXPRESSION, GLOBAL_MODEL] ... [GLOBAL_MODEL]`: Select between several global models. The global model next to the first expression evaluating to true is used, or else the final model is used. The expressions are in the following variables: `p`, `irr`, `deg`, `unram`, `tame`, `ram`, `wild`, `totram`, `totwild`.
