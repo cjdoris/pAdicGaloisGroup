@@ -86,6 +86,8 @@ algs :=
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:Generous]]",{"deg6","deg8","deg10"},{"2by"}>
   , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:True]][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg6","deg8","deg10"},{}>
   , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:False]][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg6","deg8","deg10"},{}>
+  , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:False,Complement:True]][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg6","deg8","deg10"},{}>
+  , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:True,Complement:True]][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg6","deg8","deg10"},{}>
   , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:True]][tame,RootOfUniformizer][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg6","deg8","deg10"},{}>
   ]
 ;

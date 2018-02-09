@@ -89,8 +89,10 @@ function parse_algorithm(alg)
       ),
       PGG_ArgSpec_Attr(
         "RootOfUnity",
-        [<BOOL, "Minimize", false>],
-        func<args | PGGAlg_ResEval_Global_Model_RootOfUnity_Make(:Minimize:=args[1])>
+        [ <BOOL, "Minimize", false>
+        , <BOOL, "Complement", false>
+        ],
+        func<args | PGGAlg_ResEval_Global_Model_RootOfUnity_Make(:Minimize:=args[1], Complement:=args[2])>
       ),
       PGG_ArgSpec_Attr(
         "RootOfUniformizer",

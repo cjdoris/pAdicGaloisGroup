@@ -23,7 +23,7 @@ declare type PGGAlg_ResEval_Global_Model_Select: PGGAlg_ResEval_Global_Model;
 declare attributes PGGAlg_ResEval_Global_Model_Select: predicates, models;
 
 declare type PGGAlg_ResEval_Global_Model_RootOfUnity: PGGAlg_ResEval_Global_Model;
-declare attributes PGGAlg_ResEval_Global_Model_RootOfUnity: minimize;
+declare attributes PGGAlg_ResEval_Global_Model_RootOfUnity: minimize, complement;
 
 declare type PGGAlg_ResEval_Global_Model_RootOfUniformizer: PGGAlg_ResEval_Global_Model;
 
@@ -119,10 +119,11 @@ intrinsic PGGAlg_ResEval_Global_Model_Select_Make(:Predicates:=false, Models:=fa
   return a;
 end intrinsic;
 
-intrinsic PGGAlg_ResEval_Global_Model_RootOfUnity_Make(:Minimize:=false) -> PGGAlg_ResEval_Global_Model_RootOfUnity
+intrinsic PGGAlg_ResEval_Global_Model_RootOfUnity_Make(:Minimize:=false, Complement:=false) -> PGGAlg_ResEval_Global_Model_RootOfUnity
   {The "RootOfUnity" global model algorithm.}
   a := New(PGGAlg_ResEval_Global_Model_RootOfUnity);
   a`minimize := Minimize;
+  a`complement := Complement;
   return a;
 end intrinsic;
 
