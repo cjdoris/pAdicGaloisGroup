@@ -1,4 +1,4 @@
-import "Utils.mag": Q, not_implemented, largest_coefficient, reduce_coefficients, change_apr, maximize_apr, has_root, factorization, ramification_tower, random_primitive_element, fldpad_has_isomorphism, seq_shuffle, roots, fldpad_eltseq;
+import "Utils.mag": Q, not_implemented, largest_coefficient, reduce_coefficients, change_apr, maximize_apr, has_root, factorization, ramification_tower, random_primitive_element, fldpad_has_isomorphism, seq_shuffle, roots, fldpad_eltseq, is_eisenstein, is_inertial, precision_error;
 
 declare type PGGGloMod;
 
@@ -74,6 +74,13 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: RngUPol
   PGG_GlobalTimer_Push("global polynomial");
   glopol0 := Polynomial([Approximation(bm, c) : c in Coefficients(locpol)]);
   if assigned locW`top_field then
+    if is_eisenstein(locpol) then
+      ty := "E";
+    elif is_inertial(locpol) then
+      ty := "I";
+    else
+      assert false;
+    end if;
     nembs := #bm`embeddings;
     PGG_GlobalTimer_Swap("minimize coefficients");
     locext := locW`top_field;
@@ -81,40 +88,44 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: RngUPol
     // minimize the coefficients of glopol
     K := BaseRing(locpol);
     pr := Precision(K);
-    glopol := glopol0;
+    // glopol := glopol0;
     root := locext.1;
-    locext2s := [locext : i in [1..nembs]];
-    isoms := [map<locext -> locext2s[i] | x :-> x, y :-> y> : i in [1..nembs]];
-    pr := Ceiling(Log(Prime(K), Max([largest_coefficient(c) : c in Coefficients(glopol)])));
-    vprint PGG_GaloisGroup, 1: "pr =", pr;
-    vprint PGG_GaloisGroup, 2: "glopol =", glopol;
+    // locext2s := [locext : i in [1..nembs]];
+    // isoms := [map<locext -> locext2s[i] | x :-> x, y :-> y> : i in [1..nembs]];
+    max_pr := Ceiling(Log(Prime(K), Max([largest_coefficient(c) : c in Coefficients(glopol0)])));
+    pr := 0;
     while true do
-      pr div:= 2;
-      vprint PGG_GaloisGroup, 1: "pr =", pr;
-      if pr lt 2 then
-        break;
+      if pr lt 4 then
+        pr +:= 1;
+      elif pr lt max_pr then
+        pr := Min(max_pr, 2*pr);
+      else
+        precision_error();
       end if;
+      vprint PGG_GaloisGroup, 1: "pr =", pr;
       PGG_GlobalTimer_Push("reduce coefficients");
-      glopol2 := Polynomial([reduce_coefficients(c, Prime(K)^pr) : c in Coefficients(glopol)]);
-      vprint PGG_GaloisGroup, 2: "glopol =", glopol2;
-      locpol2s := [Polynomial([change_apr(c@e, Precision(K)) : c in Coefficients(glopol2)]) : e in bm`embeddings];
-      locext2news := [ext<K | pol> : pol in locpol2s];
+      glopol := Polynomial([reduce_coefficients(c, Prime(K)^pr) : c in Coefficients(glopol0)]);
+      vprint PGG_GaloisGroup, 2: "glopol =", glopol;
+      PGG_GlobalTimer_Swap("embed");
+      locpol2s := [Polynomial([change_apr(c@e, Precision(K)) : c in Coefficients(glopol)]) : e in bm`embeddings];
+      if exists{locpol2 : locpol2 in locpol2s | not case<ty | "E": is_eisenstein(locpol2), "I": is_inertial(locpol2), default: not_implemented()>} then
+        PGG_GlobalTimer_Pop();
+        continue;
+      end if;
+      locext2s := [ext<K | pol> : pol in locpol2s];
       PGG_GlobalTimer_Swap("isomorphic");
-      isom2s := [**];
-      for locext2new in locext2news do
-        ok, isom2 := fldpad_has_isomorphism(locext, locext2new, K);
+      isoms := [**];
+      ok := true;
+      for locext2 in locext2s do
+        ok, isom := fldpad_has_isomorphism(locext, locext2, K);
         if ok then
-          Append(~isom2s, isom2);
+          Append(~isoms, isom);
         else
           break;
         end if;
       end for;
       PGG_GlobalTimer_Pop();
       if ok then
-        locext2s := locext2news;
-        isoms := isom2s;
-        glopol := glopol2;
-      else
         break;
       end if;
     end while;

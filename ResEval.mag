@@ -62,8 +62,9 @@ intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, I, U :: GrpPerm) -> RngUPol
   assert U subset W;
   ntries := 0;
   while true do
+    assert ntries lt 1000;
     ntries +:= 1;
-    trans := tschirnhaus_transformation(ntries, Index(W, U));
+    trans := tschirnhaus_transformation(ntries, Max(3, Index(W, U)));
     rss0 := ComplexRoots(s, 30);
     trss0 := [[Evaluate(trans, r) : r in rs] : rs in rss0];
     rbound := Max([Abs(r) : r in rs, rs in trss0]);

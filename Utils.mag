@@ -391,6 +391,14 @@ function is_eisenstein(f)
   return (d ge 0) and valuation_eq(Coefficient(f, d), 0) and valuation_eq(Coefficient(f, 0), 1) and forall{i : i in [1..d-1] | valuation_ge(Coefficient(f, i), 1)};
 end function;
 
+function is_inertial(f)
+  d := Degree(f);
+  if exists{c : c in Coefficients(f) | AbsolutePrecision(c) lt 1} then
+    precision_error();
+  end if;
+  return (d ge 1) and valuation_eq(Coefficient(f, d), 0) and valuation_eq(Coefficient(f, 0), 0) and forall{c : c in Coefficients(f) | valuation_ge(c, 0)} and IsIrreducible(Polynomial([c@m : c in Coefficients(f)]) where _,m:=ResidueClassField(Integers(BaseRing(f))));
+end function;
+
 function xdiv(x, y)
   ok, z := IsDivisibleBy(x, y);
   assert ok;

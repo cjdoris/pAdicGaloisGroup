@@ -38,6 +38,10 @@ else
   Start := eval Start;
 end if;
 
+if assigned Verbosity then
+  SetVerbose("PGG_GaloisGroup", eval Verbosity);
+end if;
+
 Sym := SymmetricGroup;
 Wr := WreathProduct;
 DP := DirectProduct;
