@@ -510,8 +510,8 @@ intrinsic Print(alg :: PGGAlg_ResGroups_All)
   {Print.}
   print "all";
   IndentPush();
-  print "subgroup choice =", alg`subgroup_choice;
-  printf "statistic = %o", alg`statistic;
+  printf "subgroup choice ="; Print(alg`subgroup_choice); print "";
+  printf "statistic = "; Print(alg`statistic);
   IndentPop();
 end intrinsic;
 
