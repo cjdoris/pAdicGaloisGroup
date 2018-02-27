@@ -107,11 +107,12 @@ function parse_algorithm(alg)
       PGG_ArgSpec_Attr("HasRoot", [], func<args | PGGStat_HasRoot_Make()>),
       PGG_ArgSpec_Attr("NumRoots", [], func<args | PGGStat_NumRoots_Make()>),
       PGG_ArgSpec_Attr("FactorDegrees", [], func<args | PGGStat_FactorDegrees_Make()>),
-      PGG_ArgSpec_Attr("FactorDegrees2", [], func<args | PGGStat_FactorDegrees2_Make()>),
+      // PGG_ArgSpec_Attr("FactorDegrees2", [], func<args | PGGStat_FactorDegrees2_Make()>),
       PGG_ArgSpec_Attr("Degree", [], func<args | PGGStat_Degree_Make()>),
       PGG_ArgSpec_Attr("AutGroup", [], func<args | PGGStat_AutGroup_Make()>),
       PGG_ArgSpec_AttrList("Tup", get("STATISTIC"), func<args | PGGStat_Tup_Make(args)>),
-      PGG_ArgSpec_Attr("Factors", [<get("STATISTIC"), "Stat", false>], func<args | PGGStat_Factors_Make(:Stat:=args[1])>)
+      PGG_ArgSpec_Attr("Factors", [<get("STATISTIC"), "Stat", false>], func<args | PGGStat_Factors_Make(:Stat:=args[1])>),
+      PGG_ArgSpec_Attr("Factors2", [<get("STATISTIC"), "Stat", false>], func<args | PGGStat_Factors2_Make(:Stat:=args[1])>)
     ]));
 
     // SUBGROUP_TRANCHE := PGG_ArgSpec_Union([

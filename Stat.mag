@@ -1,18 +1,23 @@
 import "Utils.mag": has_root, roots, factorization, extension, not_implemented, is_subpartition_of;
 
 declare type PGGStat;
-declare type PGGStat_HasRoot: PGGStat;
-declare type PGGStat_NumRoots: PGGStat;
-declare type PGGStat_FactorDegrees: PGGStat;
-declare type PGGStat_FactorDegrees2: PGGStat;
-declare type PGGStat_Degree: PGGStat;
-declare type PGGStat_Order: PGGStat;
-declare type PGGStat_AutGroup: PGGStat;
+declare type PGGStat_2DArray: PGGStat;
+declare attributes PGGStat_2DArray: strict;
+declare type PGGStat_EqSimple: PGGStat;
+declare type PGGStat_HasRoot: PGGStat_EqSimple;
+declare type PGGStat_NumRoots: PGGStat_EqSimple;
+declare type PGGStat_FactorDegrees: PGGStat_EqSimple;
+declare type PGGStat_FactorDegrees2: PGGStat_2DArray;
+declare type PGGStat_Degree: PGGStat_EqSimple;
+declare type PGGStat_Order: PGGStat_EqSimple;
+declare type PGGStat_AutGroup: PGGStat_EqSimple;
 declare attributes PGGStat_AutGroup: conjugacy_classes;
-declare type PGGStat_Tup: PGGStat;
+declare type PGGStat_Tup: PGGStat_EqSimple;
 declare attributes PGGStat_Tup: stats;
-declare type PGGStat_Factors: PGGStat;
+declare type PGGStat_Factors: PGGStat_EqSimple;
 declare attributes PGGStat_Factors: stat;
+declare type PGGStat_Factors2: PGGStat_2DArray;
+declare attributes PGGStat_Factors2: stat;
 
 declare type PGGStatVal;
 declare attributes PGGStatVal: stat, value, hash;
@@ -70,9 +75,11 @@ intrinsic PGGStat_FactorDegrees_Make() -> PGGStat_FactorDegrees
   return New(PGGStat_FactorDegrees);
 end intrinsic;
 
-intrinsic PGGStat_FactorDegrees2_Make() -> PGGStat_FactorDegrees2
+intrinsic PGGStat_FactorDegrees2_Make(:Strict:=false) -> PGGStat_FactorDegrees2
   {"}
-  return New(PGGStat_FactorDegrees2);
+  S := New(PGGStat_FactorDegrees2);
+  S`strict := Strict;
+  return S;
 end intrinsic;
 
 intrinsic PGGStat_AutGroup_Make() -> PGGStat_AutGroup
@@ -91,9 +98,17 @@ intrinsic PGGStat_Order_Make() -> PGGStat_Order
 end intrinsic;
 
 intrinsic PGGStat_Factors_Make(:Stat:=false) -> PGGStat_Factors
-  {Makes a new PGGStat.}
+  {"}
   S := New(PGGStat_Factors);
   S`stat := Stat cmpne false select Stat else PGGStat_Degree_Make();
+  return S;
+end intrinsic;
+
+intrinsic PGGStat_Factors2_Make(:Stat:=false,Strict:=false) -> PGGStat_Factors2
+  {"}
+  S := New(PGGStat_Factors2);
+  S`stat := Stat cmpne false select Stat else PGGStat_Degree_Make();
+  S`strict := Strict;
   return S;
 end intrinsic;
 
@@ -136,7 +151,14 @@ end intrinsic;
 
 intrinsic Print(S :: PGGStat_Factors)
   {"}
-  printf "factors -> %o", S`stat;
+  printf "factors -> ";
+  Print(S`stat);
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_Factors2)
+  {"}
+  printf "factors of factors -> ";
+  Print(S`stat);
 end intrinsic;
 
 intrinsic Print(S :: PGGStat_Tup)
@@ -146,13 +168,16 @@ intrinsic Print(S :: PGGStat_Tup)
   else
     print "tuple";
     IndentPush();
-    for i in [1..#S`stats-1] do
-      print S`stats[i];
+    for i in [1..#S`stats] do
+      Print(S`stats[i]);
+      if i lt #S`stats then
+        print "";
+      end if;
     end for;
-    printf "%o", S`stats[#S`stats];
     IndentPop();
   end if;
 end intrinsic;
+
 intrinsic ConjugacyClasses(S :: PGGStat_AutGroup, d :: RngIntElt) -> PGGSetSubgrpcls
   {The conjugacy classes of Sym(d).}
   if not assigned S`conjugacy_classes then
@@ -170,22 +195,23 @@ intrinsic GroupStat(S :: PGGStat_HasRoot, G :: GrpPerm) -> PGGStatVal
 end intrinsic;
 
 intrinsic GroupStat(S :: PGGStat_NumRoots, G :: GrpPerm) -> PGGStatVal
-  {The value of the statistic on the group.}
+  {"}
   return MakeValue(S, #[o : o in Orbits(G) | #o eq 1]);
 end intrinsic;
 
 intrinsic GroupStat(S :: PGGStat_FactorDegrees, G :: GrpPerm) -> PGGStatVal
-  {The value of the statistic on the group.}
+  {"}
   return MakeValue(S, {* #o : o in Orbits(G) *});
 end intrinsic;
 
-intrinsic GroupStat(S :: PGGStat_FactorDegrees2, G :: GrpPerm) -> PGGStatVal
-  {"}
-  return MakeValue(S, {* <#o, {*#o : o in Orbits(S)*}> where S:=Stabilizer(G, Rep(o)) : o in Orbits(G)*});
-end intrinsic;
+// intrinsic GroupStat(S :: PGGStat_FactorDegrees2, G :: GrpPerm) -> PGGStatVal
+//   {"}
+//   // return MakeValue(S, {* <#o, {*#o : o in Orbits(S)*}> where S:=Stabilizer(G, Rep(o)) : o in Orbits(G)*});
+//   return MakeValue(S, {*<#o, {*{*#o2 : o2 in Orbits(OrbitImage(S,o))*} : o in os*} where S:=Stabilizer(G,Rep(o))> : o in os*} where os:=Orbits(G));
+// end intrinsic;
 
 intrinsic GroupStat(S :: PGGStat_Degree, G :: GrpPerm) -> PGGStatVal
-  {The value of the statistic on the group.}
+  {"}
   return MakeValue(S, Degree(G));
 end intrinsic;
 
@@ -204,13 +230,18 @@ intrinsic GroupStat(S :: PGGStat_AutGroup, G :: GrpPerm) -> PGGStatVal
 end intrinsic;
 
 intrinsic GroupStat(S :: PGGStat_Tup, G :: GrpPerm) -> PGGStatVal
-  {The value of the statistic on the group.}
+  {"}
   return MakeValue(S, <GroupStat(S2, G) : S2 in S`stats>);
 end intrinsic;
 
 intrinsic GroupStat(S :: PGGStat_Factors, G :: GrpPerm) -> PGGStatVal
-  {The value of the statistic on the group.}
+  {"}
   return MakeValue(S, {* GroupStat(S`stat, OrbitImage(G, o)) : o in Orbits(G) *});
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_Factors2, G :: GrpPerm) -> PGGStatVal
+  {"}
+  return MakeValue(S, <[ [ {* GroupStat(S`stat, OrbitImage(Go,o2)) : o2 in Orbits(Go) *} where Go:=OrbitImage(So,o) : o in os ] where So:=Stabilizer(G,Rep(o)) : o in os ], ss, ss> where ss:=[GroupStat(S`stat, OrbitImage(G, o)) : o in os] where os:=[o : o in Orbits(G)]);
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_HasRoot, R :: RngUPolElt[FldPad]) -> PGGStatVal
@@ -219,22 +250,23 @@ intrinsic ResolventStat(S :: PGGStat_HasRoot, R :: RngUPolElt[FldPad]) -> PGGSta
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_NumRoots, R :: RngUPolElt[FldPad]) -> PGGStatVal
-  {The value of the statistic on the resolvent.}
+  {"}
   return MakeValue(S, #roots(R));
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_FactorDegrees, R :: RngUPolElt[FldPad]) -> PGGStatVal
-  {The value of the statistic on the resolvent.}
+  {"}
   return MakeValue(S, {* Degree(fac) : fac in factorization(R) *});
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat_FactorDegrees2, R :: RngUPolElt[FldPad]) -> PGGStatVal
-  {"}
-  return MakeValue(S, {* <Degree(fac), {* Degree(fac) : fac in factorization(ChangeRing(R, L)) *}> where L:=certs[i]`Extension where fac:=facs[i] : i in [1..#facs] *} where facs,certs:=factorization(R : Extensions));
-end intrinsic;
+// intrinsic ResolventStat(S :: PGGStat_FactorDegrees2, R :: RngUPolElt[FldPad]) -> PGGStatVal
+//   {"}
+//   // return MakeValue(S, {* <Degree(fac), {* Degree(fac) : fac in factorization(ChangeRing(R, L)) *}> where L:=certs[i]`Extension where fac:=facs[i] : i in [1..#facs] *} where facs,certs:=factorization(R : Extensions));
+//   return MakeValue(S, {* <Degree(fac), {*{* Degree(fac2) : fac2 in factorization(ChangeRing(fac, L)) *} : fac in facs*}> where L:=certs[i]`Extension where fac:=facs[i] : i in [1..#facs]*} where facs,certs:=factorization(R : Extensions));
+// end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_Degree, R :: RngUPolElt[FldPad]) -> PGGStatVal
-  {The value of the statistic on the resolvent.}
+  {"}
   return MakeValue(S, Degree(R));
 end intrinsic;
 
@@ -247,16 +279,27 @@ intrinsic ResolventStat(S :: PGGStat_AutGroup, R :: RngUPolElt[FldPad]) -> PGGSt
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_Tup, R :: RngUPolElt[FldPad]) -> PGGStatVal
-  {The value of the statistic on the resolvent.}
+  {"}
   return MakeValue(S, <ResolventStat(S2, R) : S2 in S`stats>);
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_Factors, R :: RngUPolElt[FldPad]) -> PGGStatVal
-  {The value of the statistic on the resolvent.}
+  {"}
   return MakeValue(S, {* ResolventStat(S`stat, fac) : fac in factorization(R) *});
 end intrinsic;
 
+intrinsic ResolventStat(S :: PGGStat_Factors2, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {"}
+  // return MakeValue(S, {* <ResolventStat(S`stat, facs[i]), {* {* ResolventStat(S`stat, fac2) : fac2 in factorization(ChangeRing(fac, L)) *} : fac in facs *} where L:=certs[i]`Extension> : i in [1..#facs] *} where facs,certs:=factorization(R : Certificates));
+  return MakeValue(S, <[[{* ResolventStat(S`stat,fac2) : fac2 in factorization(ChangeRing(fac, L)) *} : fac in facs] where L:=certs[i]`Extension : i in [1..#facs]], ss, ss> where ss:=[ResolventStat(S`stat,fac) : fac in facs] where facs,certs:=factorization(R : Extensions));
+end intrinsic;
+
 intrinsic 'eq'(S :: PGGStat, v1, v2) -> BoolElt
+  {Equality.}
+  not_implemented("equality:", Type(S));
+end intrinsic;
+
+intrinsic 'eq'(S :: PGGStat_EqSimple, v1, v2) -> BoolElt
   {Equality.}
   return v1`value eq v2`value;
 end intrinsic;
@@ -264,6 +307,32 @@ end intrinsic;
 intrinsic 'eq'(S :: PGGStat_AutGroup, v1, v2) -> BoolElt
   {"}
   return Degree(Rep(v1`value)) eq Degree(Rep(v2`value)) and v1`value eq v2`value;
+end intrinsic;
+
+intrinsic 'eq'(S :: PGGStat_2DArray, v1, v2) -> BoolElt
+  {"}
+  array1, rows1, cols1 := Explode(v1`value);
+  array2, rows2, cols2 := Explode(v2`value);
+  if #rows1 ne #rows2 or #cols2 ne #cols2 or SequenceToMultiset(rows1) ne SequenceToMultiset(rows2) or SequenceToMultiset(cols1) ne SequenceToMultiset(cols2) then
+    return false;
+  end if;
+  nrows := #rows1;
+  ncols := #cols1;
+  assert #array1 eq nrows;
+  assert #array2 eq nrows;
+  assert forall{row : row in array1 | #row eq ncols};
+  assert forall{row : row in array2 | #row eq ncols};
+  if {* <rows1[i], SequenceToMultiset(array1[i])> : i in [1..nrows] *} ne {* <rows2[i], SequenceToMultiset(array2[i])> : i in [1..nrows] *} then
+    return false;
+  end if;
+  if {* <cols1[i], {*array1[j,i] : j in [1..nrows]*}> : i in [1..ncols] *} ne {* <cols2[i], {*array2[j,i] : j in [1..nrows] *}> : i in [1..ncols] *} then
+    return false;
+  end if;
+  if S`strict then
+    not_implemented("equality: PGGStat_2DArray (strict)");
+  else
+    return true;
+  end if;
 end intrinsic;
 
 intrinsic 'subset'(S :: PGGStat, v1, v2) -> BoolElt
