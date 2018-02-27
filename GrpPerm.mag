@@ -241,6 +241,62 @@ function factorizations_of_length(N, n : Max:=N)
   end if;
 end function;
 
+// sequence of different ks such that k = sum_i ks[i] ms[i]
+function partitions_of_shape(k, ms)
+  assert k ge 0;
+  if k eq 0 then
+    return [[0 : m in ms]];
+  elif #ms eq 0 then
+    return [];
+  elif #ms eq 1 then
+    ok, k1 := IsDivisibleBy(k, ms[1]);
+    if ok then
+      return [[k1]];
+    else
+      return [];
+    end if;
+  else
+    m1 := ms[1];
+    ret := [];
+    for k1 in [0..k div m1] do
+      k2 := k - k1 * m1;
+      assert k2 ge 0;
+      ret cat:= [[k1] cat p : p in partitions_of_shape(k2, ms[2..#ms])];
+    end for;
+    return ret;
+  end if;
+end function;
+
+// sequence of different ns such that n = prod_i ns[i]^ms[i]
+// each prime p^k||n can be treated independently by partitioning the exponent k
+function factorizations_of_shape(n, ms)
+  assert n gt 0;
+  if n eq 1 then
+    return [[1 : m in ms]];
+  end if;
+  facs := Factorization(n);
+  parts := [partitions_of_shape(fac[2], ms) : fac in facs];
+  ret := [[&*[facs[j][1]^ks[j][i] : j in [1..#facs]] : i in [1..#ms]] : ks in CartesianProduct(parts)];
+  return ret;
+end function;
+
+function ordered_cartesian_power(xs, n : Min:=1)
+  if n eq 0 then
+    return [[]];
+  elif n eq 1 then
+    return [[x] : x in xs[Min..#xs]];
+  else
+    ans := [];
+    for i in [1..#xs] do
+      x := xs[i];
+      for ps in ordered_cartesian_power(xs, n-1 : Min:=i) do
+        Append(~ans, Insert(ps,1,x));
+      end for;
+    end for;
+    return ans;
+  end if;
+end function;
+
 intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_WrProd, n :: RngIntElt, m :: RngIntElt) -> []
   {"}
   assert m ge 1 and m le #G`factors;
@@ -252,62 +308,65 @@ intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_WrProd, n :: RngIntElt, m :: RngInt
       ans := OrbitsOfSubgroups(G`factors[m], n);
     elif Degree(G`factors[m]) eq 1 then
       ans := _OrbitsOfSubgroups(G, n, m+1);
-    elif Degree(G`factors[m]) eq 2 then
-      upper_deg := &*[Z| Degree(G`factors[i]) : i in [m+1..#G`factors]];
-      ans := [];
-      case #G`factors[m]`group:
-      when 1:
-        for n1 in Divisors(n) do
-          n2 := xdiv(n, n1);
-          if n2 lt n1 then 
-            break;
-          elif n2 eq n1 then
-            oss := _OrbitsOfSubgroups(G, n1, m+1);
-            ans cat:= [[{x : x in o} : o in os1] cat [{x+upper_deg : x in o} : o in os2] where os1:=oss[i] where os2:=oss[j] : j in [i+1..#oss], i in [1..#oss]];
-          else
-            oss1 := _OrbitsOfSubgroups(G, n1, m+1);
-            oss2 := _OrbitsOfSubgroups(G, n2, m+1);
-            ans cat:= [[{x : x in o} : o in os1] cat [{x+upper_deg : x in o} : o in os2] : os1 in oss1, os2 in oss2];
-          end if;
-        end for;
-      when 2:
-        ok, nrest := IsDivisibleBy(n, 2);
-        if ok then
-          for n1 in Divisors(nrest) do
-            n2 := xdiv(nrest, n1);
-            if n2 lt n1 then
-              break;
-            elif n2 eq n1 then
-              oss := _OrbitsOfSubgroups(G, n1, m+1);
-              ans cat:= [[{x : x in o} : o in os1] cat [{x+upper_deg : x in o} : o in os2] where os1:=oss[i] where os2:=oss[j] : j in [i..#oss], i in [1..#oss]];
-            else
-              oss1 := _OrbitsOfSubgroups(G, n1, m+1);
-              oss2 := _OrbitsOfSubgroups(G, n2, m+1);
-              ans cat:= [[{x : x in o} : o in os1] cat [{x+upper_deg : x in o} : o in os2] : os1 in oss1, os2 in oss2];
-            end if;
-          end for;
-        end if;
-        ok, nrest := IsSquare(n);
-        if ok then
-          oss := _OrbitsOfSubgroups(G, nrest, m+1);
-          ans cat:= [[{x : x in o} join {x+upper_deg : x in o} : o in os] : os in oss];
-        end if;
-      else
-        assert false;
-      end case;
     else
-      // TODO: implement this in general
-      //       this is quite tricky if we want to avoid conjugate answers:
-      //       - first find orbits for the base group
-      //       - group these by conjugacy
-      //       - distribute a factorization of the remaining index over the conjugacy classes
-      //       - then distribute over each orbit in each class, but with an ordering enforced
-      //       - group orbits in each class further by the index they just received
-      //       - find orbits for each of these indices
-      //       - distribute these over each class, but with an ordering enforced
-      //       - take the product of all these choices
-      //       maybe it's worth changing the return value of OrbitsOfSubgroups to group the orbits by conjugacy
-      not_implemented("OrbitsOfSubgroups: general towers");
+      ans := [];
+      d := &*[Z| Degree(G`factors[i]) : i in [m+1..#G`factors]];
+      for n1 in Divisors(n) do
+        n2 := xdiv(n, n1);
+        for os in OrbitsOfSubgroups(G`factors[m], n1) do
+          // find conjugacy classes of these orbits
+          cs := [];
+          for i in [1..#os] do
+            for j in [1..#cs] do
+              if IsConjugate(Group(G`factors[m]), os[i], os[cs[j][1]]) then
+                Append(~cs[j], i);
+                continue i;
+              end if;
+            end for;
+            Append(~cs, [i]);
+          end for;
+          // find factorizations n2 = prod_[X] n_[X]^|X| over classes [X] of orbits X
+          for cn2s in factorizations_of_shape(n2, [#os[c[1]] : c in cs]) do
+            // factorize n_[X] = prod_X n_X (so n2 = prod_X n_X^|X|)
+            for n2ss in CartesianProduct([factorizations_of_length(cn2s[i], #cs[i]) : i in [1..#cs]]) do
+              // flatten the factorization down so it corresponds to os
+              n2s := [];
+              for i in [1..#cs] do
+                for j in [1..#cs[i]] do
+                  n2s[cs[i][j]] := n2ss[i][j];
+                end for;
+              end for;
+              // refine the classes to include these exponents
+              cs2 := [];
+              for c in cs do
+                cur_cs := [];
+                for i in c do
+                  for j in [1..#cur_cs] do
+                    if n2s[i] eq n2s[cur_cs[j][1]] then
+                      Append(~cur_cs[j], i);
+                      continue i;
+                    end if;
+                  end for;
+                  Append(~cur_cs, [i]);
+                end for;
+                cs2 cat:= cur_cs;
+              end for;
+              // within classes, choose orbits up to reordering
+              for cos in CartesianProduct([ordered_cartesian_power(_OrbitsOfSubgroups(G, n2s[i], m+1), #cs2[i]) : i in [1..#cs2]]) do
+                oss2 := [];
+                for i in [1..#cs2] do
+                  for j in [1..#cs2[i]] do
+                    oss2[cs2[i][j]] := cos[i][j];
+                  end for;
+                end for;
+                os2 := [{y+(x-1)*d : x in os[i], y in os2} : os2 in oss2[i], i in [1..#os]];
+                Append(~ans, os2);
+                // not_implemented("OrbitsOfSubgroups: wreath products");
+              end for;
+            end for;
+          end for;
+        end for;
+      end for;
     end if;
     G`orbits_of_subgroups_above[<n,m>] := ans;
   end if;
