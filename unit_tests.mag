@@ -60,7 +60,7 @@ R<x> := PolynomialRing(Q);
 // sram:  singly ramified
 // irred: irreducible
 // degN:  degree N
-// 2by:   only for overgroups W=C2wrC2wr... (because OrbitsOfSubgroups is not implemented for other groups)
+// 2by:   only for overgroups W=C2wrC2wr... (because some strategies are only really designed for this scenario)
 
 algs :=
   [ <"Builtin", {}, {}>
@@ -76,8 +76,8 @@ algs :=
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[HasRoot,Index]]",{"deg8"},{}>
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[NumRoots,Index]]",{"deg8"},{}>
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[Factors[Tup[Degree,AutGroup]],Index]]",{"deg6","deg8","deg10"},{}>
-  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[FactorDegrees2,Index]]",{"deg6","deg8","deg10"},{}>
-  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[FactorDegrees,OrbitIndex]]",{"deg6","deg8","deg10","deg16"},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[Factors2[Degree],Index]]",{"deg6","deg8","deg10"},{}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[FactorDegrees,OrbitIndex]]",{"deg6","deg8","deg10","deg16"},{}>
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[FactorDegrees,OrbitIndex[If:le[ridx,2]]]]",{"deg6","deg8","deg10","deg16"},{"2by"}>
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Eager]]",{},{"2by"}>
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:All]]",{},{"2by"}>
