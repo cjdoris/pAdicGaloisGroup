@@ -103,8 +103,8 @@ A function which can be applied to polynomials and groups, with the property tha
 - `HasRoot`: True or false depending on whether the resolvent has a root (i.e. the group has a fixed point).
 - `NumRoots`: The number of roots of the resolvent (i.e. the number of fixed points in the group).
 - `FactorDegrees`: The multiset of degrees of irreducible factors (i.e. the sizes of the orbits). Equivalent to `Factors[Degree]` but more efficient because it doesn't need to compute the orbit images.
-- `FactorDegrees2`: Like `FactorDegrees` but also looks at the factors of the factors over the fields defined by the factors.
 - `Factors [STATISTIC]`: A multiset of statistics corresponding to the irreducible factors.
+- `Factors2 [STATISTIC]`: If there are `n` irreducible factors, this is the `n x n` array where the `(i,j)` entry is the multiset of statistics of factors of the `i`th factor over the field defined by the `j`th factor. Each row and column in the array is also labelled with a statistic for the corresponding factor. The array is defined up to a permutation on rows and columns.
 - `Degree`: The degree of the polynomial or group.
 - `AutGroup`: The automorphism group assuming the polynomial is irreducible (i.e. `N_G(S)/S` where `S=Stab_G(1)` up to `S_d`-conjugacy, where `d` is the order of the group, assuming the group is transitive).
 - `Tup [STATISTIC, ...]`: A tuple of statistics.
@@ -178,7 +178,7 @@ Each test has a set of tags associated to it. Here are their meanings:
 - `sram`: singly ramified
 - `irred`: irreducible
 - `degN`: polynomials of degree `N`
-- `2by`: the overgroup is of the form C2 wr C2 wr ... (this is because OrbitsOfSubgroup is not implemented in generality yet for wreath products)
+- `2by`: the overgroup is of the form C2 wr C2 wr ... (some algorithm parameters are tailored to this)
 
 Each Galois group test also is given a tag for each component of its algorithm, so `ARM[Global[Symmetric],RootsMaximal]` has tags `ARM`, `Global` etc.
 
