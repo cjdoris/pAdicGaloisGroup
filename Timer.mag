@@ -1,11 +1,21 @@
 declare type PGGTimer;
-declare attributes PGGTimer: last_time, times, counts, labels, current_label, idxs;
+
+declare type PGGTimerStack: PGGTimer;
+declare attributes PGGTimerStack: current_label;
+
+declare type PGGTimerBase: PGGTimerStack;
+declare attributes PGGTimerBase: last_time, times, counts, labels, idxs;
+
+declare type PGGTimerFork: PGGTimerStack;
+declare attributes PGGTimerFork: parent, parent_label;
+
+declare type PGGTimerNull: PGGTimer;
 
 declare verbose PGG_Timer, 2;
 
-intrinsic PGG_Timer() -> PGGTimer
+intrinsic PGG_Timer() -> PGGTimerBase
   {A new timer.}
-  t := New(PGGTimer);
+  t := New(PGGTimerBase);
   t`last_time := Cputime();
   t`times := [RealField()|];
   t`counts := [Integers()|];
@@ -15,7 +25,28 @@ intrinsic PGG_Timer() -> PGGTimer
   return t;
 end intrinsic;
 
-intrinsic FindIndex(t :: PGGTimer, label :: [MonStgElt]) -> RngIntElt
+NULL := New(PGGTimerNull);
+
+intrinsic PGG_NullTimer() -> PGGTimerNull
+  {The null timer.}
+  return NULL;
+end intrinsic;
+
+intrinsic Fork(t :: PGGTimerStack) -> PGGTimerFork
+  {Forks t.}
+  t2 := New(PGGTimerFork);
+  t2`parent := t;
+  t2`parent_label := t`current_label;
+  t2`current_label := [Strings()|];
+  return t2;
+end intrinsic;
+
+intrinsic Fork(t :: PGGTimerNull) -> PGGTimerNull
+  {"}
+  return NULL;
+end intrinsic;
+
+intrinsic FindIndex(t :: PGGTimerBase, label :: [MonStgElt]) -> RngIntElt
   {The index of the given label. If it doesn't exist, creates it first.}
   ok, i := IsDefined(t`idxs, label);
   if ok then
@@ -28,14 +59,31 @@ intrinsic FindIndex(t :: PGGTimer, label :: [MonStgElt]) -> RngIntElt
   return #t`labels;
 end intrinsic;
 
-intrinsic Update(t :: PGGTimer, c :: RngIntElt, label :: [MonStgElt])
+intrinsic Update(t :: PGGTimerBase, c :: RngIntElt, label :: [MonStgElt])
   {Assigns the accumulated time to the given label.}
-  i := FindIndex(t, label);
   now := Cputime();
+  ok, i := IsDefined(t`idxs, label);
+  if not ok then
+    Append(~t`times, 0);
+    Append(~t`counts, 0);
+    Append(~t`labels, label);
+    t`idxs[label] := #t`labels;
+    i := #t`labels;
+  end if;
   t`times[i] +:= now - t`last_time;
   t`counts[i] +:= c;
   t`last_time := now;
   vprint PGG_Timer: "PGG_Timer", label, c, now;
+end intrinsic;
+
+intrinsic Update(t :: PGGTimerFork, c :: RngIntElt, label :: [MonStgElt])
+  {"}
+  Update(t`parent, c, t`parent_label cat label);
+end intrinsic;
+
+intrinsic Update(t :: PGGTimerNull, c :: RngIntElt, label :: [MonStgElt])
+  {"}
+  return;
 end intrinsic;
 
 intrinsic Update(t :: PGGTimer, label :: [MonStgElt])
@@ -43,25 +91,40 @@ intrinsic Update(t :: PGGTimer, label :: [MonStgElt])
   Update(t, 0, label);
 end intrinsic;
 
-intrinsic Push(t :: PGGTimer, x :: MonStgElt)
+intrinsic Push(t :: PGGTimerBase, x :: MonStgElt)
   {Assings time to the current label, then appends x to the label.}
   Update(t, t`current_label);
   Append(~t`current_label, x);
 end intrinsic;
 
-intrinsic Pop(t :: PGGTimer, n :: RngIntElt)
+intrinsic Push(t :: PGGTimerNull, x :: MonStgElt)
+  {"}
+  return;
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimerStack, n :: RngIntElt)
   {Assigns time to the current label, then pops n items from the label.}
   error if #t`current_label lt n, "n greater than label length";
   Update(t, 1, t`current_label);
   t`current_label := t`current_label[1..#t`current_label-n];
 end intrinsic;
 
-intrinsic Pop(t :: PGGTimer, n :: RngIntElt, x :: MonStgElt)
+intrinsic Pop(t :: PGGTimerNull, n :: RngIntElt)
+  {"}
+  return;
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimerStack, n :: RngIntElt, x :: MonStgElt)
   {Assigns time to the current label, then pops n items from the label, the nth being x.}
   error if #t`current_label lt n, "n greater than label length";
   error if t`current_label[#t`current_label-n+1] ne x, "incorrect label entry";
   Update(t, 1, t`current_label);
   t`current_label := t`current_label[1..#t`current_label-n];
+end intrinsic;
+
+intrinsic Pop(t :: PGGTimerNull, n :: RngIntElt, x :: MonStgElt)
+  {"}
+  return;
 end intrinsic;
 
 intrinsic Pop(t :: PGGTimer, x :: MonStgElt)
@@ -74,19 +137,29 @@ intrinsic Pop(t :: PGGTimer)
   Pop(t, 1);
 end intrinsic;
 
-intrinsic Swap(t :: PGGTimer, x :: MonStgElt)
+intrinsic Swap(t :: PGGTimerStack, x :: MonStgElt)
   {Assigns time to the current label, then swaps the last item from the label to x.}
   error if #t`current_label lt 1, "label too short";
   Update(t, 1, t`current_label);
   t`current_label[#t`current_label] := x;
 end intrinsic;
 
-intrinsic Log(t :: PGGTimer, x :: MonStgElt)
+intrinsic Swap(t :: PGGTimerNull, x :: MonStgElt)
+  {"}
+  return;
+end intrinsic;
+
+intrinsic Log(t :: PGGTimerStack, x :: MonStgElt)
   {Assigns time to the current label with x appended.}
   Update(t, 1, Append(t`current_label, x));
 end intrinsic;
 
-intrinsic Tree(t :: PGGTimer : Total:="TOTAL", Other:="OTHER") -> Tup
+intrinsic Log(t :: PGGTimerNull, x :: MonStgElt)
+  {"}
+  return;
+end intrinsic;
+
+intrinsic Tree(t :: PGGTimerBase : Total:="TOTAL", Other:="OTHER") -> Tup
   {A tree representation of t.}
   procedure insert(~node, label, tm, ct)
     node[2] +:= tm;

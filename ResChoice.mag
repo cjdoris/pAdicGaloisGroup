@@ -2,8 +2,11 @@ declare type PGGAlg_ResChoice: PGGAlg;
 declare type PGGAlg_ResChoice_Tranche: PGGAlg_ResChoice;
 declare attributes PGGAlg_ResChoice_Tranche: tranche_alg, priority;
 
-declare type PGGAlgState_ResChoice_Tranche: PGGAlgState;
-declare attributes PGGAlgState_ResChoice_Tranche: tranche_state, parent, overgroup;
+declare type PGGAlgState_ResChoice: PGGAlgState;
+declare attributes PGGAlgState_ResChoice: parent;
+
+declare type PGGAlgState_ResChoice_Tranche: PGGAlgState_ResChoice;
+declare attributes PGGAlgState_ResChoice_Tranche: tranche_state, overgroup;
 
 intrinsic PGGAlg_ResChoice_Tranche_Make(:Tranche:=false, Priority:=false) -> PGGAlg_ResChoice_Tranche
   {The "Tranche" subgroups choice.}
@@ -15,11 +18,13 @@ end intrinsic;
 
 intrinsic Print(alg :: PGGAlg_ResChoice_Tranche)
   {Print.}
-  print "tranche";
-  IndentPush();
-  print "tranche =", alg`tranche_alg;
-  printf "priority = "; Print(alg`priority);
-  IndentPop();
+  printf "tranche -> "; Print(alg`tranche_alg);
+  if Type(alg`priority) ne PGGAlg_ResPriority_Null then
+    print "";
+    IndentPush();
+    printf "priority = "; Print(alg`priority);
+    IndentPop();
+  end if;
 end intrinsic;
 
 intrinsic Start(alg :: PGGAlg_ResChoice_Tranche, parent :: PGGAlgState_ResGroups) -> PGGAlgState_ResChoice_Tranche
@@ -37,20 +42,45 @@ intrinsic Reset(s :: PGGAlgState_ResChoice_Tranche)
   Reset(s`tranche_state);
 end intrinsic;
 
-intrinsic Subgroup(s :: PGGAlgState_ResChoice_Tranche) -> GrpPerm
+intrinsic Restart(alg :: PGGAlg_ResChoice, s :: PGGAlgState_ResChoice) -> PGGAlgState_ResChoice
+  {Like ``Start(alg, s`parent)`` but tries to preserve information.}
+  vprint PGG_GaloisGroup: "*** starting ResChoice algorithm from scratch:", alg;
+  return Start(alg, s`parent);
+end intrinsic;
+
+intrinsic Restart(alg :: PGGAlg_ResChoice_Tranche, s :: PGGAlgState_ResChoice_Tranche) -> PGGAlgState_ResChoice_Tranche
+  {"}
+  s`algorithm := alg;
+  s`tranche_state := Restart(alg`tranche_alg, s`tranche_state);
+  return s;
+end intrinsic;
+
+intrinsic HasSubgroup(s :: PGGAlgState_ResChoice_Tranche : NoForget:=false) -> BoolElt, GrpPerm
   {Selects a subgroup.}
   while true do
     PGG_GlobalTimer_Push("tranche");
-    tranche := Tranche(s`tranche_state);
+    ok, tranche := HasTranche(s`tranche_state);
+    if not ok then
+      PGG_GlobalTimer_Pop();
+      return false, _;
+    end if;
     assert #tranche gt 0;
     PGG_GlobalTimer_Swap("prioritize");
     tranche2 := Prioritize(Filter(PGG_ToIter(tranche), func<i | IsUseful(s`parent, i)>), s`algorithm`priority, s`parent);
     ok, i := HasNext(tranche2);
     PGG_GlobalTimer_Pop();
     if ok then
-      Forget(i);
-      return Group(i);
+      if not NoForget then
+        Forget(i);
+      end if;
+      return true, Group(i);
     end if;
   end while;
 end intrinsic;
 
+intrinsic Subgroup(s :: PGGAlgState_ResChoice) -> GrpPerm
+  {The next subgroup.}
+  ok, G := HasSubgroup(s);
+  error if not ok, "ran out of subgroups";
+  return G;
+end intrinsic;

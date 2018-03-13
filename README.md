@@ -61,23 +61,31 @@ How to compute a Galois group.
 How to deduce the Galois group using resolvents.
 
 - `All [Stat:STATISTIC, Choice:SUBGROUP_CHOICE]`: Enumerate all possible Galois groups, then eliminate possibilities until only one remains. `Stat` is the statistic used to distinguish between possible Galois groups. `Choice` determines how to choose which subgroups to form resolvents from.
-- `Maximal [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, Descend, Useful, Reprocess:BOOL, Reset:BOOL, Blacklist:BOOL, Dedupe:BOOL]` Work down the graph of possible Galois groups by maximal inclusion. `Stat` is the statistic used to distinguish between possible Galois groups. `Choice` determines how to choose which subgroups to form resolvents from.
-  - `Descend` How to descend through the graph. One of:
-    - `Eager`: As soon as a top node is known not to be the Galois group, move on to its children.
-    - `Steady`: When all top nodes are known to not be the Galois group, move on to their children.
-    - `Patient`: Like Steady, but also require that the remaining top nodes have a common subgroups which could be a Galois group. Experimental!
+- `Maximal [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, DescendWhen, Descend, Useful, Reprocess:BOOL, Reset:BOOL, Blacklist:BOOL, Dedupe:BOOL]`: Work down the graph of possible Galois groups by maximal inclusion. `Stat` is the statistic used to distinguish between possible Galois groups. `Choice` determines how to choose which subgroups to form resolvents from.
+  - `DescendWhen` When to descend through the graph. One of:
+    - `Sufficient`: Don't descend if there are two groups in the pool which might be equal to the Galois group, or if there is one in the pool which might be equal and it has a child which might contain the Galois group. In either of these cases, we can certainly deduce some information (via the `Sufficient` measure of usefulness), so we only descend when we don't know if we can deduce anything.
+    - `Always`: Descend as soon as possible.
+    - `AllUnequal`: Descend when all nodes in the pool are known not to be the Galois group.
+    - `NoSubgroup`: Descend when the subgroup choice algorithm has no subgroups remaining. Note that useful subgroups are marked as "special" in the subgroup choice algorithm, so the subgroup choice algorithm can dynamically change depending on which subgroups are useful.
+    - `AllUnequalAndNoSubgroup`: Descend when `AllUnequal` and `NoSubgroup` would both descend. This marks useful subgroups as "special" only when `AllUnequal` would descend.
+    - `Necessary`: Like `AllUnequal`, but also require that the remaining top nodes have a common subgroups which could be a Galois group. Experimental!
     - `Ask`: Ask the user.
+  - `Descend`: How to descend. One of:
+    - `All`: Replace every node in the pool which is not the Galois group by its children.
+    - `OneNode`: Replace a single node by its children.
+    - `OneChild`: Add a single child to the pool, and remove the parent when all its possible children have been pooled.
   - `Useful:`: How to decide whether a subgroup is useful. One of:
+    - `Sufficient`: Useful if there are two groups in the pool which might be equal to the Galois group and which have differing statistics, or if there is one in the pool which might be the Galois group, and a child, such that the statistic of the child is strictly less than the pool group. This guarantees some information is deduced.
+    - `Necessary`: Like sufficient, but the statistic of pool group should not be equal to or less than the statistic of the child.
     - `Generous`: Useful if there is a pair of nodes with different statistics.
-    - `Necessary`: Useful if it satisfies a necessary condition to provide information.
-    - `Sufficient`: Useful if it satisfies a sufficient condition to provide information.
     - `All`: Always useful.
   - `Reprocess`: When true (default), on a descent re-use all resolvents computed so far.
   - `Reset`: When true (default), on a descent reset the subgroup choice algorithm.
-  - `Blacklist`: When true, maintain a blacklist to exclude groups from. Not required if Reprocess is true.
-  - `Dedupe`: When true, nodes in the graph are merged if they are conjugate.
+  - `Dedupe`: When true (default), nodes in the graph are merged if they are conjugate.
 - `RootsMaximal [Dedupe:BOOL]`: Work down the graph of possible Galois groups by maximal inclusion, similar to the relative resolvent method, forming resolvents from the subgroups of the current candidate G and testing for roots to rule out the subgroup or change the candidate to that subgroup. Will compute resolvents of degree equal to the index of the Galois group, which is exponential in the degree of the input polynomial.
   - `Dedupe`: Dedupe groups by conjugacy.
+- `[GROUP_ALG, ...]`: Try each of the algorithms in turn: when the first one runs out of resolvents to try (e.g. because its subgroup choice algorithm is limited) then move on to the second, and so on. This will re-use as much information as possible from one run to the next, so for example `[All[NumRoots,...],All[FactorDegrees,...]]` will only enumerate all possible Galois groups once, and remember which ones were eliminated.
+- `ForEach [Vars, [Val1,Val2,...], GROUP_ALG]`: Like the previous, but with a more compact notation. For each of `Val1`, `Val2`, etc, its values are unpacked into variables with names coming from `Vars` and substituted into the `GROUP_ALG`. For example `ForEach[STAT,[NumRoots,FactorDegrees],All[STAT,...]]` is equivalent to the previous example. The `Vars` can be more complex, such as `ForEach[[X,xs],[[A,[a1,a2]],[B,[b]]],ForEach[x,xs,...]]` will have `(x,y)` successively `(A,a1)`, `(A,a2)`, `(B,b)`.
 
 ### `RESEVAL_ALG`
 
@@ -104,7 +112,7 @@ A function which can be applied to polynomials and groups, with the property tha
 - `NumRoots`: The number of roots of the resolvent (i.e. the number of fixed points in the group).
 - `FactorDegrees`: The multiset of degrees of irreducible factors (i.e. the sizes of the orbits). Equivalent to `Factors[Degree]` but more efficient because it doesn't need to compute the orbit images.
 - `Factors [STATISTIC]`: A multiset of statistics corresponding to the irreducible factors.
-- `Factors2 [STATISTIC]`: If there are `n` irreducible factors, this is the `n x n` array where the `(i,j)` entry is the multiset of statistics of factors of the `i`th factor over the field defined by the `j`th factor. Each row and column in the array is also labelled with a statistic for the corresponding factor. The array is defined up to a permutation on rows and columns.
+- `Factors2 [Stat2:STATISTIC, Stat1:STATISTIC, Strict:BOOL]`: If there are `n` irreducible factors, this is the `n x n` array where the `(i,j)` entry is the multiset of statistics (by `Stat2`) of factors of the `i`th factor over the field defined by the `j`th factor. Each row and column in the array is also labelled with a statistic (by `Stat1`) for the corresponding factor. The array is defined up to a permutation on factors. When `Strict` is true, then two values are equal iff there is a permutation of the factors making the arrays and labels equal; when false, we just check if the multisets along rows and columns are the same, which is much faster (and in practice usually just as good).
 - `Degree`: The degree of the polynomial or group.
 - `AutGroup`: The automorphism group assuming the polynomial is irreducible (i.e. `N_G(S)/S` where `S=Stab_G(1)` up to `S_d`-conjugacy, where `d` is the order of the group, assuming the group is transitive).
 - `Tup [STATISTIC, ...]`: A tuple of statistics.
@@ -139,8 +147,10 @@ An expression with free variables.
 
 - `<free variable>`: A free variable. The possibilities depend on context.
 - `<integer>`: A constant.
-- `eq|ne|le|lt|ge|gt [EXPRESSION, EXPRESSION]`: Comparisons.
+- `eq|ne|le|lt|ge|gt [EXPRESSION, EXPRESSION]`: Equality and comparisons.
+- `mle|mlt|mge|mgt`: Multiplicative comparisons, e.g. `mle[x,y]` iff `x` divides `y` (note that everything divides 0, so it is the multiplicative infinity)
 - `and|or [EXPRESSION, ...]`: True if all or any of the parameters are true.
+- `not [EXPRESSION]`: True if its argument is false.
 - `- [EXPRESSION]`: Negation.
 - `- [EXPRESSION, EXPRESSION]`: Subtraction.
 - `+ [EXPRESSION, ...]`: Sum.

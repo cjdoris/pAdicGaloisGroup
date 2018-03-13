@@ -69,6 +69,30 @@ intrinsic PGG_ArgSpec_Literal(X) -> PGGArgSpec
   end function);
 end intrinsic;
 
+intrinsic PGG_ArgSpec_Attr() -> PGGArgSpec
+  {The argspec matching a PGGAttr.}
+  return PGG_ArgSpec(function (x)
+    ok, a := PGG_Attribute_IsCoercible(x);
+    if ok then
+      return true, a;
+    end if;
+  end function);
+end intrinsic;
+
+intrinsic PGG_ArgSpec_Attr_NoArgs() -> PGGArgSpec
+  {The argspec matching a PGGAttr with no args. Outputs the name.}
+  return PGG_ArgSpec(function (x)
+    ok, a := PGG_Attribute_IsCoercible(x);
+    if not ok then
+      return false, _;
+    end if;
+    if #Arguments(a) ne 0 then
+      return false, _;
+    end if;
+    return true, Name(a);
+  end function);
+end intrinsic;
+
 intrinsic PGG_ArgSpec_Attr(name :: MonStgElt) -> PGGArgSpec
   {The argspec matching the PGGAttr with the given name and no args.}
   return PGG_ArgSpec_Attr(name, [], func<args | name>);
@@ -136,6 +160,100 @@ intrinsic PGG_ArgSpec_AttrSelect(name :: MonStgElt, parg, rarg, transform) -> PG
     end for;
     // apply the transform
     return true, transform(ps, rs);
+  end function);
+end intrinsic;
+
+procedure unpack_vars(~ok, ~a, var, val)
+  varargs := Arguments(var);
+  valargs := Arguments(val);
+  if #varargs gt #valargs then
+    ok := false;
+    return;
+  end if;
+  vname := Trim(Name(var));
+  if #vname gt 0 then
+    a[vname] := val;
+  end if;
+  for i in [1..#varargs] do
+    unpack_vars(~ok, ~a, varargs[i], valargs[i]);
+    if not ok then
+      return;
+    end if;
+  end for;
+  ok := true;
+  return;
+end procedure;
+
+function substitute(A, x)
+  nm := Name(x);
+  ok, r := IsDefined(A, Trim(nm));
+  if ok then
+    if #Arguments(x) eq 0 then
+      return true, r;
+    else
+      return false, _;
+    end if;
+  end if;
+  args := [];
+  for a in Arguments(x) do
+    ok, arg := substitute(A, a);
+    if ok then
+      Append(~args, arg);
+    else
+      return false, _;
+    end if;
+  end for;
+  return true, PGG_Attribute(nm, args);
+end function;
+
+intrinsic PGG_ArgSpec_AttrForEach(name :: MonStgElt, arg, transform) -> PGGArgSpec
+  {The argspec matching a PGGAttr with the given name and three arguments [var,iter,arg] where var specifies a variable (or variables), iter is a list of items, each getting assigned to var and substituted into arg in turn. The output is the list of args.}
+  varg := PGG_ArgSpec_Attr();
+  iarg := PGG_ArgSpec_AttrList("", varg, func<x | x>);
+  return PGG_ArgSpec(function (x)
+    // coerce to a PGGAttr
+    ok, a := PGG_Attribute_IsCoercible(x);
+    if not ok then
+      return false, _;
+    end if;
+    // check the name
+    if Trim(Name(a)) ne name then
+      return false, _;
+    end if;
+    // check the arguments
+    args := Arguments(a);
+    if #args ne 3 then
+      return false, _;
+    end if;
+    ok, var := PGG_Parsable(varg, args[1]);
+    if not ok then
+      return false, _;
+    end if;
+    ok, iter := PGG_Parsable(iarg, args[2]);
+    if not ok then
+      return false, _;
+    end if;
+    // iterate
+    rs := [**];
+    for y in iter do
+      A := AssociativeArray();
+      unpack_vars(~ok, ~A, var, y);
+      if not ok then
+        error "unpacking error";
+        return false, _;
+      end if;
+      ok, sa := substitute(A, args[3]);
+      if not ok then
+        error "substitution error";
+        return false, _;
+      end if;
+      ok, r := PGG_Parsable(arg, sa);
+      if not ok then
+        return false, _;
+      end if;
+      Append(~rs, r);
+    end for;
+    return true, transform(rs);
   end function);
 end intrinsic;
 

@@ -1,13 +1,10 @@
 import "Utils.mag": has_root, roots, factorization, extension, not_implemented, is_subpartition_of;
 
 declare type PGGStat;
-declare type PGGStat_2DArray: PGGStat;
-declare attributes PGGStat_2DArray: strict;
 declare type PGGStat_EqSimple: PGGStat;
 declare type PGGStat_HasRoot: PGGStat_EqSimple;
 declare type PGGStat_NumRoots: PGGStat_EqSimple;
 declare type PGGStat_FactorDegrees: PGGStat_EqSimple;
-declare type PGGStat_FactorDegrees2: PGGStat_2DArray;
 declare type PGGStat_Degree: PGGStat_EqSimple;
 declare type PGGStat_Order: PGGStat_EqSimple;
 declare type PGGStat_AutGroup: PGGStat_EqSimple;
@@ -16,11 +13,11 @@ declare type PGGStat_Tup: PGGStat_EqSimple;
 declare attributes PGGStat_Tup: stats;
 declare type PGGStat_Factors: PGGStat_EqSimple;
 declare attributes PGGStat_Factors: stat;
-declare type PGGStat_Factors2: PGGStat_2DArray;
-declare attributes PGGStat_Factors2: stat;
+declare type PGGStat_Factors2: PGGStat;
+declare attributes PGGStat_Factors2: strict, stat1, stat2;
 
 declare type PGGStatVal;
-declare attributes PGGStatVal: stat, value, hash;
+declare attributes PGGStatVal: stat, value, hash, hashable;
 
 intrinsic MakeValue(S :: PGGStat, value) -> PGGStatVal
   {A value for the statistic S.}
@@ -33,9 +30,17 @@ end intrinsic;
 intrinsic Hash(v :: PGGStatVal) -> .
   {Hash of v.}
   if not assigned v`hash then
-    v`hash := _Hash(v`stat, v);
+    v`hash := Hash(Hashable(v));
   end if;
   return v`hash;
+end intrinsic;
+
+intrinsic Hashable(v :: PGGStatVal) -> .
+  {Hashable value for v.}
+  if not assigned v`hashable then
+    v`hashable := _Hashable(v`stat, v);
+  end if;
+  return v`hashable;
 end intrinsic;
 
 intrinsic 'eq'(S1 :: PGGStat, S2 :: PGGStat) -> BoolElt
@@ -75,13 +80,6 @@ intrinsic PGGStat_FactorDegrees_Make() -> PGGStat_FactorDegrees
   return New(PGGStat_FactorDegrees);
 end intrinsic;
 
-intrinsic PGGStat_FactorDegrees2_Make(:Strict:=false) -> PGGStat_FactorDegrees2
-  {"}
-  S := New(PGGStat_FactorDegrees2);
-  S`strict := Strict;
-  return S;
-end intrinsic;
-
 intrinsic PGGStat_AutGroup_Make() -> PGGStat_AutGroup
   {"}
   return New(PGGStat_AutGroup);
@@ -104,10 +102,11 @@ intrinsic PGGStat_Factors_Make(:Stat:=false) -> PGGStat_Factors
   return S;
 end intrinsic;
 
-intrinsic PGGStat_Factors2_Make(:Stat:=false,Strict:=false) -> PGGStat_Factors2
+intrinsic PGGStat_Factors2_Make(:Stat1:=false,Stat2:=false,Strict:=false) -> PGGStat_Factors2
   {"}
   S := New(PGGStat_Factors2);
-  S`stat := Stat cmpne false select Stat else PGGStat_Degree_Make();
+  S`stat2 := Stat2 cmpne false select Stat2 else PGGStat_Degree_Make();
+  S`stat1 := Stat1 cmpne false select Stat1 else PGGStat_Degree_Make();
   S`strict := Strict;
   return S;
 end intrinsic;
@@ -134,11 +133,6 @@ intrinsic Print(S :: PGGStat_FactorDegrees)
   printf "degrees of factors";
 end intrinsic;
 
-intrinsic Print(S :: PGGStat_FactorDegrees2)
-  {"}
-  printf "degrees of factors of factors";
-end intrinsic;
-
 intrinsic Print(S :: PGGStat_AutGroup)
   {"}
   printf "automorphism group";
@@ -157,8 +151,14 @@ end intrinsic;
 
 intrinsic Print(S :: PGGStat_Factors2)
   {"}
-  printf "factors of factors -> ";
-  Print(S`stat);
+  print "factors of factors";
+  IndentPush();
+  printf "stat2 = "; Print(S`stat2);
+  print "";
+  printf "stat1 = "; Print(S`stat1);
+  print "";
+  printf "strict = %o", S`strict;
+  IndentPop();
 end intrinsic;
 
 intrinsic Print(S :: PGGStat_Tup)
@@ -204,12 +204,6 @@ intrinsic GroupStat(S :: PGGStat_FactorDegrees, G :: GrpPerm) -> PGGStatVal
   return MakeValue(S, {* #o : o in Orbits(G) *});
 end intrinsic;
 
-// intrinsic GroupStat(S :: PGGStat_FactorDegrees2, G :: GrpPerm) -> PGGStatVal
-//   {"}
-//   // return MakeValue(S, {* <#o, {*#o : o in Orbits(S)*}> where S:=Stabilizer(G, Rep(o)) : o in Orbits(G)*});
-//   return MakeValue(S, {*<#o, {*{*#o2 : o2 in Orbits(OrbitImage(S,o))*} : o in os*} where S:=Stabilizer(G,Rep(o))> : o in os*} where os:=Orbits(G));
-// end intrinsic;
-
 intrinsic GroupStat(S :: PGGStat_Degree, G :: GrpPerm) -> PGGStatVal
   {"}
   return MakeValue(S, Degree(G));
@@ -241,7 +235,18 @@ end intrinsic;
 
 intrinsic GroupStat(S :: PGGStat_Factors2, G :: GrpPerm) -> PGGStatVal
   {"}
-  return MakeValue(S, <[ [ {* GroupStat(S`stat, OrbitImage(Go,o2)) : o2 in Orbits(Go) *} where Go:=OrbitImage(So,o) : o in os ] where So:=Stabilizer(G,Rep(o)) : o in os ], ss, ss> where ss:=[GroupStat(S`stat, OrbitImage(G, o)) : o in os] where os:=[o : o in Orbits(G)]);
+  return MakeValue(S,
+    < [GroupStat(S`stat1, OrbitImage(G,o)) : o in os]
+    , [ [ {* GroupStat(S`stat2, OrbitImage(Go,o2)) : o2 in Orbits(Go) *} 
+          where Go := OrbitImage(So,o) 
+          : o in os
+        ]
+        where So := Stabilizer(G,Rep(o))
+        : o in os 
+        ]
+    >
+    where os := [o : o in Orbits(G)]
+  );
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_HasRoot, R :: RngUPolElt[FldPad]) -> PGGStatVal
@@ -258,12 +263,6 @@ intrinsic ResolventStat(S :: PGGStat_FactorDegrees, R :: RngUPolElt[FldPad]) -> 
   {"}
   return MakeValue(S, {* Degree(fac) : fac in factorization(R) *});
 end intrinsic;
-
-// intrinsic ResolventStat(S :: PGGStat_FactorDegrees2, R :: RngUPolElt[FldPad]) -> PGGStatVal
-//   {"}
-//   // return MakeValue(S, {* <Degree(fac), {* Degree(fac) : fac in factorization(ChangeRing(R, L)) *}> where L:=certs[i]`Extension where fac:=facs[i] : i in [1..#facs] *} where facs,certs:=factorization(R : Extensions));
-//   return MakeValue(S, {* <Degree(fac), {*{* Degree(fac2) : fac2 in factorization(ChangeRing(fac, L)) *} : fac in facs*}> where L:=certs[i]`Extension where fac:=facs[i] : i in [1..#facs]*} where facs,certs:=factorization(R : Extensions));
-// end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_Degree, R :: RngUPolElt[FldPad]) -> PGGStatVal
   {"}
@@ -290,8 +289,17 @@ end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_Factors2, R :: RngUPolElt[FldPad]) -> PGGStatVal
   {"}
-  // return MakeValue(S, {* <ResolventStat(S`stat, facs[i]), {* {* ResolventStat(S`stat, fac2) : fac2 in factorization(ChangeRing(fac, L)) *} : fac in facs *} where L:=certs[i]`Extension> : i in [1..#facs] *} where facs,certs:=factorization(R : Certificates));
-  return MakeValue(S, <[[{* ResolventStat(S`stat,fac2) : fac2 in factorization(ChangeRing(fac, L)) *} : fac in facs] where L:=certs[i]`Extension : i in [1..#facs]], ss, ss> where ss:=[ResolventStat(S`stat,fac) : fac in facs] where facs,certs:=factorization(R : Extensions));
+  return MakeValue(S,
+    < [ ResolventStat(S`stat1, fac) : fac in facs ]
+    , [ [ {* ResolventStat(S`stat2, fac2) : fac2 in factorization(ChangeRing(fac, L)) *}
+          : fac in facs
+        ]
+        where L := certs[i]`Extension
+        : i in [1..#facs]
+      ]
+    >
+    where facs, certs := factorization(R : Extensions)
+  );
 end intrinsic;
 
 intrinsic 'eq'(S :: PGGStat, v1, v2) -> BoolElt
@@ -309,27 +317,66 @@ intrinsic 'eq'(S :: PGGStat_AutGroup, v1, v2) -> BoolElt
   return Degree(Rep(v1`value)) eq Degree(Rep(v2`value)) and v1`value eq v2`value;
 end intrinsic;
 
-intrinsic 'eq'(S :: PGGStat_2DArray, v1, v2) -> BoolElt
+procedure assoc_append(~A, k, x)
+  if IsDefined(A, k) then
+    Append(~A[k], x);
+  else
+    A[k] := [x];
+  end if;
+end procedure;
+
+function is_conjugate2(G, X, xs, ys)
+  H := G;
+  for i in [1..#xs] do
+    ok, g := IsConjugate(H, X, xs[i], ys[i]);
+    if ok then
+      for j in [i..#xs] do
+        xs[j] := xs[j]^g;
+      end for;
+      assert xs[i] eq ys[i];
+      H := Stabilizer(H, X, xs[i]);
+    else
+      return false;
+    end if;
+  end for;
+  return true;
+end function;
+
+intrinsic 'eq'(S :: PGGStat_Factors2, v1, v2) -> BoolElt
   {"}
-  array1, rows1, cols1 := Explode(v1`value);
-  array2, rows2, cols2 := Explode(v2`value);
-  if #rows1 ne #rows2 or #cols2 ne #cols2 or SequenceToMultiset(rows1) ne SequenceToMultiset(rows2) or SequenceToMultiset(cols1) ne SequenceToMultiset(cols2) then
+  if Hash(v1) ne Hash(v2) then
     return false;
-  end if;
-  nrows := #rows1;
-  ncols := #cols1;
-  assert #array1 eq nrows;
-  assert #array2 eq nrows;
-  assert forall{row : row in array1 | #row eq ncols};
-  assert forall{row : row in array2 | #row eq ncols};
-  if {* <rows1[i], SequenceToMultiset(array1[i])> : i in [1..nrows] *} ne {* <rows2[i], SequenceToMultiset(array2[i])> : i in [1..nrows] *} then
+  elif Hashable(v1) ne Hashable(v2) then
     return false;
-  end if;
-  if {* <cols1[i], {*array1[j,i] : j in [1..nrows]*}> : i in [1..ncols] *} ne {* <cols2[i], {*array2[j,i] : j in [1..nrows] *}> : i in [1..ncols] *} then
-    return false;
-  end if;
-  if S`strict then
-    not_implemented("equality: PGGStat_2DArray (strict)");
+  elif S`strict then
+    xs1, yss1 := Explode(v1`value);
+    xs2, yss2 := Explode(v2`value);
+    n := #xs1;
+    assert n eq #yss1;
+    assert n eq #xs2;
+    assert n eq #yss2;
+    A1 := AssociativeArray();
+    B1 := AssociativeArray();
+    A2 := AssociativeArray();
+    B2 := AssociativeArray();
+    for i in [1..n] do
+      assoc_append(~A1, xs1[i], [i,n+1]);
+      assoc_append(~A2, xs2[i], [i,n+1]);
+      for j in [1..n] do
+        assoc_append(~B1, yss1[i][j], [i,j]);
+        assoc_append(~B2, yss2[i][j], [i,j]);
+      end for;
+    end for;
+    S := DirectProduct(SymmetricGroup(n), SymmetricGroup(1));
+    as := SetToSequence(Keys(A1));
+    bs := SetToSequence(Keys(B1));
+    X := {[i,j] : i,j in [1..n+1]};
+    GX := GSet(S, X, map<car<X, S> -> X | p :-> [p[1][1]^p[2], p[1][2]^p[2]] >);
+    ok := is_conjugate2(S, GX, [SequenceToSet(B1[b]) : b in bs] cat [SequenceToSet(A1[a]) : a in as], [SequenceToSet(B2[b]) : b in bs] cat [SequenceToSet(A2[a]) : a in as]);
+    if not ok then
+      vprint PGG_GaloisGroup: "***** Factors2", v1, v2;
+    end if;
+    return ok;
   else
     return true;
   end if;
@@ -372,14 +419,25 @@ end intrinsic;
 //   {"}
 // end intrinsic;
 
-intrinsic _Hash(S :: PGGStat, v) -> .
+intrinsic _Hashable(S :: PGGStat, v) -> .
   {Hash.}
-  return Hash(v`value);
+  return v`value;
 end intrinsic;
 
-intrinsic _Hash(S :: PGGStat_AutGroup, v) -> .
+intrinsic _Hashable(S :: PGGStat_AutGroup, v) -> .
   {"}
-  return Hash(<Degree(Rep(v`value)), v`value>);
+  return <Degree(Rep(v`value)), v`value>;
+end intrinsic;
+
+intrinsic _Hashable(S :: PGGStat_Factors2, v) -> .
+  {"}
+  xs, yss := Explode(v`value);
+  n := #xs;
+  return 
+    < {* x : x in xs *}
+    , {* <xs[i], {* y : y in yss[i] *}> : i in [1..n] *}
+    , {* <xs[i], {* ys[i] : ys in yss *}> : i in [1..n] *}
+    >;
 end intrinsic;
 
 intrinsic _Print(S :: PGGStat, v)

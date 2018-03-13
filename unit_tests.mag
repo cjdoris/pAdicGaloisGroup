@@ -79,11 +79,11 @@ algs :=
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[Factors2[Degree],Index]]",{"deg6","deg8","deg10"},{}>
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[FactorDegrees,OrbitIndex]]",{"deg6","deg8","deg10","deg16"},{}>
   , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],All[FactorDegrees,OrbitIndex[If:le[ridx,2]]]]",{"deg6","deg8","deg10","deg16"},{"2by"}>
-  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Eager]]",{},{"2by"}>
-  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:All]]",{},{"2by"}>
-  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:Sufficient]]",{"deg6","deg8","deg10"},{"2by"}>
-  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:Necessary]]",{"deg6","deg8","deg10"},{"2by"}>
-  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,Index,Descend:Steady,Useful:Generous]]",{"deg6","deg8","deg10"},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,OrbitIndex[If:le[ridx,2]],DescendWhen:Always]]",{},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,OrbitIndex[If:le[ridx,2]],DescendWhen:AllUnequal,Useful:All]]",{},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,OrbitIndex[If:le[ridx,2]],DescendWhen:Sufficient,Useful:Sufficient]]",{"deg6","deg8","deg10"},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,OrbitIndex[If:le[ridx,2]],DescendWhen:AllUnequal,Useful:Necessary]]",{"deg6","deg8","deg10"},{"2by"}>
+  , <"ARM[Global[Factors[RamTower[Symmetric[SinglyRamified]]]],Maximal[FactorDegrees,OrbitIndex[If:le[ridx,2]],DescendWhen:AllUnequal,Useful:Generous]]",{"deg6","deg8","deg10"},{"2by"}>
   , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:True]][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg6","deg8","deg10"},{}>
   , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:False]][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg6","deg8","deg10"},{}>
   , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:False,Complement:True]][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg6","deg8","deg10"},{}>

@@ -47,18 +47,29 @@ function parse_algorithm(alg)
         PGG_ArgSpec_Attr(var, [], func<args | PGG_Expression_FreeVariable(var)>)
         : var in vars
       ] cat [
-        PGG_ArgSpec_Attr("le", [<X>,<X>], func<args | PGG_Expression_BinOp('le', args[1], args[2])>),
-        PGG_ArgSpec_Attr("lt", [<X>,<X>], func<args | PGG_Expression_BinOp('lt', args[1], args[2])>),
-        PGG_ArgSpec_Attr("ge", [<X>,<X>], func<args | PGG_Expression_BinOp('ge', args[1], args[2])>),
-        PGG_ArgSpec_Attr("gt", [<X>,<X>], func<args | PGG_Expression_BinOp('gt', args[1], args[2])>),
-        PGG_ArgSpec_Attr("eq", [<X>,<X>], func<args | PGG_Expression_BinOp('eq', args[1], args[2])>),
-        PGG_ArgSpec_Attr("ne", [<X>,<X>], func<args | PGG_Expression_BinOp('ne', args[1], args[2])>),
-        PGG_ArgSpec_AttrList("and", X, func<args | PGG_Expression_SeqOp('&and', [x : x in args])>),
-        PGG_ArgSpec_AttrList("or", X, func<args | PGG_Expression_SeqOp('&or', [x : x in args])>),
-        PGG_ArgSpec_Attr("-", [<X>], func<args | PGG_Expression_UnOp('-', args[1])>),
-        PGG_ArgSpec_Attr("-", [<X>,<X>], func<args | PGG_Expression_BinOp('-', args[1], args[2])>),
-        PGG_ArgSpec_AttrList("+", X, func<args | PGG_Expression_SeqOp('&+', [x : x in args])>),
-        PGG_ArgSpec_AttrList("*", X, func<args | PGG_Expression_SeqOp('&*', [x : x in args])>),
+        // equality
+        PGG_ArgSpec_Attr("eq", [<X>,<X>], func<args | PGG_Expression_BinOp('eq', args[1], args[2] : Infix)>),
+        PGG_ArgSpec_Attr("ne", [<X>,<X>], func<args | PGG_Expression_BinOp('ne', args[1], args[2] : Infix)>),
+        // (additive) ordering
+        PGG_ArgSpec_Attr("le", [<X>,<X>], func<args | PGG_Expression_BinOp('le', args[1], args[2] : Infix)>),
+        PGG_ArgSpec_Attr("lt", [<X>,<X>], func<args | PGG_Expression_BinOp('lt', args[1], args[2] : Infix)>),
+        PGG_ArgSpec_Attr("ge", [<X>,<X>], func<args | PGG_Expression_BinOp('ge', args[1], args[2] : Infix)>),
+        PGG_ArgSpec_Attr("gt", [<X>,<X>], func<args | PGG_Expression_BinOp('gt', args[1], args[2] : Infix)>),
+        // multiplicative ordering
+        PGG_ArgSpec_Attr("mle", [<X>,<X>], func<args | PGG_Expression_BinOp(func<x,y | IsDivisibleBy(y,x)>, args[1], args[2] : Infix:=" mle ")>),
+        PGG_ArgSpec_Attr("mlt", [<X>,<X>], func<args | PGG_Expression_BinOp(func<x,y | x ne y and IsDivisibleBy(y,x)>, args[1], args[2] : Infix:=" mlt ")>),
+        PGG_ArgSpec_Attr("mge", [<X>,<X>], func<args | PGG_Expression_BinOp(func<x,y | IsDivisibleBy(x,y)>, args[1], args[2] : Infix:=" mge ")>),
+        PGG_ArgSpec_Attr("mgt", [<X>,<X>], func<args | PGG_Expression_BinOp(func<x,y | x ne y and IsDivisibleBy(x,y)>, args[1], args[2] : Infix:=" mgt ")>),
+        // logical
+        PGG_ArgSpec_AttrList("and", X, func<args | PGG_Expression_All([*x : x in args*])>),
+        PGG_ArgSpec_AttrList("or", X, func<args | PGG_Expression_Any([*x : x in args*])>),
+        PGG_ArgSpec_Attr("not", [<X>], func<args | PGG_Expression_UnOp('not', args[1] : Prefix)>),
+        // arithmetic
+        PGG_ArgSpec_Attr("-", [<X>], func<args | PGG_Expression_UnOp('-', args[1] : Prefix)>),
+        PGG_ArgSpec_Attr("-", [<X>,<X>], func<args | PGG_Expression_BinOp('-', args[1], args[2] : Infix)>),
+        PGG_ArgSpec_AttrList("+", X, func<args | PGG_Expression_SeqOp('&+', [*x : x in args*] : Infix:=" + ")>),
+        PGG_ArgSpec_AttrList("*", X, func<args | PGG_Expression_SeqOp('&*', [*x : x in args*] : Infix:=" * ")>),
+        // constants
         PGG_ArgSpec_Transform(PGG_ArgSpec_AttrInt(), func<x | PGG_Expression_Const(x)>)
       ]);
     end function)>;
@@ -107,12 +118,21 @@ function parse_algorithm(alg)
       PGG_ArgSpec_Attr("HasRoot", [], func<args | PGGStat_HasRoot_Make()>),
       PGG_ArgSpec_Attr("NumRoots", [], func<args | PGGStat_NumRoots_Make()>),
       PGG_ArgSpec_Attr("FactorDegrees", [], func<args | PGGStat_FactorDegrees_Make()>),
-      // PGG_ArgSpec_Attr("FactorDegrees2", [], func<args | PGGStat_FactorDegrees2_Make()>),
       PGG_ArgSpec_Attr("Degree", [], func<args | PGGStat_Degree_Make()>),
       PGG_ArgSpec_Attr("AutGroup", [], func<args | PGGStat_AutGroup_Make()>),
       PGG_ArgSpec_AttrList("Tup", get("STATISTIC"), func<args | PGGStat_Tup_Make(args)>),
       PGG_ArgSpec_Attr("Factors", [<get("STATISTIC"), "Stat", false>], func<args | PGGStat_Factors_Make(:Stat:=args[1])>),
-      PGG_ArgSpec_Attr("Factors2", [<get("STATISTIC"), "Stat", false>], func<args | PGGStat_Factors2_Make(:Stat:=args[1])>)
+      PGG_ArgSpec_Attr("Factors2",
+        [ <get("STATISTIC"), "Stat2", false>
+        , <get("STATISTIC"), "Stat1", false>
+        , <BOOL, "Strict", false>
+        ],
+        func<args | PGGStat_Factors2_Make(
+          : Stat2:=args[1]
+          , Stat1:=args[2] cmpne false select args[2] else args[1]
+          , Strict:=args[3]
+        )>
+      )
     ]));
 
     // SUBGROUP_TRANCHE := PGG_ArgSpec_Union([
@@ -176,12 +196,16 @@ function parse_algorithm(alg)
       ),
       PGG_ArgSpec_Attr(
         "Index",
-        [ <X,"If",false>, <X,"Sort",false> ] where X:=EXPRESSION(["idx"]),
+        [ <EXPRESSION(["idx","has_special","sidx0"]),"If",false>
+        , <EXPRESSION(["idx"]),"Sort",false>
+        ],
         func<args | PGGAlg_Tranche_Index_Make(:Filter:=args[1], SortKey:=args[2])>
       ),
       PGG_ArgSpec_Attr(
         "OrbitIndex",
-        [ <X,"If",false>, <X,"Sort",false> ] where X:=EXPRESSION(["idx","oidx","ridx"]),
+        [ <EXPRESSION(["idx","oidx","ridx","has_special","sidx0"]),"If",false>
+        , <EXPRESSION(["idx","oidx","ridx"]),"Sort",false>
+        ],
         func<args | PGGAlg_Tranche_OrbitIndex_Make(:Filter:=args[1], SortKey:=args[2])>
       )
     ]);
@@ -200,7 +224,7 @@ function parse_algorithm(alg)
       )
     ]);
 
-    RESGROUPS := PGG_ArgSpec_Union([
+    RESGROUPS := set("RESGROUPS", PGG_ArgSpec_Union([
       PGG_ArgSpec_ISA(PGGAlg_ResGroups),
       PGG_ArgSpec_Literal(false),
       PGG_ArgSpec_Attr(
@@ -216,10 +240,19 @@ function parse_algorithm(alg)
         , <SUBGROUP_CHOICE,"Choice",false>
         , <PGG_ArgSpec_Union([
             PGG_ArgSpec_Literal(false),
-            PGG_ArgSpec_Attr("Eager"),
-            PGG_ArgSpec_Attr("Steady"),
-            PGG_ArgSpec_Attr("Patient"),
+            PGG_ArgSpec_Attr("Always"),
+            PGG_ArgSpec_Attr("AllUnequal"),
+            PGG_ArgSpec_Attr("AllUnequalAndNoSubgroup"),
+            PGG_ArgSpec_Attr("Necessary"),
+            PGG_ArgSpec_Attr("NoSubgroup"),
+            PGG_ArgSpec_Attr("Sufficient"),
             PGG_ArgSpec_Attr("Ask")
+          ]), "DescendWhen", false>
+        , <PGG_ArgSpec_Union([
+            PGG_ArgSpec_Literal(false),
+            PGG_ArgSpec_Attr("All"),
+            PGG_ArgSpec_Attr("OneNode"),
+            PGG_ArgSpec_Attr("OneChild")
           ]), "Descend", false>
         , <PGG_ArgSpec_Union([
             PGG_ArgSpec_Literal(false),
@@ -230,17 +263,26 @@ function parse_algorithm(alg)
           ]), "Useful", false>
         , <BOOL, "Reprocess", true>
         , <BOOL, "Reset", true>
-        , <BOOL, "Blacklist", false>
         , <BOOL, "Dedupe", true>
         ],
-        func<args | PGGAlg_ResGroups_Maximal_Make(:Statistic:=args[1], SubgroupChoice:=args[2], Descend:=args[3], Useful:=args[4], Reprocess:=args[5], Reset:=args[6], Blacklist:=args[7], Dedupe:=args[8])>
+        func<args | PGGAlg_ResGroups_Maximal_Make(:Statistic:=args[1], SubgroupChoice:=args[2], DescendWhen:=args[3], Descend:=args[4], Useful:=args[5], Reprocess:=args[6], Reset:=args[7], Dedupe:=args[8])>
       ),
       PGG_ArgSpec_Attr(
         "RootsMaximal",
         [ <BOOL,"Dedupe",false> ],
         func<args | PGGAlg_ResGroups_RootsMaximal_Make(:Dedupe:=args[1])>
+      ),
+      PGG_ArgSpec_AttrList(
+        "",
+        get("RESGROUPS"),
+        func<args | PGGAlg_ResGroups_Sequence_Make(args)>
+      ),
+      PGG_ArgSpec_AttrForEach(
+        "ForEach",
+        get("RESGROUPS"),
+        func<args | PGGAlg_ResGroups_Sequence_Make(args)>
       )
-    ]);
+    ]));
 
     RESEVAL := PGG_ArgSpec_Union([
       PGG_ArgSpec_ISA(PGGAlg_ResEval),
