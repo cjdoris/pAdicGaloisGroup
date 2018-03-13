@@ -84,3 +84,8 @@ intrinsic Subgroup(s :: PGGAlgState_ResChoice) -> GrpPerm
   error if not ok, "ran out of subgroups";
   return G;
 end intrinsic;
+
+intrinsic MarkSpecial(s :: PGGAlgState_ResChoice_Tranche)
+  {Marks the current state of s as "special".}
+  MarkSpecialTranche(s`tranche_state);
+end intrinsic;

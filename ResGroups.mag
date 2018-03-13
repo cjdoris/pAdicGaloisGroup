@@ -31,7 +31,7 @@ declare type PGGAlg_ResGroups_Maximal: PGGAlg_ResGroups;
 declare attributes PGGAlg_ResGroups_Maximal: subgroup_choice, statistic, descend_when, descend, useful, reprocess, reset, dedupe;
 
 declare type PGGAlgState_ResGroups_Maximal: PGGAlgState_ResGroups;
-declare attributes PGGAlgState_ResGroups_Maximal: galois_conjugacy, resolvent_overgroup, choice_state, graph, pool, resolvents, useful_is_special;
+declare attributes PGGAlgState_ResGroups_Maximal: galois_conjugacy, resolvent_overgroup, choice_state, graph, pool, resolvents, useful_is_special, actually_useful_is_special;
 
 declare type PGG_ResGroups_Graph[PGG_ResGroups_GraphNode];
 declare attributes PGG_ResGroups_Graph: galois_conjugacy, dedupe, conjugacy_classes, id_to_node, class_to_id;
@@ -190,6 +190,7 @@ intrinsic Start(alg :: PGGAlg_ResGroups_Maximal, emb :: PGGHomGrpPerm) -> PGGAlg
   s`pool := { Root(s`graph) };
   s`resolvents := [**];
   s`useful_is_special := false;
+  s`actually_useful_is_special := false;
   return s;
 end intrinsic;
 
@@ -606,7 +607,16 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, resolvent :: RngU
   ridx := #s`resolvents + 1;
   s`resolvents[ridx] := <resolvent, subgroup, rstat, h>;
   PGG_GlobalTimer_Swap("process");
-  ProcessResolvent(s, ridx);
+  if s`actually_useful_is_special then
+    old_pool := s`pool;
+    old_children := &join[PossibleChildren(n) : n in old_pool];
+    ProcessResolvent(s, ridx);
+    if old_pool ne s`pool or old_children ne &join[PossibleChildren(n) : n in s`pool] then
+      MarkSpecial(s`choice_state);
+    end if;
+  else
+    ProcessResolvent(s, ridx);
+  end if;
   vprint PGG_GaloisGroup: "#pool =", #s`pool, #{n : n in s`pool | n`maybe_equal}, #{m : m in PossibleChildren(n), n in s`pool}, #{m : m in PossibleChildren(n), n in s`pool | m`maybe_equal};
   while true do
     PGG_GlobalTimer_Swap("is done");
@@ -632,6 +642,7 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, resolvent :: RngU
       if s`algorithm`reset then
         PGG_GlobalTimer_Swap("reset");
         s`useful_is_special := false;
+        s`actually_useful_is_special := false;
         Reset(s`choice_state);
       end if;
     else

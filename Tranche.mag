@@ -411,6 +411,11 @@ intrinsic MarkSpecialTranche(s :: PGGAlgState_Tranche, tidx)
   vprint PGG_GaloisGroup: "special tranches =", SpecialTranches(s);
 end intrinsic;
 
+intrinsic MarkSpecialTranche(s :: PGGAlgState_Tranche)
+  {Marks the current tranche of s as "special".}
+  MarkSpecialTranche(s, TrancheIndex(s));
+end intrinsic;
+
 intrinsic SpecialTranches(s :: PGGAlgState_Tranche) -> SetIndx
   {The special tranches of s.}
   if not assigned s`special_tranches then
