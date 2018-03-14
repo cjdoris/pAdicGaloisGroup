@@ -2,7 +2,7 @@
 
 import "Utils.mag": Q, Z, not_implemented;
 
-declare verbose PGG_GaloisGroup, 1;
+declare verbose PGG_GaloisGroup, 2;
 
 declare type PGGAlg;
 
@@ -266,6 +266,15 @@ function parse_algorithm(alg)
         , <BOOL, "Dedupe", true>
         ],
         func<args | PGGAlg_ResGroups_Maximal_Make(:Statistic:=args[1], SubgroupChoice:=args[2], DescendWhen:=args[3], Descend:=args[4], Useful:=args[5], Reprocess:=args[6], Reset:=args[7], Dedupe:=args[8])>
+      ),
+      PGG_ArgSpec_Attr(
+        "Maximal2",
+        [ <STATISTIC,"Stat",false>
+        , <SUBGROUP_CHOICE,"Choice",false>
+        , <BOOL, "Reset", true>
+        , <BOOL, "Dedupe", true>
+        ],
+        func<args | PGGAlg_ResGroups_Maximal2_Make(:Statistic:=args[1], SubgroupChoice:=args[2], Reset:=args[3], Dedupe:=args[4])>
       ),
       PGG_ArgSpec_Attr(
         "RootsMaximal",

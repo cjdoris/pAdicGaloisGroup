@@ -450,3 +450,69 @@ intrinsic _Print(S :: PGGStat_AutGroup, v)
   printf "%o", GroupName(Rep(v`value));
 end intrinsic;
 
+function stabilizers(G, S, v)
+  Gv := GroupStat(S, G);
+  if v eq Gv then
+    return [G];
+  elif v subset Gv then
+    Hs := [x`subgroup : x in MaximalSubgroups(G)];
+    return #Hs eq 0 select [] else &cat[stabilizers(H, S, v) : H in Hs];
+  else
+    return [];
+  end if;
+end function;
+
+intrinsic Stabilizers(G :: GrpPerm, v :: PGGStatVal) -> []
+  {Minimal subgroups of G whose statistic is v. One per conjugacy class.}
+  return _Stabilizers(G, v`stat, v);
+end intrinsic;
+
+intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat, v) -> []
+  {"}
+  // print "WARNING: using inefficient stabilizers algorithm";
+  return stabilizers(G, S, v);
+  // error Sprintf("not implemented: Stabilizers: %o", Type(S));
+end intrinsic;
+
+intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat_HasRoot, v) -> []
+  {"}
+  return v`value select [Stabilizer(G,1)] else [G];
+end intrinsic;
+
+function partition_system(G)
+  parts := AllPartitions(G) join {{1}, {1..Degree(G)}};
+  sys := [{1}];
+  while true do
+    last := sys[#sys];
+    parts := [P : P in parts | last ne P and last subset P];
+    if #parts eq 0 then
+      assert last eq {1..Degree(G)};
+      return sys;
+    else
+      _, i := Min([#P : P in parts]);
+      Append(~sys, parts[i]);
+    end if;
+  end while;
+end function;
+
+// intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat_FactorDegrees, v) -> []
+//   {"}
+//   // general strategy:
+//   // - find a wreath product W and r in S_d such that G^r < W (by computing partitions of G) (wlog r=id)
+//   // - then if H < G has statistic v, then H < G < W has statistic v
+//   // - find maximal H < W with statistic v
+//   // - take all conjugates H^c meet G - it suffices to take c to be representatives of N_W(H) \ W / G
+//   // - throw away those with the wrong statistic
+//   P := v`value;
+//   d := Degree(G);
+//   assert &+P eq d;
+//   if P eq {*#o : o in Orbits(G)*} then
+//     return [G];
+//   elif IsTransitive(G) and P eq {* 1, d-1 *} then
+//     return [Stabilizer(G, 1)];
+//   elif IsTransitive(G) and P eq {* (d div 2)^^2 *} then
+//     error "not implemented: Stabilizers: FactorDegrees";
+//   else
+//     error "not implemented: Stabilizers: FactorDegrees";
+//   end if;
+// end intrinsic;
