@@ -153,9 +153,29 @@ intrinsic OrbitsOfSubgroups(G :: PGGGrpPerm, n :: RngIntElt) -> []
     G`orbits_of_subgroups := AssociativeArray();
   end if;
   if not IsDefined(G`orbits_of_subgroups, n) then
-    G`orbits_of_subgroups[n] := _OrbitsOfSubgroups(G, n);
+    oss := _OrbitsOfSubgroups(G, n);
+    assert forall{os : os in oss | Index(Group(G), Stabilizer(Group(G), os)) eq n};
+    G`orbits_of_subgroups[n] := oss;
   end if;
   return G`orbits_of_subgroups[n];
+end intrinsic;
+
+intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm, n :: RngIntElt) -> []
+  {"}
+  // default behaviour is to compute all subgroups of index n, and filter down to those whose orbits have the right index
+  return [os : x in Subgroups(Group(G) : IndexEqual:=n) | S eq H where S:=Stabilizer(Group(G),os) where os:=[{x:x in o} : o in Orbits(H)] where H:=x`subgroup];
+end intrinsic;
+
+intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_Cyclic, n :: RngIntElt) -> []
+  {"}
+  d := Degree(G);
+  ok, m := IsDivisibleBy(d, n);
+  if ok then
+    C := Group(G);
+    return [[{x:x in o} : o in Orbits(sub<C|C.1^n>)]];
+  else
+    return [];
+  end if;
 end intrinsic;
 
 intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_Symmetric, n :: RngIntElt) -> []
@@ -352,7 +372,7 @@ intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_WrProd, n :: RngIntElt, m :: RngInt
                 cs2 cat:= cur_cs;
               end for;
               // within classes, choose orbits up to reordering
-              for cos in CartesianProduct([ordered_cartesian_power(_OrbitsOfSubgroups(G, n2s[i], m+1), #cs2[i]) : i in [1..#cs2]]) do
+              for cos in CartesianProduct([ordered_cartesian_power(_OrbitsOfSubgroups(G, n2s[cs2[i][1]], m+1), #cs2[i]) : i in [1..#cs2]]) do
                 oss2 := [];
                 for i in [1..#cs2] do
                   for j in [1..#cs2[i]] do
