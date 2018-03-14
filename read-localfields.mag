@@ -30,33 +30,6 @@ function read_lines(filename)
   end while;
 end function;
 
-function read_data(
-  : prime := 2
-  , degree := 4
-  , algorithm := "ALG1"
-  , jump := 8
-  , starts := [1..jump]
-  , ofile_template := "test-localfields_p{prime}_d{degree}_{algorithm}_{start}of{jump}"
-  , ofiles := [template(ofile_template, [
-      <"prime", IntegerToString(prime)>,
-      <"degree", IntegerToString(degree)>,
-      <"algorithm", algorithm>,
-      <"jump", IntegerToString(jump)>,
-      <"start", IntegerToString(start)>
-    ]) : start in starts]
-  , only_last := true
-  )
-  data := [eval line : line in read_lines(ofile), ofile in ofiles];
-  if only_last then
-    A := AssociativeArray();
-    for x in data do
-      A[x[1]] := x;
-    end for;
-    data := [A[k] : k in Keys(A)];
-  end if;
-  return data;
-end function;
-
 function histogram(xs : bin_size:=1)
   counts := AssociativeArray();
   for x in xs do
@@ -93,3 +66,65 @@ function median(xs)
   xs := Sort([x : x in xs]);
   return xs[#xs div 2 + 1];
 end function;
+
+function extended_data(xs, p, d)
+  lookup := local_fields_lookup_table(:prime:=p, degree:=d);
+  FMT := recformat<poly, prec, success, err, cputime, G, t, correct_G, correct_t, is_correct, field>;
+  rs := [];
+  for x in xs do
+    r := rec<FMT | poly:=x[1], prec:=x[2], success:=x[3]>;
+    assert Degree(r`poly) eq d;
+    if r`success then
+      r`cputime := x[4];
+      r`G := x[5];
+      r`t := TransitiveGroupIdentification(r`G);
+    else
+      r`err := x[4];
+    end if;
+    r`field := lookup[<p, x[1]>];
+    ok, _, cs := Regexp("^t([0-9]+)n([0-9]+)$", r`field`Gname);
+    if ok then
+      assert StringToInteger(cs[1]) eq d;
+      r`correct_t := StringToInteger(cs[2]);
+      r`correct_G := TransitiveGroup(d, r`correct_t);
+    end if;
+    if assigned r`correct_t and assigned r`t then
+      r`is_correct := r`correct_t eq r`t;
+    end if;
+    Append(~rs, r);
+  end for;
+  return rs;
+end function;
+
+function read_data(
+  : prime := 2
+  , degree := 8
+  , algorithm := "ALG3"
+  , jump := 1
+  , starts := [1..jump]
+  , ofile_template := "test-localfields_p{prime}_d{degree}_{algorithm}_{start}of{jump}.out"
+  , ofiles := [template(ofile_template, [
+      <"prime", IntegerToString(prime)>,
+      <"degree", IntegerToString(degree)>,
+      <"algorithm", algorithm>,
+      <"jump", IntegerToString(jump)>,
+      <"start", IntegerToString(start)>
+    ]) : start in starts]
+  , only_last := true
+  , extended := true
+  )
+  data := [eval line : line in read_lines(ofile), ofile in ofiles];
+  if only_last then
+    A := AssociativeArray();
+    for x in data do
+      A[x[1]] := x;
+    end for;
+    data := [A[k] : k in Keys(A)];
+  end if;
+  if extended then
+    return extended_data(data, prime, degree);
+  else
+    return data;
+  end if;
+end function;
+
