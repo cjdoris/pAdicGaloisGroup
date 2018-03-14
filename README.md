@@ -61,7 +61,9 @@ How to compute a Galois group.
 How to deduce the Galois group using resolvents.
 
 - `All [Stat:STATISTIC, Choice:SUBGROUP_CHOICE]`: Enumerate all possible Galois groups, then eliminate possibilities until only one remains. `Stat` is the statistic used to distinguish between possible Galois groups. `Choice` determines how to choose which subgroups to form resolvents from.
-- `Maximal [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, DescendWhen, Descend, Useful, Reprocess:BOOL, Reset:BOOL, Blacklist:BOOL, Dedupe:BOOL]`: Work down the graph of possible Galois groups by maximal inclusion. `Stat` is the statistic used to distinguish between possible Galois groups. `Choice` determines how to choose which subgroups to form resolvents from.
+- `Maximal [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, DescendWhen, Descend, Useful, Reprocess:BOOL, Reset:BOOL, Blacklist:BOOL, Dedupe:BOOL]`: Work down the graph of possible Galois groups by maximal inclusion.
+  - `Stat`: The statistic used to distinguish between possible Galois groups.
+  - `Choice`: Determines how to choose which subgroups to form resolvents from.
   - `DescendWhen` When to descend through the graph. One of:
     - `Sufficient`: Don't descend if there are two groups in the pool which might be equal to the Galois group, or if there is one in the pool which might be equal and it has a child which might contain the Galois group. In either of these cases, we can certainly deduce some information (via the `Sufficient` measure of usefulness), so we only descend when we don't know if we can deduce anything.
     - `Always`: Descend as soon as possible.
@@ -84,6 +86,11 @@ How to deduce the Galois group using resolvents.
   - `Dedupe`: When true (default), nodes in the graph are merged if they are conjugate.
 - `RootsMaximal [Dedupe:BOOL]`: Work down the graph of possible Galois groups by maximal inclusion, similar to the relative resolvent method, forming resolvents from the subgroups of the current candidate G and testing for roots to rule out the subgroup or change the candidate to that subgroup. Will compute resolvents of degree equal to the index of the Galois group, which is exponential in the degree of the input polynomial.
   - `Dedupe`: Dedupe groups by conjugacy.
+- `Maximal2 [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, Reset:BOOL, Dedupe:BOOL]`: Like `RootsMaximal` but where the statistic `Roots` is parameterised. We maintain a "pool" of groups such that the Galois group is contained in at least one of them. On each iteration, we find a resolvent such that we can either eliminate all subgroups of some group in the pool, or we can replace a pool element by some of its maximal subgroups. This is very similar to `Maximal` except that instead of merely ruling out groups which cannot contain the Galois group, we identify groups which certainly do contain the Galois group, which is more powerful. `Choice` determines how to choose which subgroups to form resolvents from.
+  - `Stat`: The statistic used to distinguish between possible Galois groups.
+  - `Choice`: Determines how to choose which subgroups to form resolvents from.
+  - `Reset`: When true (default), reset the subgroup choice algorithm each time something gets added to the pool.
+  - `Dedupe`: When true (default), groups are deduped by conjugacy.
 - `[GROUP_ALG, ...]`: Try each of the algorithms in turn: when the first one runs out of resolvents to try (e.g. because its subgroup choice algorithm is limited) then move on to the second, and so on. This will re-use as much information as possible from one run to the next, so for example `[All[NumRoots,...],All[FactorDegrees,...]]` will only enumerate all possible Galois groups once, and remember which ones were eliminated.
 - `ForEach [Vars, [Val1,Val2,...], GROUP_ALG]`: Like the previous, but with a more compact notation. For each of `Val1`, `Val2`, etc, its values are unpacked into variables with names coming from `Vars` and substituted into the `GROUP_ALG`. For example `ForEach[STAT,[NumRoots,FactorDegrees],All[STAT,...]]` is equivalent to the previous example. The `Vars` can be more complex, such as `ForEach[[X,xs],[[A,[a1,a2]],[B,[b]]],ForEach[x,xs,...]]` will have `(x,y)` successively `(A,a1)`, `(A,a2)`, `(B,b)`.
 
