@@ -1,7 +1,7 @@
 import "Utils.mag": not_implemented, Z, sprint_with_parens;
 
 declare type PGGHomGrpPerm;
-declare attributes PGGHomGrpPerm: domain, codomain, hom, shape;
+declare attributes PGGHomGrpPerm: domain, codomain, hom, shape, image;
 
 declare type PGGHomGrpPerm_Id: PGGHomGrpPerm;
 
@@ -28,6 +28,14 @@ end intrinsic;
 intrinsic Codomain(h :: PGGHomGrpPerm) -> PGGGrpPerm
   {The codomain.}
   return h`codomain;
+end intrinsic;
+
+intrinsic Image(h :: PGGHomGrpPerm) -> PGGGrpPerm
+  {The image of h.}
+  if not assigned h`image then
+    h`image := PGGGrpPerm_RawSubgroup_Make(Codomain(h), Group(Domain(h)) @ h);
+  end if;
+  return h`image;
 end intrinsic;
 
 intrinsic PGGHomGrpPerm_Id_Make(G :: PGGGrpPerm, H :: PGGGrpPerm) -> PGGHomGrpPerm
@@ -201,9 +209,14 @@ intrinsic _Hom(h :: PGGHomGrpPerm_WrDiagonal) -> Map
   end if;
 end intrinsic;
 
-intrinsic '@'(x, h :: PGGHomGrpPerm) -> GrpPermElt
+intrinsic '@'(x, h :: PGGHomGrpPerm) -> .
   {Application.}
   return x @ Hom(h);
+end intrinsic;
+
+intrinsic '@@'(x, h :: PGGHomGrpPerm) -> .
+  {Inverse.}
+  return x @@ Hom(h);
 end intrinsic;
 
 intrinsic Shape(h :: PGGHomGrpPerm) -> []
