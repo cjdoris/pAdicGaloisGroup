@@ -22,7 +22,7 @@ declare type PGGGloMod_RootOfUnity: PGGGloMod_Fld, PGGGloMod_UPol;
 declare attributes PGGGloMod_RootOfUnity: primitive_root, aut_powers, sum_powers, zeta_pol;
 
 declare type PGGGloMod_RootOfUniformizer: PGGGloMod_Fld, PGGGloMod_UPol;
-declare attributes PGGGloMod_RootOfUniformizer: degree, global_uniformizer, unity_powers;
+declare attributes PGGGloMod_RootOfUniformizer: degree, global_uniformizer, global_zeta_pol;
 
 intrinsic Approximation(m :: PGGGloMod_Fld, x :: FldPadElt : Pr:=false) -> FldElt
   {Takes a global approximation to x across all embeddings.}
@@ -392,8 +392,14 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer, f ::
 
   // find Aut(gK(zeta_d)/gK) in terms of i s.t. zeta -> zeta^i
   C := Factorization(ChangeRing(CyclotomicPolynomial(d), gK))[1][1];
-  gM<z> := ext<gK | C>;
+  if Degree(C) eq 1 then
+    gM := gK;
+    z := Roots(C)[1][1];
+  else
+    gM<z> := ext<gK | C>;
+  end if;
   zauts := {@ i : i in [1..d-1] | Evaluate(C, z^i) eq 0 @};
+  // zauts := {@ i : i in [1..d-1] | GCD(i,d) eq 1 @};
   vprint PGG_GaloisGroup, 1: "zauts =", zauts;
   assert 1 in zauts;
   assert IsDivisibleBy(EulerPhi(d), #zauts);
@@ -428,8 +434,8 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer, f ::
   m`global_field := gL;
   m`global_pol := DefiningPolynomial(gL);
   m`global_uniformizer := -gpiK;
+  m`global_zeta_pol := C;
   m`degree := d;
-  m`unity_powers := zauts;
 
   // the Galois groups
   Sd := PGGGrpPerm_Symmetric_Make(d);
@@ -437,6 +443,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer, f ::
   assert #Group(gW) eq d*#zauts;
   W := PGGConj_TotRam_Make(f : TopField:=L);
   Whom := PGGHomGrpPerm_Id_Make(W, gW);
+  // error "DEBUG";
 
   return m, Whom;
 end intrinsic;
@@ -485,7 +492,11 @@ intrinsic ComplexRoots(m :: PGGGloMod_RootOfUniformizer, embs :: [Map]) -> []
   if m`degree eq 1 then
     return [[r] : r in rs];
   else
-    return [[j eq 0 select r else r * z^j : j in [0..m`degree-1]] where z:=((C!-1)^(1/m`degree))^2 where C:=Codomain(e) where e:=embs[i] where r:=rs[i] : i in [1..#embs]];
+    // zs := [((C!-1)^(1/m`degree))^2 where C:=Codomain(e) : e in embs];
+    // THE ABOVE LINE WILL CAUSE ERRORS!!
+    // We don't have free choice over the root of unity, it needs to be consistent between different models, i.e. a root of a fixed polynomial over the base field
+    zs := [Roots(Polynomial([c@e : c in Coefficients(m`global_zeta_pol)]))[1][1] : e in embs];
+    return [[j eq 0 select r else r * z^j : j in [0..m`degree-1]] where z:=zs[i] where r:=rs[i] : i in [1..#embs]];
   end if;
 end intrinsic;
 
