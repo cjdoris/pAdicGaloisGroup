@@ -271,10 +271,16 @@ function parse_algorithm(alg)
         "Maximal2",
         [ <STATISTIC,"Stat",false>
         , <SUBGROUP_CHOICE,"Choice",false>
+        , <PGG_ArgSpec_Union([
+            PGG_ArgSpec_Literal(false),
+            PGG_ArgSpec_Attr("Strict"),
+            PGG_ArgSpec_Attr("SimpleMagic"),
+            PGG_ArgSpec_Attr("Magic")
+          ]), "Descend", false>
         , <BOOL, "Reset", true>
         , <BOOL, "Dedupe", true>
         ],
-        func<args | PGGAlg_ResGroups_Maximal2_Make(:Statistic:=args[1], SubgroupChoice:=args[2], Reset:=args[3], Dedupe:=args[4])>
+        func<args | PGGAlg_ResGroups_Maximal2_Make(:Statistic:=args[1], SubgroupChoice:=args[2], Descend:=args[3], Reset:=args[4], Dedupe:=args[5])>
       ),
       PGG_ArgSpec_Attr(
         "RootsMaximal",

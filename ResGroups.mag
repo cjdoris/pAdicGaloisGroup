@@ -43,7 +43,7 @@ declare type PGGAlgState_ResGroups_Maximal_GraphNode: PGG_ResGroups_GraphNode;
 declare attributes PGGAlgState_ResGroups_Maximal_GraphNode: pooled_children;
 
 declare type PGGAlg_ResGroups_Maximal2: PGGAlg_ResGroups;
-declare attributes PGGAlg_ResGroups_Maximal2: subgroup_choice, statistic, reset, dedupe;
+declare attributes PGGAlg_ResGroups_Maximal2: subgroup_choice, statistic, reset, dedupe, descend;
 
 declare type PGGAlgState_ResGroups_Maximal2: PGGAlgState_ResGroups;
 declare attributes PGGAlgState_ResGroups_Maximal2: galois_conjugacy, resolvent_overgroup, choice_state, graph, pool;
@@ -90,13 +90,14 @@ intrinsic PGGAlg_ResGroups_Maximal_Make(:Statistic:=false, SubgroupChoice:=false
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResGroups_Maximal2_Make(:Statistic:=false, SubgroupChoice:=false, Reset:=true, Dedupe:=true) -> PGGAlg_ResGroups_Maximal2
+intrinsic PGGAlg_ResGroups_Maximal2_Make(:Statistic:=false, SubgroupChoice:=false, Reset:=true, Dedupe:=true, Descend:=false) -> PGGAlg_ResGroups_Maximal2
   {The "Maximal2" resolvent groups algorithm.}
   alg := New(PGGAlg_ResGroups_Maximal2);
   alg`statistic := Statistic cmpne false select Statistic else PGGStat_FactorDegrees_Make();
   alg`subgroup_choice := SubgroupChoice cmpne false select SubgroupChoice else PGGAlg_ResChoice_Tranche_Make();
   alg`reset := Reset;
   alg`dedupe := Dedupe;
+  alg`descend := Descend cmpne false select Descend else "Magic";
   return alg;
 end intrinsic;
 
@@ -756,8 +757,8 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal2, resolvent :: Rng
   // eliminate the not equal pool nodes
   ns := {n : n in s`pool | not n`maybe_equal};
   if #ns gt 0 then
-    case "v2":
-    when "v1":
+    case s`algorithm`descend:
+    when "Strict":
       emb := s`overgroup_embedding;
       W1 := Group(Domain(emb));
       W2 := Group(Codomain(emb));
@@ -775,9 +776,39 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal2, resolvent :: Rng
       Hs := [H : H in Hs | GalGrpIsConsistentWithSubgroup(Domain(emb), H)];
       PGG_GlobalTimer_Swap("nodes");
       ms := { m : H in Hs | m`maybe_equal and m`maybe_subgroup where m := Node(s`graph, H)};
-    when "v2":
+    when "SimpleMagic":
       ms := {m : m in PossibleChildren(n), n in ns | GroupStat(m,h) eq rstat};
+    when "Magic":
+      ms := {};
+      for n in ns do
+        todo := [n];
+        nms := {};
+        while #todo ne 0 do
+          nn := todo[1];
+          todo := todo[2..#todo];
+          if #PossibleChildren(nn) ne 0 then
+            nnms := {m : m in PossibleChildren(nn) | GroupStat(m,h) eq rstat};
+            if #nnms ne 0 then
+              nms join:= nnms;
+            else
+              for m in PossibleChildren(nn) do
+                if not (rstat subset GroupStat(m,h)) then
+                  NotSubgroup(m);
+                end if;
+              end for;
+              todo cat:= SetToSequence(PossibleChildren(nn));
+            end if;
+          end if;
+        end while;
+        ms join:= nms;
+      end for;
+    else
+      assert false;
     end case;
+    if s`algorithm`reset and #(ms diff s`pool) ne 0 then
+      PGG_GlobalTimer_Swap("reset");
+      Reset(s`choice_state);
+    end if;
     s`pool diff:= ns;
     s`pool join:= ms;
   end if;
@@ -785,10 +816,6 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal2, resolvent :: Rng
   PGG_GlobalTimer_Swap("possible children");
   vprint PGG_GaloisGroup: "#pool =", #s`pool, #&join[PossibleChildren(n) : n in s`pool];
   vprint PGG_GaloisGroup: "pool indices =", {* Index(Group(s`galois_conjugacy), Rep(n`class)) : n in s`pool *};
-  if s`algorithm`reset then
-    PGG_GlobalTimer_Swap("reset");
-    Reset(s`choice_state);
-  end if;
   PGG_GlobalTimer_Pop();
 end intrinsic;
 
