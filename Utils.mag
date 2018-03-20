@@ -80,10 +80,8 @@ end function;
 
 // the roots of f as a sequence (no multiplicities)
 // f must be squarefree
-function roots(f)
-  rs := Roots(f : IsSquarefree);
-  assert forall{r : r in rs | r[2] eq 1};
-  return [r[1] : r in rs];
+function roots(f : Lift:=true)
+  return PGG_Roots(f : Lift:=Lift);
 end function;
 
 // true if f has a root
@@ -101,14 +99,8 @@ end function;
 // the factorization of f as a sequence (no multiplicities)
 // f must be squarefree
 // also the certificates
-function factorization(f : Extensions:=false)
-  slope := Ceiling(Max(Slopes(NewtonPolygon(f))));
-  d := Degree(f);
-  vlc := Valuation(Coefficient(f, d));
-  f2 := Parent(f) ! [ShiftValuation(Coefficient(f, i), (d-i)*slope - vlc) : i in [0..d]];
-  facs, _, certs := Factorization(f2 : IsSquarefree, Certificates, Extensions:=Extensions);
-  assert forall{fac : fac in facs | fac[2] eq 1};
-  return [Parent(g)![ShiftValuation(Coefficient(g,i), (i-d)*slope-vlc) : i in [0..d]] where vlc:=Valuation(Coefficient(g,d)) where d:=Degree(g) where g:=fac[1] : fac in facs], certs;
+function factorization(f : Extensions:=false, Lift:=true)
+  return PGG_Factorization(f : Extensions:=Extensions, Lift:=Lift);
 end function;
 
 function extension(f)

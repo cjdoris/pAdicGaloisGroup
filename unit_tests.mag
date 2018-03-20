@@ -42,6 +42,14 @@ if assigned Verbosity then
   SetVerbose("PGG_GaloisGroup", eval Verbosity);
 end if;
 
+if assigned UseNew and eval UseNew then
+  PGG_UseExactpAdicsFactorization();
+  PGG_UseExactpAdicsRoots();
+else
+  PGG_UseBuiltinFactorization();
+  PGG_UseBuiltinRoots();
+end if;
+
 Sym := SymmetricGroup;
 Wr := WreathProduct;
 DP := DirectProduct;

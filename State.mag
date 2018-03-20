@@ -1,9 +1,75 @@
 freeze;
 
 declare type PGGState;
-declare attributes PGGState: timer;
+declare attributes PGGState: timer, factorization_func, roots_func;
 
 STATE := New(PGGState);
+
+intrinsic PGG_Factorization(f :: RngUPolElt[FldPad] : Extensions:=false, Lift:=true) -> [], []
+  {Factorization of f as a sequence of factors (assumes f is squarefree). Also returns a sequence of certificates. If Extensions is true, then the certificates have the `Extension` field assigned. If Lift is false, the factors are not Hensel lifted, and so may have low precision.}
+  if not assigned STATE`factorization_func then
+    print "WARNING: Using builtin factorization algorithm by default. To suppress this message, call PGG_UseBuiltinFactorization() or an alternative such as PGG_UseNewFactorization().";
+    PGG_UseBuiltinFactorization();
+  end if;
+  return STATE`factorization_func(f : Extensions:=Extensions, Lift:=Lift);
+end intrinsic;
+
+intrinsic PGG_Roots(f :: RngUPolElt[FldPad] : Lift:=true) -> []
+  {Roots of f as a sequence (assumes f is squarefree). If Lift is false, the roots are not Hensel lifted, and so may have low precision.}
+  if not assigned STATE`roots_func then
+    print "WARNING: Using builtin roots algorithm by default. To suppress this message, call PGG_UseBuiltinRoots() or an alternative such as PGG_UseNewFactorization().";
+    PGG_UseBuiltinRoots();
+  end if;
+  return STATE`roots_func(f : Lift:=Lift);
+end intrinsic;
+
+intrinsic PGG_UseBuiltinRoots()
+  {Uses the builtin roots algorithm.}
+  s := STATE;
+  s`roots_func := function (f : Lift:=true)
+    rs := Roots(f : IsSquarefree);
+    assert forall{r : r in rs | r[2] eq 1};
+    return [r[1] : r in rs];
+  end function;
+end intrinsic;
+
+intrinsic PGG_UseExactpAdicsRoots()
+  {Uses the new roots algorithm. Requires the ExactpAdics package to be attached.}
+  ok, intr := IsIntrinsic("ExactpAdics_Roots");
+  require ok: "Requires the ExactpAdics package to be attached";
+  s := STATE;
+  s`roots_func := function (f : Lift:=true)
+    rs := intr(f : Lift:=Lift);
+    assert forall{r : r in rs | r[2] eq 1};
+    return [r[1] : r in rs];
+  end function;
+end intrinsic;
+
+intrinsic PGG_UseBuiltinFactorization()
+  {Uses the builtin factorization algorithm.}
+  s := STATE;
+  s`factorization_func := function (f : Extensions:=false, Lift:=true)
+    slope := Ceiling(Max(Slopes(NewtonPolygon(f))));
+    d := Degree(f);
+    vlc := Valuation(Coefficient(f, d));
+    f2 := Parent(f) ! [ShiftValuation(Coefficient(f, i), (d-i)*slope - vlc) : i in [0..d]];
+    facs, _, certs := Factorization(f2 : IsSquarefree, Certificates, Extensions:=Extensions);
+    assert forall{fac : fac in facs | fac[2] eq 1};
+    return [Parent(g)![ShiftValuation(Coefficient(g,i), (i-d)*slope-vlc) : i in [0..d]] where vlc:=Valuation(Coefficient(g,d)) where d:=Degree(g) where g:=fac[1] : fac in facs], certs;
+  end function;
+end intrinsic;
+
+intrinsic PGG_UseExactpAdicsFactorization()
+  {Uses the new factorization algorithm. Requires the ExactpAdics package to be attached.}
+  ok, intr := IsIntrinsic("ExactpAdics_Factorization");
+  require ok: "Requires the ExactpAdics package to be attached";
+  s := STATE;
+  s`factorization_func := function (f : Extensions:=false, Lift:=true)
+    facs, _, certs := intr(f : Certificates, Extensions:=Extensions, Lift:=Lift);
+    assert forall{x : x in facs | x[2] eq 1};
+    return [x[1] : x in facs], certs;
+  end function;
+end intrinsic;
 
 intrinsic PGG_HasGlobalTimer() -> BoolElt, PGGTimer
   {True if there is a global timer set.}

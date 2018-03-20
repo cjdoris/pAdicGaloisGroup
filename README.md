@@ -12,6 +12,7 @@ Experimental code for computing [Galois groups](https://en.wikipedia.org/wiki/Ga
 ## Getting started
 * [Download from GitHub](https://github.com/cjdoris/pAdicGaloisGroup).
 * Attach the `spec` file (see the example below).
+* Optional/recommended: Download and attach the [ExactpAdics](https://cjdoris.github.io/ExactpAdics) package and call `PGG_UseExactpAdicsFactorization()` and `PGG_UseExactpAdicsRoots()`. This makes our package use superior "OM" algorithms for factorization and root finding, instead of the ones builtin to Magma. For polynomials of about degree 32 or more, this can be a significant improvement in both speed and p-adic precision. Note that this does **not** actually use the exact p-adic functionality from the ExactpAdics package (yet).
 
 ## Example
 
@@ -20,6 +21,9 @@ The following confirms the Galois group in the 12th line of [this table](http://
 ```
 > // the following line only needs to be done once per session
 > AttachSpec("/path/to/package/spec");
+> // optional/recommended if you have the ExactpAdics package (see the Getting started section)
+> PGG_UseExactpAdicsFactorization();
+> PGG_UseExactpAdicsRoots();
 >
 > // define a polynomial over Q_2
 > K := pAdicField(2,100);
