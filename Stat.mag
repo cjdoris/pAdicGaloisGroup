@@ -251,17 +251,17 @@ end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_HasRoot, R :: RngUPolElt[FldPad]) -> PGGStatVal
   {The value of the statistic on the resolvent.}
-  return MakeValue(S, has_root(R));
+  return MakeValue(S, #roots(R : Lift:=false) gt 0);
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_NumRoots, R :: RngUPolElt[FldPad]) -> PGGStatVal
   {"}
-  return MakeValue(S, #roots(R));
+  return MakeValue(S, #roots(R : Lift:=false));
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_FactorDegrees, R :: RngUPolElt[FldPad]) -> PGGStatVal
   {"}
-  return MakeValue(S, {* Degree(fac) : fac in factorization(R) *});
+  return MakeValue(S, {* Degree(fac) : fac in factorization(R : Lift:=false) *});
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_Degree, R :: RngUPolElt[FldPad]) -> PGGStatVal
