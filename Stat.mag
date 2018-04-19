@@ -1,4 +1,4 @@
-import "Utils.mag": has_root, roots, factorization, extension, not_implemented, is_subpartition_of;
+import "Utils.mag": has_root, roots, factorization, extension, not_implemented, is_subpartition_of, all_binnings, mset_apply;
 
 declare type PGGStat;
 declare type PGGStat_EqSimple: PGGStat;
@@ -15,6 +15,10 @@ declare type PGGStat_Factors: PGGStat_EqSimple;
 declare attributes PGGStat_Factors: stat;
 declare type PGGStat_Factors2: PGGStat;
 declare attributes PGGStat_Factors2: strict, stat1, stat2;
+declare type PGGStat_Stab: PGGStat_EqSimple;
+declare attributes PGGStat_Stab: stat;
+declare type PGGStat_GaloisGroup: PGGStat;
+declare attributes PGGStat_GaloisGroup: alg;
 
 declare type PGGStatVal;
 declare attributes PGGStatVal: stat, value, hash, hashable;
@@ -46,6 +50,51 @@ end intrinsic;
 intrinsic 'eq'(S1 :: PGGStat, S2 :: PGGStat) -> BoolElt
   {Equality.}
   return IsIdentical(S1, S2);
+end intrinsic;
+
+intrinsic 'eq'(S1 :: PGGStat_HasRoot, S2 :: PGGStat_HasRoot) -> BoolElt
+  {"}
+  return true;
+end intrinsic;
+
+intrinsic 'eq'(S1 :: PGGStat_NumRoots, S2 :: PGGStat_NumRoots) -> BoolElt
+  {"}
+  return true;
+end intrinsic;
+
+intrinsic 'eq'(S1 :: PGGStat_FactorDegrees, S2 :: PGGStat_FactorDegrees) -> BoolElt
+  {"}
+  return true;
+end intrinsic;
+
+intrinsic 'eq'(S1 :: PGGStat_Degree, S2 :: PGGStat_Degree) -> BoolElt
+  {"}
+  return true;
+end intrinsic;
+
+intrinsic 'eq'(S1 :: PGGStat_AutGroup, S2 :: PGGStat_AutGroup) -> BoolElt
+  {"}
+  return true;
+end intrinsic;
+
+intrinsic 'eq'(S1 :: PGGStat_Order, S2 :: PGGStat_Order) -> BoolElt
+  {"}
+  return true;
+end intrinsic;
+
+intrinsic 'eq'(S1 :: PGGStat_Factors, S2 :: PGGStat_Factors) -> BoolElt
+  {"}
+  return S1`stat eq S2`stat;
+end intrinsic;
+
+intrinsic 'eq'(S1 :: PGGStat_Stab, S2 :: PGGStat_Stab) -> BoolElt
+  {"}
+  return S1`stat eq S2`stat;
+end intrinsic;
+
+intrinsic 'eq'(S1 :: PGGStat_Tup, S2 :: PGGStat_Tup) -> BoolElt
+  {"}
+  return #S1`stats eq #S2`stats and forall{i : i in [1..#S1`stats] | S1`stats[i] eq S2`stats[i]};
 end intrinsic;
 
 intrinsic 'eq'(v1 :: PGGStatVal, v2 :: PGGStatVal) -> BoolElt
@@ -118,6 +167,22 @@ intrinsic PGGStat_Tup_Make(args) -> PGGStat_Tup
   return S;
 end intrinsic;
 
+intrinsic PGGStat_Stab_Make(:Stat:=false) -> PGGStat_Stab
+  {"}
+  S := New(PGGStat_Stab);
+  S`stat := Stat cmpne false select Stat else PGGStat_Degree_Make();
+  return S;
+end intrinsic;
+
+intrinsic PGGStat_GaloisGroup_Make(:Alg:=false) -> PGGStat_GaloisGroup
+  {"}
+  S := New(PGGStat_GaloisGroup);
+  if Alg cmpne false then
+    S`alg := Alg;
+  end if;
+  return S;
+end intrinsic;
+
 intrinsic Print(S :: PGGStat_HasRoot)
   {Print.}
   printf "has root";
@@ -178,6 +243,20 @@ intrinsic Print(S :: PGGStat_Tup)
   end if;
 end intrinsic;
 
+intrinsic Print(S :: PGGStat_Stab)
+  {"}
+  printf "stabilizer -> "; Print(S`stat);
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_GaloisGroup)
+  {"}
+  printf "galois group";
+  if assigned S`alg then
+    printf " -> ";
+    Print(S`alg);
+  end if;
+end intrinsic;
+
 intrinsic ConjugacyClasses(S :: PGGStat_AutGroup, d :: RngIntElt) -> PGGSetSubgrpcls
   {The conjugacy classes of Sym(d).}
   if not assigned S`conjugacy_classes then
@@ -189,8 +268,13 @@ intrinsic ConjugacyClasses(S :: PGGStat_AutGroup, d :: RngIntElt) -> PGGSetSubgr
   return S`conjugacy_classes[d];
 end intrinsic;
 
-intrinsic GroupStat(S :: PGGStat_HasRoot, G :: GrpPerm) -> PGGStatVal
+intrinsic GroupStat(S :: PGGStat, G :: GrpPerm) -> PGGStatVal
   {The value of the statistic on the group.}
+  error "not implemented: GroupStat:", Type(S);
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_HasRoot, G :: GrpPerm) -> PGGStatVal
+  {"}
   return MakeValue(S, exists{o : o in Orbits(G) | #o eq 1});
 end intrinsic;
 
@@ -249,8 +333,24 @@ intrinsic GroupStat(S :: PGGStat_Factors2, G :: GrpPerm) -> PGGStatVal
   );
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat_HasRoot, R :: RngUPolElt[FldPad]) -> PGGStatVal
+intrinsic GroupStat(S :: PGGStat_Stab, G :: GrpPerm) -> PGGStatVal
+  {"}
+  error if not IsTransitive(G), "only applies to transitive groups";
+  return MakeValue(S, GroupStat(S`stat, Stabilizer(G,1)));
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_GaloisGroup, G :: GrpPerm) -> PGGStatVal
+  {"}
+  return MakeValue(S, G);
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat, R :: RngUPolElt[FldPad]) -> PGGStatVal
   {The value of the statistic on the resolvent.}
+  error "not implemented: ResolventStat:", Type(S);
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_HasRoot, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {"}
   return MakeValue(S, #roots(R : Lift:=false) gt 0);
 end intrinsic;
 
@@ -302,6 +402,22 @@ intrinsic ResolventStat(S :: PGGStat_Factors2, R :: RngUPolElt[FldPad]) -> PGGSt
   );
 end intrinsic;
 
+intrinsic ResolventStat(S :: PGGStat_Stab, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {"}
+  facs, certs := factorization(R : Extensions);
+  error if #facs ne 1, "only applies to irreducible polynomials";
+  return MakeValue(S, ResolventStat(S`stat, ChangeRing(R, certs[1]`Extension)));
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_GaloisGroup, R :: RngUPolElt[FldPad]) -> PGGStatVal
+  {"}
+  if assigned S`alg then
+    return MakeValue(S, PGG_GaloisGroup(R : Alg:=S`alg));
+  else
+    error "ResolventStat: Galois group algorithm not specified";
+  end if;
+end intrinsic;
+
 intrinsic 'eq'(S :: PGGStat, v1, v2) -> BoolElt
   {Equality.}
   not_implemented("equality:", Type(S));
@@ -315,6 +431,11 @@ end intrinsic;
 intrinsic 'eq'(S :: PGGStat_AutGroup, v1, v2) -> BoolElt
   {"}
   return Degree(Rep(v1`value)) eq Degree(Rep(v2`value)) and v1`value eq v2`value;
+end intrinsic;
+
+intrinsic 'eq'(S :: PGGStat_GaloisGroup, v1, v2) -> BoolElt
+  {"}
+  return Degree(v1`value) eq Degree(v2`value) and IsConjugate(SymmetricGroup(Degree(v1`value)), v1`value, v2`value);
 end intrinsic;
 
 procedure assoc_append(~A, k, x)
@@ -404,7 +525,273 @@ end intrinsic;
 
 intrinsic 'subset'(S :: PGGStat_Degree, v1, v2) -> BoolElt
   {"}
-  return v1`degree eq v2`degree;
+  return v1`value eq v2`value;
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_Tup, v1, v2) -> BoolElt
+  {"}
+  return forall{i : i in [1..#S`stats] | 'subset'(S`stats[i], v1`value[i], v2`value[i])};
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_Stab, v1, v2) -> BoolElt
+  {"}
+  return 'subset'(S`stat, v1`value, v2`value);
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_Factors, v1, v2) -> BoolElt
+  {"}
+  w1s := SetToSequence(MultisetToSet(v1`value));
+  w2s := SetToSequence(MultisetToSet(v2`value));
+  bs := all_binnings(
+    [Multiplicity(v1`value, w1) : w1 in w1s],
+    [Multiplicity(v2`value, w2) : w2 in w2s]:
+    limit:=1,
+    is_semivalid:=func<i,b | PartialLe(ProductStat(S`stat, mset_apply(b, func<j | w1s[j]>)), w2s[i])>,
+    is_valid:=func<i,b | ProductStat(S`stat, mset_apply(b,func<j | w1s[j]>)) subset w2s[i]>
+  );
+  return #bs gt 0;
+end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_GaloisGroup, v1, v2) -> BoolElt
+  {"}
+  return Degree(v1`value) eq Degree(v2`value) and IsConjugateSubgroup(SymmetricGroup(Degree(v1`value)), v2`value, v1`value);
+end intrinsic;
+
+intrinsic ProductStat(S :: PGGStat_Degree, vs :: {*PGGStatVal*}) -> PGGStatVal
+  {Statistict of the direct product of groups or product of polynomials.}
+  return MakeValue(S, &+ChangeUniverse(mset_apply(vs, func<v | v`value>), Integers()));
+end intrinsic;
+
+intrinsic ProductStat(S :: PGGStat_HasRoot, vs :: {*PGGStatVal*}) -> PGGStatVal
+  {"}
+  return MakeValue(S, exists{v : v in MultisetToSet(vs) | v`value});
+end intrinsic;
+
+intrinsic ProductStat(S :: PGGStat_NumRoots, vs :: {*PGGStatVal*}) -> PGGStatVal
+  {"}
+  return MakeValue(S, &+ChangeUniverse(mset_apply(vs, func<v | v`value>), Integers()));
+end intrinsic;
+
+intrinsic ProductStat(S :: PGGStat_Tup, vs :: {*PGGStatVal*}) -> PGGStatVal
+  {"}
+  return MakeValue(S, <ProductStat(S`stats[i], mset_apply(vs, func<v | v`value[i]>)) : i in [1..#S`stats]>);
+end intrinsic;
+
+intrinsic ProductStat(S :: PGGStat_FactorDegrees, vs :: {*PGGStatVal*}) -> PGGStatVal
+  {"}
+  return MakeValue(S, &join mset_apply(vs, func<v | v`value>));
+end intrinsic;
+
+intrinsic ProductStat(S :: PGGStat_Factors, vs :: {*PGGStatVal*}) -> PGGStatVal
+  {"}
+  return MakeValue(S, &join mset_apply(vs, func<v | v`value>));
+end intrinsic;
+
+intrinsic ProductStat(S :: PGGStat_AutGroup, vs :: {*PGGStatVal*}) -> PGGStatVal
+  {"}
+  aut := DirectProduct([Rep(v`value) : v in vs]);
+  return MakeValue(S, ConjugacyClasses(S, Degree(aut)) ! aut);
+end intrinsic;
+
+intrinsic ProductStat(S :: PGGStat_Stab, vs :: {*PGGStatVal*}) -> PGGStatVal
+  {"}
+  return MakeValue(S, ProductStat(S`stat, mset_apply(vs, func<v | v`value>)));
+end intrinsic;
+
+intrinsic ProductStat(S :: PGGStat_GaloisGroup, vs :: {*PGGStatVal*}) -> PGGStatVal
+  {"}
+  return MakeValue(S, DirectProduct([v`value : v in vs]));
+end intrinsic;
+
+intrinsic PartialLe(v1 :: PGGStatVal, v2 :: PGGStatVal) -> BoolElt
+  {True if G1 is a subgroup the action of G2 on some of its orbits, and v1 and v2 are corresponding statistics.}
+  require v1`stat eq v2`stat: "must be values of the same statistic";
+  return PartialLe(v1`stat, v1, v2);
+end intrinsic;
+
+intrinsic PartialLe(S :: PGGStat, v1, v2) -> BoolElt
+  {"}
+  error "not implemented: PartialLe:", Type(S);
+end intrinsic;
+
+intrinsic PartialLe(S :: PGGStat_HasRoot, v1, v2) -> BoolElt
+  {"}
+  return true;
+end intrinsic;
+
+intrinsic PartialLe(S :: PGGStat_NumRoots, v1, v2) -> BoolElt
+  {"}
+  return true;
+end intrinsic;
+
+intrinsic PartialLe(S :: PGGStat_Degree, v1, v2) -> BoolElt
+  {"}
+  return v1`value le v2`value;
+end intrinsic;
+
+intrinsic PartialLe(S :: PGGStat_Tup, v1, v2) -> BoolElt
+  {"}
+  return forall{i : i in [1..#S`stats] | PartialLe(v1`value[i], v2`value[i])};
+end intrinsic;
+
+intrinsic PartialLe(S :: PGGStat_FactorDegrees, v1, v2) -> BoolElt
+  {"}
+  d1s := SetToSequence(MultisetToSet(v1`value));
+  d2s := SetToSequence(MultisetToSet(v2`value));
+  bs := all_binnings(
+    [Multiplicity(v1`value, d1) : d1 in d1s],
+    [Multiplicity(v2`value, d2) : d2 in d2s]:
+    limit:=1,
+    is_semivalid:=func<i,b | &+mset_apply(b,func<j | d1s[j]>) le d2s[i]>
+  );
+  return #bs gt 0;
+end intrinsic;
+
+intrinsic PartialLe(S :: PGGStat_Stab, v1, v2) -> BoolElt
+  {"}
+  return PartialLe(v1`value, v2`value);
+end intrinsic;
+
+intrinsic PossibleIntermediateStatistics(S1 :: PGGStat, S2 :: PGGStat) -> []
+  {A sequence of statistics to try deducing to from S1, and to S2 from.}
+  return [];
+end intrinsic;
+
+intrinsic PossibleIntermediateStatistics(S1 :: PGGStat, S2 :: PGGStat_HasRoot) -> []
+  {"}
+  return [PGGStat_NumRoots_Make()];
+end intrinsic;
+
+intrinsic PossibleIntermediateStatistics(S1 :: PGGStat, S2 :: PGGStat_NumRoots) -> []
+  {"}
+  return [PGGStat_FactorDegrees_Make()];
+end intrinsic;
+
+intrinsic PossibleIntermediateStatistics(S1 :: PGGStat, S2 :: PGGStat_FactorDegrees) -> []
+  {"}
+  return [PGGStat_Factors_Make(:Stat:=PGGStat_Degree_Make())];
+end intrinsic;
+
+intrinsic PossibleIntermediateStatistics(S1 :: PGGStat, S2 :: PGGStat_Degree) -> []
+  {"}
+  return [PGGStat_FactorDegrees_Make()];
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat, S2 :: PGGStat) -> BoolElt, .
+  {True if values of S2 can be deduced from values of S1. If so, also returns the corresponding map.}
+  if S1 eq S2 then
+    return true, func<v | v>;
+  end if;
+  for S in PossibleIntermediateStatistics(S1,S2) do
+    ok, m1 := Implies(S1, S);
+    if ok then
+      ok, m2 := Implies(S, S2);
+      if ok then
+        return true, func<v | m2(m1(v))>;
+      end if;
+    end if;
+  end for;
+  return false, _;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat_NumRoots, S2 :: PGGStat_HasRoot) -> BoolElt, .
+  {"}
+  return true, func<v | MakeValue(S2, v`value gt 0)>;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat_FactorDegrees, S2 :: PGGStat_NumRoots) -> BoolElt, .
+  {"}
+  return true, func<v | MakeValue(S2, Multiplicity(v`value, 1))>;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat_Factors, S2 :: PGGStat_FactorDegrees) -> BoolElt, .
+  {"}
+  ok, m := Implies(S1`stat, PGGStat_Degree_Make());
+  if ok then
+    return true, func<v | MakeValue(S2, mset_apply(v`value, func<w | m(w)`value>))>;
+  end if;
+  return false, _;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat_FactorDegrees, S2 :: PGGStat_Degree) -> BoolElt, .
+  {"}
+  return true, func<v | MakeValue(S2, &+v`value)>;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat_FactorDegrees, S2 :: PGGStat_Factors) -> BoolElt, .
+  {"}
+  SD := PGGStat_Degree_Make();
+  ok, m := Implies(SD, S2`stat);
+  if ok then
+    return true, func<v | MakeValue(S2, mset_apply(v`value, func<d | m(MakeValue(SD,d))>))>;
+  end if;
+  return false, _;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat_Factors, S2 :: PGGStat_Factors) -> BoolElt, .
+  {"}
+  if S1 eq S2 then
+    return true, func<v | v>;
+  end if;
+  ok, m := Implies(S1`stat, S2`stat);
+  if ok then
+    return true, func<v | MakeValue(S2, mset_apply(v`value, m))>;
+  end if;
+  return false, _;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat_Tup, S2 :: PGGStat_Tup) -> BoolElt, .
+  {"}
+  if S1 eq S2 then
+    return true, func<v | v>;
+  end if;
+  ms := [];
+  for S in S2`stats do
+    ok, m := Implies(S1, S);
+    if ok then
+      Append(~ms, m);
+    else
+      return false, _;
+    end if;
+  end for;
+  return true, func<v | MakeValue(S2, <m(v) : m in ms>)>;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat, S2 :: PGGStat_Tup) -> BoolElt, .
+  {"}
+  ms := [];
+  for S in S2`stats do
+    ok, m := Implies(S1, S);
+    if ok then
+      Append(~ms, m);
+    else
+      return false, _;
+    end if;
+  end for;
+  return true, func<v | MakeValue(S2, <m(v) : m in ms>)>;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat_Tup, S2 :: PGGStat) -> BoolElt, .
+  {"}
+  for i in [1..#S1`stats] do
+    ok, m := Implies(S1`stats[i], S2);
+    if ok then
+      return true, func<v | m(v`value[i])>;
+    end if;
+  end for;
+  return false, _;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat_Stab, S2 :: PGGStat_Stab) -> BoolElt, .
+  {"}
+  if S1 eq S2 then
+    return true, func<v | v>;
+  end if;
+  ok, m := Implies(S1`stat, S2`stat);
+  if ok then
+    return true, func<v | MakeValue(S2, m(v`value))>;
+  end if;
+  return false;
 end intrinsic;
 
 // Is it true that if H<G then N_G(Stab_G(1))/Stab_G(1) < N_H(Stab_H(1))/Stab_H(1)?
@@ -419,7 +806,7 @@ end intrinsic;
 //   {"}
 // end intrinsic;
 
-intrinsic _Hashable(S :: PGGStat, v) -> .
+intrinsic _Hashable(S :: PGGStat_EqSimple, v) -> .
   {Hash.}
   return v`value;
 end intrinsic;
@@ -469,14 +856,35 @@ end intrinsic;
 
 intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat, v) -> []
   {"}
-  // print "WARNING: using inefficient stabilizers algorithm";
-  return stabilizers(G, S, v);
-  // error Sprintf("not implemented: Stabilizers: %o", Type(S));
+  S2s := [<S2,m> : S2 in [PGGStat_HasRoot_Make(), PGGStat_FactorDegrees_Make()] | ok where ok,m:=Implies(S,S2)];
+  vprint PGG_GaloisGroup: "WARNING: using generic stabilizers algorithm";
+  if #S2s gt 0 then
+    vprint PGG_GaloisGroup: "...after using specialist algorithms for:";
+    IndentPush();
+    for x in S2s do
+      print x[1];
+    end for;
+    IndentPop();
+  end if;
+  Gs := [G];
+  for x in S2s do
+    if #Gs eq 0 then
+      break;
+    end if;
+    S2, m := Explode(x);
+    v2 := m(v);
+    Gs := &cat[_Stabilizers(G, S2, v2) : G in Gs];
+  end for;
+  if #Gs eq 0 then
+    return [];
+  else
+    return &cat[stabilizers(G, S, v) : G in Gs];
+  end if;
 end intrinsic;
 
 intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat_HasRoot, v) -> []
   {"}
-  return v`value select [Stabilizer(G,1)] else [G];
+  return v`value select [Stabilizer(G,Rep(o)) : o in Orbits(G)] else [G];
 end intrinsic;
 
 function partition_system(G)
@@ -495,24 +903,213 @@ function partition_system(G)
   end while;
 end function;
 
-// intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat_FactorDegrees, v) -> []
-//   {"}
-//   // general strategy:
-//   // - find a wreath product W and r in S_d such that G^r < W (by computing partitions of G) (wlog r=id)
-//   // - then if H < G has statistic v, then H < G < W has statistic v
-//   // - find maximal H < W with statistic v
-//   // - take all conjugates H^c meet G - it suffices to take c to be representatives of N_W(H) \ W / G
-//   // - throw away those with the wrong statistic
-//   P := v`value;
-//   d := Degree(G);
-//   assert &+P eq d;
-//   if P eq {*#o : o in Orbits(G)*} then
-//     return [G];
-//   elif IsTransitive(G) and P eq {* 1, d-1 *} then
-//     return [Stabilizer(G, 1)];
-//   elif IsTransitive(G) and P eq {* (d div 2)^^2 *} then
-//     error "not implemented: Stabilizers: FactorDegrees";
-//   else
-//     error "not implemented: Stabilizers: FactorDegrees";
-//   end if;
-// end intrinsic;
+intrinsic PGG_DirectProductEmbedding(G :: GrpPerm) -> []
+  {A sequence of transitive groups Gs and a permutation g such that G^g subset DirectProduct(Gs).}
+  d := Degree(G);
+  Sd := SymmetricGroup(d);
+  if IsTransitive(G) then
+    Gs := [G];
+    g := Id(Sd);
+  else
+    os := [[x:x in o]:o in Orbits(G)];
+    g := (Sd ! [x : x in o, o in os])^-1;
+    Gs := [OrbitImage(G^g, {@ x^g : x in o @}) : o in os];
+  end if;
+  for i in [1..#Gs] do
+    ReduceGenerators(~Gs[i]);
+  end for;
+  assert G^g subset DirectProduct(Gs);
+  return Gs, g;
+end intrinsic;
+
+intrinsic PGG_WreathProductEmbedding(G :: GrpPerm) -> [], GrpPermElt
+  {A sequence of groups Gs and a permutation g such that G^g subset WreathProduct(Gs).}
+  d := Degree(G);
+  Sd := SymmetricGroup(d);
+  if IsPrimitive(G) then
+    // terminal case: no non-trivial partitions
+    ReduceGenerators(~G);
+    Gs := [G];
+    g := Id(Sd);
+  else
+    // recursive case
+    // select a minimal partition (there is a choice here, maybe some choices are better than others?)
+    P := MinimalPartition(G);
+    n := #P;
+    Sn := SymmetricGroup(n);
+    ok, m := IsDivisibleBy(d, n);
+    assert ok;
+    Sm := SymmetricGroup(m);
+    assert forall{B : B in P | #B eq m};
+    // choose an ordering on each block; the choice of ordering determines how small the resulting wreath product will be; taking an arbitrary order is bad, because even if the factor should be cyclic, it could end up huge; on the other hand, we don't bother to find the smallest possible wreath product, which could be infeasible to compute; instead we order the first block arbitrarily, and then order the remaining blocks 
+    Pseq := [#Self() eq 0 select [x : x in B] else ([x^g : x in B1] where ok,g:=IsConjugate(G,B1[1],Rep(B)) where B1:=Self(1)) : B in P];
+    // find g1 such that G^g1 has the partition [[1..m],[m+1..2m],..,[..d]]
+    g1 := (Sd ! [Pseq[i][j] : j in [1..m], i in [1..n]])^-1;
+    G1 := G^g1;
+    P1seq := [[(i-1)*m+1..i*m] : i in [1..n]];
+    P1 := [SequenceToSet(B) : B in P1seq];
+    assert forall{B : B in P1 | IsBlock(G1, B)};
+    b := BlocksAction(G1, P1);
+    Gquo := G1 @ b;
+    Glift := WreathProduct(sub<Sm | Id(Sm)>, Gquo);
+    lift := map<Sn -> Sd | g :-> [j+(i^g-1)*m : j in [1..m], i in [1..n]]>;
+    topgens := [Sm|];
+    for i in [1..Ngens(G1)] do
+      gen := G1.i;
+      gen0 := gen * (gen @ b @ lift)^-1;
+      topgens cat:= [Sm| [(j+(i-1)*m)^gen0 - (i-1)*m : j in [1..m]] : i in [1..n]];
+    end for;
+    Gtop := sub<Sm | topgens>;
+    assert G1 subset WreathProduct(Gtop, Gquo);
+    // recurse on the quotient
+    Gquos, gquo := PGG_WreathProductEmbedding(Gquo);
+    glift := gquo @ lift;
+    ReduceGenerators(~Gtop);
+    Gs := [Gtop] cat Gquos;
+    g := g1 * glift;
+  end if;
+  assert G^g subset WreathProduct(Gs);
+  return Gs, g;
+end intrinsic;
+
+function is_partition_stabilizer(G, S)
+  return Stabilizer(G, [{x:x in o} : o in Orbits(S)]) eq S;
+end function;
+
+function is_partition_stabilizer_of_shape(G, S, V)
+  return ({*#o : o in Orbits(S)*} eq V) and is_partition_stabilizer(G, S);
+end function;
+
+function partitions_of_shape(G, V)
+  os := Orbits(G);
+  sh := {*#o:o in os*};
+  if sh eq V then
+    return [{{x:x in o} : o in os}];
+  elif is_subpartition_of(V, sh) then
+    return [P : P in partitions_of_shape(x`subgroup, V), x in MaximalSubgroups(G)];
+  else
+    return [];
+  end if;
+end function;
+
+function partitions_above_shape(G, V, d : avoid:=false)
+  os := Orbits(G);
+  sh := {*d*#o:o in os*};
+  if sh eq V then
+    return [{{x:x in o}:o in os}];
+  elif is_subpartition_of(V, sh) then
+    return (avoid cmpeq false or avoid ne os select [{{x:x in o}:o in os}] else []) cat [P : P in partitions_above_shape(x`subgroup, V, d : avoid:=os), x in MaximalSubgroups(G)];
+  else
+    return [];
+  end if;
+end function;
+
+function partitions_of_wr_above_shape(Gs, V, d)
+  assert d*&*[Degree(G):G in Gs] eq &+V;
+  if #Gs eq 1 then
+    return partitions_above_shape(Gs[1], V, d);
+  end if;
+  // partitions on the bottom of the wreath product
+  P0s := partitions_of_wr_above_shape(Gs[2..#Gs], V, d*Degree(Gs[1]));
+  // partitions on the top
+  P1s := [{{x:x in o}:o in Orbits(S)} : x in Subgroups(Gs[1]) | is_partition_stabilizer(Gs[1],S) where S:=x`subgroup];
+  Ps := [];
+  D := Degree(Gs[1]);
+  for P0 in P0s do
+    P0seq := [B : B in P0];
+    for x in CartesianPower(P1s, #P0seq) do
+      P := {{y+(x-1)*D : y in P1, x in P0} where P0:=P0seq[i] : P1 in x[i], i in [1..#P0seq]};
+      if is_subpartition_of(V, {*d*#o : o in P*}) then
+        Append(~Ps, P);
+      end if;
+    end for;
+  end for;
+  return Ps;
+end function;
+
+function partitions_of_wr_of_shape(Gs, V)
+  assert #Gs gt 0;
+  if #Gs eq 1 then
+    return partitions_of_shape(Gs[1], V);
+  end if;
+  return [P : P in partitions_of_wr_above_shape(Gs, V, 1) | {*#o : o in P*} eq V];
+end function;
+
+intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat_FactorDegrees, v) -> []
+  {"}
+  // We embed G into a wreath product, solve the problem there, and then intersect conjugates of those stabilizers with G
+  // TODO: this only uses one system of partitions for G to find a wreath product; the information from the other partitions could probably be used, though this would make the algorithm more complicated, since the partitions used now form a DAG not a single path; might be worth doing if this routine becomes the bottleneck
+  V := v`value;
+  d := Degree(G);
+  assert &+V eq d;
+  os := [{x:x in o} : o in Orbits(G)];
+  assert is_subpartition_of(V, {* #o : o in os *});
+  if V eq {* #o : o in os *} then
+    return [G];
+  end if;
+  // embed G into a direct product of transitive groups
+  Ds, gD := PGG_DirectProductEmbedding(G);
+  gDinv := gD^-1;
+  // find the ways in which sub-partitions of V correspond to the factors
+  Vss := PGG_all_partition_groupings(V, [Degree(D) : D in Ds]);
+  Sss := [];
+  // for each direct factor, find all its stabilizers for each relevant partition
+  for i in [1..#Ds] do
+    D := Ds[i];
+    Gs, g := PGG_WreathProductEmbedding(D);
+    ginv := g^-1;
+    Sss[i] := AssociativeArray();
+    for VD in {Vs[i] : Vs in Vss} do
+      P0s := [{{x^ginv : x in B} : B in P} : P in partitions_of_wr_of_shape(Gs, VD)];
+      assert forall{P0 : P0 in P0s | {*#o : o in P0*} eq VD};
+      W := WreathProduct(Gs)^ginv;
+      assert D subset W;
+      S0s := [Stabilizer(W, SetToSequence(P0)) : P0 in P0s];
+      assert forall{i : i in [1..#P0s] | P0s[i] eq {{x : x in o} : o in Orbits(S0s[i])}};
+      Ss := [];
+      for S0 in S0s do
+        for w in DoubleCosetRepresentatives(W, Normalizer(W,S0), D) do
+          S := (S0^w) meet D;
+          VS := {* #o : o in Orbits(S) *};
+          if VS eq VD then
+            for S2 in Ss do
+              if IsConjugate(D, S2, S) then
+                continue w;
+              end if;
+            end for;
+            Append(~Ss, S);
+          else
+            assert is_subpartition_of(VS, VD);
+          end if;
+        end for;
+      end for;
+      Sss[i][VD] := Ss;
+    end for;
+  end for;
+  // take combinations to find the overall factors
+  Ss := [];
+  W := DirectProduct(Ds)^gDinv;
+  assert G subset W;
+  for Vs in Vss do
+    for x in CartesianProduct(<Sss[i][Vs[i]] : i in [1..#Ds]>) do
+      S0 := DirectProduct([S : S in x])^gDinv;
+      assert S0 subset W;
+      for w in DoubleCosetRepresentatives(W, Normalizer(W,S0), G) do
+        S := (S0^w) meet G;
+        VS := {* #o : o in Orbits(S) *};
+        if VS eq V then
+          for S2 in Ss do
+            if IsConjugate(G, S2, S) then
+              continue w;
+            end if;
+          end for;
+          Append(~Ss, S);
+        else
+          assert is_subpartition_of(VS, V);
+        end if;
+      end for;
+    end for;
+  end for;
+  return Ss;
+end intrinsic;
+

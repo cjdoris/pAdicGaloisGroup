@@ -32,7 +32,7 @@ intrinsic RamificationGroup(alg :: PGGAlg_GaloisGroup, f :: RngUPolElt[FldPad], 
   end if;
 end intrinsic;
 
-function parse_algorithm(alg)
+function parse_algorithm(alg : prime:=false)
 
   specs := PGG_ArgSpec_ManyRecursive(procedure (set, get)
 
@@ -56,10 +56,13 @@ function parse_algorithm(alg)
         PGG_ArgSpec_Attr("ge", [<X>,<X>], func<args | PGG_Expression_BinOp('ge', args[1], args[2] : Infix)>),
         PGG_ArgSpec_Attr("gt", [<X>,<X>], func<args | PGG_Expression_BinOp('gt', args[1], args[2] : Infix)>),
         // multiplicative ordering
-        PGG_ArgSpec_Attr("mle", [<X>,<X>], func<args | PGG_Expression_BinOp(func<x,y | IsDivisibleBy(y,x)>, args[1], args[2] : Infix:=" mle ")>),
-        PGG_ArgSpec_Attr("mlt", [<X>,<X>], func<args | PGG_Expression_BinOp(func<x,y | x ne y and IsDivisibleBy(y,x)>, args[1], args[2] : Infix:=" mlt ")>),
-        PGG_ArgSpec_Attr("mge", [<X>,<X>], func<args | PGG_Expression_BinOp(func<x,y | IsDivisibleBy(x,y)>, args[1], args[2] : Infix:=" mge ")>),
-        PGG_ArgSpec_Attr("mgt", [<X>,<X>], func<args | PGG_Expression_BinOp(func<x,y | x ne y and IsDivisibleBy(x,y)>, args[1], args[2] : Infix:=" mgt ")>),
+        PGG_ArgSpec_Attr("mle", [<X>,<X>], func<args | PGG_Expression_BinOp(func<x,y | IsDivisibleBy(y,x)>, args[1], args[2] : Infix, Name:="mle")>),
+        PGG_ArgSpec_Attr("mlt", [<X>,<X>], func<args | PGG_Expression_BinOp(func<x,y | x ne y and IsDivisibleBy(y,x)>, args[1], args[2] : Infix, Name:="mlt")>),
+        PGG_ArgSpec_Attr("mge", [<X>,<X>], func<args | PGG_Expression_BinOp(func<x,y | IsDivisibleBy(x,y)>, args[1], args[2] : Infix, Name:="mge")>),
+        PGG_ArgSpec_Attr("mgt", [<X>,<X>], func<args | PGG_Expression_BinOp(func<x,y | x ne y and IsDivisibleBy(x,y)>, args[1], args[2] : Infix, Name:="mgt")>),
+        // valuation
+        PGG_ArgSpec_Attr("val", [<X>,<X>], func<args | PGG_Expression_BinOp(func<p,x | Valuation(x,p)>, args[1], args[2] : Format:="val_%o(%o)")>),
+        PGG_ArgSpec_Attr("val", [<X>], function(args) error if prime cmpeq false, "cannot use val when prime is not implied"; return PGG_Expression_UnOp(func<x | Valuation(x, prime)>, args[1] : Name:="val"); end function),
         // logical
         PGG_ArgSpec_AttrList("and", X, func<args | PGG_Expression_All([*x : x in args*])>),
         PGG_ArgSpec_AttrList("or", X, func<args | PGG_Expression_Any([*x : x in args*])>),
@@ -67,8 +70,8 @@ function parse_algorithm(alg)
         // arithmetic
         PGG_ArgSpec_Attr("-", [<X>], func<args | PGG_Expression_UnOp('-', args[1] : Prefix)>),
         PGG_ArgSpec_Attr("-", [<X>,<X>], func<args | PGG_Expression_BinOp('-', args[1], args[2] : Infix)>),
-        PGG_ArgSpec_AttrList("+", X, func<args | PGG_Expression_SeqOp('&+', [*x : x in args*] : Infix:=" + ")>),
-        PGG_ArgSpec_AttrList("*", X, func<args | PGG_Expression_SeqOp('&*', [*x : x in args*] : Infix:=" * ")>),
+        PGG_ArgSpec_AttrList("+", X, func<args | PGG_Expression_SeqOp('&+', [*x : x in args*] : Infix, Name:="+")>),
+        PGG_ArgSpec_AttrList("*", X, func<args | PGG_Expression_SeqOp('&*', [*x : x in args*] : Infix, Name:="*")>),
         // constants
         PGG_ArgSpec_Transform(PGG_ArgSpec_AttrInt(), func<x | PGG_Expression_Const(x)>)
       ]);
@@ -132,7 +135,9 @@ function parse_algorithm(alg)
           , Stat1:=args[2] cmpne false select args[2] else args[1]
           , Strict:=args[3]
         )>
-      )
+      ),
+      PGG_ArgSpec_Attr("Stab", [<get("STATISTIC"), "Stat", false>], func<args | PGGStat_Stab_Make(:Stat:=args[1])>),
+      PGG_ArgSpec_Attr("GaloisGroup", [<get("GALOISGROUP"),"Alg",false>], func<args | PGGStat_GaloisGroup_Make(:Alg:=args[1])>)
     ]));
 
     // SUBGROUP_TRANCHE := PGG_ArgSpec_Union([
@@ -345,7 +350,7 @@ intrinsic PGG_RamificationGroup(f :: RngUPolElt[FldPad], u :: FldRatElt : Alg:=f
   if Alg cmpeq false then
     Alg := "ARM";
   end if;
-  alg := parse_algorithm(Alg);
+  alg := parse_algorithm(Alg : prime:=Prime(BaseRing(f)));
   vprint PGG_GaloisGroup: "algorithm =", alg;
   PGG_GlobalTimer_Swap("GaloisGroup");
   if u lt 0 then

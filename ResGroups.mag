@@ -20,7 +20,7 @@ declare type PGGAlg_ResGroups_Sequence: PGGAlg_ResGroups;
 declare attributes PGGAlg_ResGroups_Sequence: seq;
 
 declare type PGGAlgState_ResGroups_Sequence: PGGAlgState_ResGroups;
-declare attributes PGGAlgState_ResGroups_Sequence: idx, cur_state;
+declare attributes PGGAlgState_ResGroups_Sequence: idx, cur_state, prev_state;
 
 declare type PGGAlg_ResGroups_Null: PGGAlg_ResGroups;
 
@@ -97,7 +97,7 @@ intrinsic PGGAlg_ResGroups_Maximal2_Make(:Statistic:=false, SubgroupChoice:=fals
   alg`subgroup_choice := SubgroupChoice cmpne false select SubgroupChoice else PGGAlg_ResChoice_Tranche_Make();
   alg`reset := Reset;
   alg`dedupe := Dedupe;
-  alg`descend := Descend cmpne false select Descend else "Magic";
+  alg`descend := Descend cmpne false select Descend else "Strict";
   return alg;
 end intrinsic;
 
@@ -238,12 +238,22 @@ end intrinsic;
 intrinsic RestartFromScratch(alg :: PGGAlg_ResGroups, s :: PGGAlgState_ResGroups) -> PGGAlgState_ResGroups
   {Same as ``Start(alg, s`overgroup_embedding)`` but with a warning that it's happening.}
   vprint PGG_GaloisGroup: "*** starting ResGroups algorithm from scratch:", alg;
-  return Start(alg, s`overgroup_embedding);  
+  return Start(alg, s`overgroup_embedding);
+end intrinsic;
+
+intrinsic AllowRestartFromScratch(a :: PGGAlg_ResGroups, b :: PGGAlg_ResGroups) -> BoolElt
+  {True if we allow restarting an instance of b from a.}
+  // by default, we allow it if the algorithms are of different type
+  return Type(a) ne Type(b);
 end intrinsic;
 
 intrinsic Restart(alg :: PGGAlg_ResGroups, s :: PGGAlgState_ResGroups) -> PGGAlgState_ResGroups
   {Like ``Start(alg, s`overgroup_embedding)`` but tries to preserve information.}
-  return RestartFromScratch(alg, s);
+  if AllowRestartFromScratch(alg, s`algorithm) then
+    return RestartFromScratch(alg, s);
+  else
+    error "not implemented: Restart:", Type(alg);
+  end if;
 end intrinsic;
 
 intrinsic Restart(alg :: PGGAlg_ResGroups_Null, s :: PGGAlgState_ResGroups) -> PGGAlgState_ResGroups_Null
@@ -274,19 +284,12 @@ intrinsic Restart(alg :: PGGAlg_ResGroups_All, s :: PGGAlgState_ResGroups_All) -
   return s;
 end intrinsic;
 
-intrinsic Restart(alg :: PGGAlg_ResGroups_RootsMaximal, s :: PGGAlgState_ResGroups_RootsMaximal) -> PGGAlgState_ResGroups_RootsMaximal
-  {"}
-  error "not implemented: Restart: PGGAlg_ResGroups_RootsMaximal";
-end intrinsic;
-
-intrinsic Restart(alg :: PGGAlg_ResGroups_Maximal, s :: PGGAlgState_ResGroups_Maximal) -> PGGAlgState_ResGroups_Maximal
-  {"}
-  error "not implemented: Restart: PGGAlg_ResGroups_Maximal";
-end intrinsic;
-
 intrinsic Restart(alg :: PGGAlg_ResGroups_Maximal2, s :: PGGAlgState_ResGroups_Maximal2) -> PGGAlgState_ResGroups_Maximal2
   {"}
-  error "not implemented: Restart: PGGAlg_ResGroups_Maximal2";
+  error if s`algorithm`dedupe ne alg`dedupe, "not implemented: Restart: PGGAlg_ResGroups_Maximal2: change dedupe";
+  s`algorithm := alg;
+  s`choice_state := Restart(alg`subgroup_choice, s`choice_state);
+  return s;
 end intrinsic;
 
 intrinsic Restart(alg :: PGGAlg_ResGroups_Sequence, s :: PGGAlgState_ResGroups_Sequence) -> PGGAlgState_ResGroups_Sequence
@@ -526,7 +529,8 @@ intrinsic NextState(s :: PGGAlgState_ResGroups_Sequence) -> PGGAlgState_ResGroup
   alg := AtEnd(s) select PGGAlg_ResGroups_Null_Make() else s`algorithm`seq[s`idx];
   if assigned s`cur_state then
     vprint PGG_GaloisGroup: "next groups algorithm =", alg;
-    s`cur_state := Restart(alg, s`cur_state);
+    s`prev_state := s`cur_state;
+    s`cur_state := Restart(alg, s`prev_state);
   else
     vprint PGG_GaloisGroup: "initial groups algorithm =", alg;
     s`cur_state := Start(alg, s`overgroup_embedding);
@@ -734,6 +738,7 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal2, resolvent :: Rng
   rstat := ResolventStat(s`algorithm`statistic, resolvent);
   vprint PGG_GaloisGroup: "resolvent statistic =", rstat;
   h := CosetAction(Group(s`resolvent_overgroup), subgroup);
+  vprint PGG_GaloisGroup: "pool resolvents =", [<Q, GroupStat(n,h)> where Q:=Rep(n`class) @ s`overgroup_embedding @ h : n in s`pool];
   // eliminate any children not containing the galois group
   PGG_GlobalTimer_Swap("filter children");
   ok_children := false;
@@ -759,6 +764,16 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal2, resolvent :: Rng
   if #ns gt 0 then
     case s`algorithm`descend:
     when "Strict":
+      // for each P in the pool, we find it the maximal subgroups with the observed statistic (called "stabilizers")
+      emb := s`overgroup_embedding;
+      PGG_GlobalTimer_Swap("stabilizers");
+      Hs := &cat[[(S @@ h @@ emb) meet P : S in Stabilizers(P @ emb @ h, rstat)] where P:=Rep(n`class) : n in ns];
+      PGG_GlobalTimer_Swap("valid");
+      Hs := [H : H in Hs | GalGrpIsConsistentWithSubgroup(Domain(emb), H)];
+      PGG_GlobalTimer_Swap("nodes");
+      ms := {m : H in Hs | m`maybe_subgroup where m:=Node(s`graph, H)};
+    when "StrictOld":
+      // this version takes stabilizers once in Codomain(h), and then needs to intersect conjugates with groups in the pool
       emb := s`overgroup_embedding;
       W1 := Group(Domain(emb));
       W2 := Group(Codomain(emb));

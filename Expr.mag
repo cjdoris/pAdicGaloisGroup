@@ -5,13 +5,13 @@ declare type PGGExpr_FreeVar: PGGExpr;
 declare attributes PGGExpr_FreeVar: name;
 
 declare type PGGExpr_Unop: PGGExpr;
-declare attributes PGGExpr_Unop: op, arg1, prefix;
+declare attributes PGGExpr_Unop: op, arg1, name, prefix, format;
 
 declare type PGGExpr_Binop: PGGExpr;
-declare attributes PGGExpr_Binop: op, arg1, arg2, infix;
+declare attributes PGGExpr_Binop: op, arg1, arg2, name, infix, format;
 
 declare type PGGExpr_Seqop: PGGExpr;
-declare attributes PGGExpr_Seqop: op, args, infix;
+declare attributes PGGExpr_Seqop: op, args, name, infix;
 
 declare type PGGExpr_Const: PGGExpr;
 declare attributes PGGExpr_Const: val;
@@ -31,33 +31,37 @@ INTRNAME := func<f | Type(f) eq Intrinsic select GetIntrinsicName(f) else "<unkn
 
 intrinsic Print(x :: PGGExpr_Unop)
   {"}
-  if assigned x`prefix then
-    printf "(%o%o)", x`prefix, x`arg1;
+  if assigned x`format then
+    printf x`format, x`arg1;
+  elif x`prefix then
+    printf "(%o %o)", x`name, x`arg1;
   else
-    printf "%o(%o)", INTRNAME(x`op), x`arg1;
+    printf "%o(%o)", x`name, x`arg1;
   end if;
 end intrinsic;
 
 
 intrinsic Print(x :: PGGExpr_Binop)
   {"}
-  if assigned x`infix then
-    printf "(%o%o%o)", x`arg1, x`infix, x`arg2;
+  if assigned x`format then
+    printf x`format, x`arg1, x`arg2;
+  elif x`infix then
+    printf "(%o %o %o)", x`arg1, x`name, x`arg2;
   else
-    printf "%o(%o, %o)", INTRNAME(x`op), x`arg1, x`arg2;
+    printf "%o(%o, %o)", x`name, x`arg1, x`arg2;
   end if;
 end intrinsic;
 
 intrinsic Print(x :: PGGExpr_Seqop)
   {"}
-  if assigned x`infix and #x`args ge 1 then
+  if x`infix and #x`args ge 1 then
     if #x`args eq 1 then
       Print(x`args[1]);
     else
-      printf "(%o)", Join([Sprint(a) : a in x`args], x`infix);
+      printf "(%o)", Join([Sprint(a) : a in x`args], " " cat x`name cat " ");
     end if;
   else
-    printf "%o([%o])", INTRNAME(x`op), Join([Sprint(a) : a in x`args], ", ");
+    printf "%o([%o])", x`name, Join([Sprint(a) : a in x`args], ", ");
   end if;
 end intrinsic;
 
@@ -105,43 +109,42 @@ intrinsic PGG_Expression_FreeVariable(name :: MonStgElt) -> PGGExpr_FreeVar
   return x;
 end intrinsic;
 
-intrinsic PGG_Expression_UnOp(op, arg1 :: PGGExpr : Prefix:=false) -> PGGExpr_Unop
+intrinsic PGG_Expression_UnOp(op, arg1 :: PGGExpr : Prefix:=false, Name:=false, Format:=false) -> PGGExpr_Unop
   {The unary operation op (a function or intrinsic) with argument arg1.}
   x := New(PGGExpr_Unop);
   x`op := op;
   x`arg1 := arg1;
-  if Prefix cmpeq true then
-    x`prefix := INTRNAME(op) cat " ";
-  elif Prefix cmpne false then
+  if Format cmpeq false then
+    x`name := Name cmpeq false select INTRNAME(op) else Name;
     x`prefix := Prefix;
+  else
+    x`format := Format;
   end if;
   return x;
 end intrinsic;
 
-intrinsic PGG_Expression_BinOp(op, arg1 :: PGGExpr, arg2 :: PGGExpr : Infix:=false) -> PGGExpr_Binop
+intrinsic PGG_Expression_BinOp(op, arg1 :: PGGExpr, arg2 :: PGGExpr : Infix:=false, Name:=false, Format:=false) -> PGGExpr_Binop
   {The binary operation op (a function or intrinsic) with arguments arg1 and arg2.}
   x := New(PGGExpr_Binop);
   x`op := op;
   x`arg1 := arg1;
   x`arg2 := arg2;
-  if Infix cmpeq true then
-    x`infix := " " cat INTRNAME(op) cat " ";
-  elif Infix cmpne false then
+  if Format cmpeq false then
     x`infix := Infix;
+    x`name := Name cmpeq false select INTRNAME(op) else Name;
+  else
+    x`format := Format;
   end if;
   return x;
 end intrinsic;
 
-intrinsic PGG_Expression_SeqOp(op, args : Infix:=false) -> PGGExpr_Seqop
+intrinsic PGG_Expression_SeqOp(op, args : Infix:=false, Name:=false) -> PGGExpr_Seqop
   {The operation op with one argument, the sequence args.}
   x := New(PGGExpr_Seqop);
   x`op := op;
   x`args := args;
-  if Infix cmpeq true then
-    x`infix := " " cat INTRNAME(op) cat " ";
-  elif Infix cmpne false then
-    x`infix := Infix;
-  end if;
+  x`infix := Infix;
+  x`name := Name cmpeq false select INTRNAME(op) else Name;
   return x;
 end intrinsic;
 

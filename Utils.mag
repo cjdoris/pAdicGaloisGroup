@@ -528,6 +528,10 @@ function change_apr(x, apr)
   end if;
 end function;
 
+function trim_apr(x, trim)
+  return change_apr(x, AbsolutePrecision(x) - trim);
+end function;
+
 function maximize_apr(x)
   if IsWeaklyZero(x) then
     return Parent(x) ! 0;
@@ -572,12 +576,10 @@ DEFAULT_TSCHIRNHAUS_TRANSFORMATIONS := [PolynomialRing(Z) | [0,1], [0,0,1], [0,-
 function tschirnhaus_transformation(ntries, degree)
   assert ntries gt 0;
   if ntries le #DEFAULT_TSCHIRNHAUS_TRANSFORMATIONS then
-    t := DEFAULT_TSCHIRNHAUS_TRANSFORMATIONS[ntries];
-    if Degree(t) le degree then
-      return t;
-    end if;
+    return DEFAULT_TSCHIRNHAUS_TRANSFORMATIONS[ntries];
+  else
+    return PolynomialRing(Z) ! [Random(1,ntries) : i in [1..ntries-#DEFAULT_TSCHIRNHAUS_TRANSFORMATIONS+2]];
   end if;
-  return PolynomialRing(Z) ! [Random(1,ntries) : i in [1..degree]];
 end function;
 
 function dflt(what, d)
@@ -603,6 +605,7 @@ function _is_subpartition_of(P, Q)
   p := Max(P);
   P2 := Exclude(P, p);
   // pick an element of Q it could come from
+  Rs := [];
   for q in MultisetToSet(Q) do
     if p le q then
       Q2 := Exclude(Q, q);
@@ -618,6 +621,32 @@ function _is_subpartition_of(P, Q)
   return false;
 end function;
 
+// sequence of different ks such that k = sum_i ks[i] ms[i]
+function partitions_of_shape(k, ms)
+  assert k ge 0;
+  if k eq 0 then
+    return [[0 : m in ms]];
+  elif #ms eq 0 then
+    return [];
+  elif #ms eq 1 then
+    ok, k1 := IsDivisibleBy(k, ms[1]);
+    if ok then
+      return [[k1]];
+    else
+      return [];
+    end if;
+  else
+    m1 := ms[1];
+    ret := [];
+    for k1 in [0..k div m1] do
+      k2 := k - k1 * m1;
+      assert k2 ge 0;
+      ret cat:= [[k1] cat p : p in partitions_of_shape(k2, ms[2..#ms])];
+    end for;
+    return ret;
+  end if;
+end function;
+
 // given two multisets of positive integers, determine if P may be obtained by partitioning each element of Q
 function is_subpartition_of(P, Q)
   assert Type(P) eq SetMulti;
@@ -628,6 +657,121 @@ function is_subpartition_of(P, Q)
   assert forall{x : x in MultisetToSet(Q) | x gt 0};
   assert ((#P eq 0) and (#Q eq 0)) or ((#P gt 0) and (#Q gt 0) and (&+P eq &+Q));
   return _is_subpartition_of(P, Q);
+end function;
+
+function _all_partition_groupings(P, Q)
+  ptodo := [<Q, [{**} : q in Q]>];
+  for p in MultisetToSet(P) do
+    n := Multiplicity(P, p);
+    ptodo_new := [];
+    for x in ptodo do
+      Qrem, Ps := Explode(x);
+      todo := [<n, []>];
+      for q in Qrem do
+        todo := [<x[1]-k, Append(x[2],k)> : k in [0..Min(x[1], q div p)], x in todo];
+      end for;
+      nss := [x[2] : x in todo | x[1] eq 0];
+      for ns in nss do
+        Append(~ptodo_new, <[Qrem[i]-ns[i]*p : i in [1..#Q]], [Ps[i] join {*p^^ns[i]*} : i in [1..#Q]]>);
+      end for;
+    end for;
+    ptodo := ptodo_new;
+  end for;
+  return [x[2] : x in ptodo | x[1] eq [0 : q in Q]];
+end function;
+
+// given a multiset P of integers, and a sequence Q of integers, returns all sequences Ps of length #Q of multisets of integers so that &join Ps eq P and &+Ps[i] eq Qs[i]; that is, assigns the elements of P to bins of size Q
+function all_partition_groupings(P, Q)
+  assert Type(P) eq SetMulti;
+  assert Type(Q) eq SeqEnum;
+  assert Universe(P) eq Z;
+  assert Universe(Q) eq Z;
+  assert forall{x : x in MultisetToSet(P) | x gt 0};
+  assert forall{x : x in Q | x gt 0};
+  assert ((#P eq 0) and (#Q eq 0)) or ((#P gt 0) and (#Q gt 0) and (&+P eq &+Q));
+  return _all_partition_groupings(P, Q);
+end function;
+
+intrinsic PGG_all_partition_groupings(P :: {* RngIntElt *}, Q :: [RngIntElt]) -> []
+  {All sequences Ps of length #Q of multisets of integers such that &join Ps eq P and &+Ps[i] eq Qs[i].}
+  return all_partition_groupings(P, Q);
+end intrinsic;
+
+function extend_binning(binning, items : limit:=Infinity(), is_valid:=func<i,b | true>, is_semivalid:=func<i,b | true>)
+  // assert #binning eq #bins;
+  // assert forall{i : i in [1..#bins] | #binning[i] eq bins[i]};
+  assert limit ge 0;
+  if limit eq 0 then
+    return [];
+  end if;
+  // base case: no items to bin
+  n := #items;
+  if n eq 0 then
+    if forall{i : b in binning[i], i in [1..#binning] | is_semivalid(i,b) and is_valid(i,b)} then
+      return [binning];
+    else
+      return [];
+    end if;
+  end if;
+  // base case: multiplicity zero
+  if items[n] eq 0 then
+    return extend_binning(binning, items[1..n-1] : limit:=limit, is_valid:=is_valid, is_semivalid:=is_semivalid);
+  end if;
+  // main case: add an item into a bin
+  ret := [];
+  items[n] -:= 1;
+  for i in [1..#binning] do
+    b := binning[i];
+    // group the bin by excluding n, for each group record the highest multiplicity m, and whether m-1 was seen
+    A := AssociativeArray();
+    for x in MultisetToSet(b) do
+      m := Multiplicity(x,n);
+      x0 := Exclude(x, n^^m);
+      assert n notin x0;
+      if IsDefined(A, x0) then
+        if m eq A[x0][1]-1 then
+          A[x0][2] := true;
+        elif m eq A[x0][1]+1 then
+          A[x0] := <m, true>;
+        elif m gt A[x0][1] then
+          A[x0] := <m, false>;
+        end if;
+      else
+        A[x0] := <m, false>;
+      end if;
+    end for;
+    // add an item into the largest or largest but one bin
+    for x0 in Keys(A) do
+      for m in [A[x0][1]-(A[x0][2] select 1 else 0) .. A[x0][1]] do
+        x := Include(x0, n^^m);
+        assert x in b;
+        x2 := Include(x0, n^^(m+1));
+        b2 := Include(Exclude(b,x),x2);
+        if is_semivalid(i,x2) then
+          binning2 := binning;
+          binning2[i] := b2;
+          ret cat:= extend_binning(binning2, items : limit:=limit-#ret, is_valid:=is_valid, is_semivalid:=is_semivalid);
+          if #ret ge limit then
+            return ret[1..limit];
+          end if;
+        end if;
+      end for;
+    end for;
+  end for;
+  return ret;
+end function;
+
+function all_binnings(items, bins : limit:=Infinity(), is_valid:=func<i,b | true>, is_semivalid:=func<i,b | true>)
+  return extend_binning([PowerMultiset(PowerMultiset(Integers()))| {*{**}^^bins[i]*} : i in [1..#bins]], items : limit:=limit, is_valid:=is_valid, is_semivalid:=is_semivalid);
+end function;
+
+intrinsic PGG_all_binnings(items :: [RngIntElt], bins :: [RngIntElt] : limit:=Infinity(), is_valid:=func<i,b | true>, is_semivalid:=func<i,b | true>) -> []
+  {If items is a sequence of multiplicities of different items, and bins is a sequence of multiplicities of different bins, returns a sequence of possible binnings, where a binning is a sequence (of distinct bins) of multisets (of bins) of multisets (of items) of valid binnings of the items. A multiset b of items into the ith bin is valid if is_valid(i,b) is true. If b is a partial binning extendable to a valid binning, then is_semivalid(i,b) must be true; this is used to terminate branches of the algorithm early.}
+  return all_binnings(items, bins : limit:=limit, is_valid:=is_valid, is_semivalid:=is_semivalid);
+end intrinsic;
+
+function mset_apply(xs, f)
+  return {*f(x)^^Multiplicity(xs,x) : x in MultisetToSet(xs)*};
 end function;
 
 function sprint_with_parens(x : Level:="Default", Chars:=" \t\n")
@@ -649,6 +793,8 @@ function fldpad_has_isomorphism(L1, L2, K : MaximizeAPr:=true)
   // case degrees unequal
   if Degree(L1, K) ne Degree(L2, K) then
     return false, _;
+  elif RamificationDegree(L1, K) ne RamificationDegree(L2, K) then
+    return false, _;
   end if;
   d := Degree(L1, K);
 
@@ -664,14 +810,16 @@ function fldpad_has_isomorphism(L1, L2, K : MaximizeAPr:=true)
     assert BaseField(L2) eq K;
     f1 := DefiningPolynomial(L1);
     f2 := DefiningPolynomial(L2);
+    FUDGE := (e eq 1 select 0 else 2*e) where e:=AbsoluteRamificationDegree(L1);
     ok, root1 := has_root(ChangeRing(f1, L2));
     if not ok then
+      error if has_root(ChangeRing(f2, L1)), "precision error";
       return false, _;
     end if;
     roots2 := roots(ChangeRing(f2, L1));
-    assert #roots2 gt 0;
-    idxs := [i : i in [1..#roots2] | IsWeaklyEqual(L1.1, &+[L1| cs[i] * r^(i-1) : i in [1..#cs]] where cs:=fldpad_eltseq(root1)) where r:=roots2[i]];
-    assert #idxs eq 1;
+    error if #roots2 eq 0, "precision error";
+    idxs := [i : i in [1..#roots2] | IsWeaklyEqual(trim_apr(L1.1,FUDGE), trim_apr(&+[L1| cs[i] * r^(i-1) : i in [1..#cs]],FUDGE) where cs:=fldpad_eltseq(root1)) where r:=roots2[i]];
+    error if #idxs ne 1, "precision error";
     root2 := roots2[idxs[1]];
     if MaximizeAPr then
       root1 := maximize_apr(root1);

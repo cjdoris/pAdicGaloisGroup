@@ -1,4 +1,4 @@
-import "Utils.mag": Z, pop_start, xdiv, not_implemented, sprint_with_parens;
+import "Utils.mag": Z, pop_start, xdiv, not_implemented, sprint_with_parens, partitions_of_shape;
 
 declare type PGGGrpPerm;
 declare attributes PGGGrpPerm: group, degree, orbits_of_subgroups;
@@ -258,32 +258,6 @@ function factorizations_of_length(N, n : Max:=N)
   else
     assert n gt 1;
     return &cat[PowerSequence(PowerSequence(Z))| [Append(facs, d) : facs in factorizations_of_length(xdiv(N, d), n-1 : Max:=d)] : d in Divisors(N) | d le Max];
-  end if;
-end function;
-
-// sequence of different ks such that k = sum_i ks[i] ms[i]
-function partitions_of_shape(k, ms)
-  assert k ge 0;
-  if k eq 0 then
-    return [[0 : m in ms]];
-  elif #ms eq 0 then
-    return [];
-  elif #ms eq 1 then
-    ok, k1 := IsDivisibleBy(k, ms[1]);
-    if ok then
-      return [[k1]];
-    else
-      return [];
-    end if;
-  else
-    m1 := ms[1];
-    ret := [];
-    for k1 in [0..k div m1] do
-      k2 := k - k1 * m1;
-      assert k2 ge 0;
-      ret cat:= [[k1] cat p : p in partitions_of_shape(k2, ms[2..#ms])];
-    end for;
-    return ret;
   end if;
 end function;
 
