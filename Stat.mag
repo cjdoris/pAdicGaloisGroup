@@ -257,6 +257,11 @@ intrinsic Print(S :: PGGStat_GaloisGroup)
   end if;
 end intrinsic;
 
+intrinsic Print(S :: PGGStat_Order)
+  {"}
+  printf "galois group order";
+end intrinsic;
+
 intrinsic ConjugacyClasses(S :: PGGStat_AutGroup, d :: RngIntElt) -> PGGSetSubgrpcls
   {The conjugacy classes of Sym(d).}
   if not assigned S`conjugacy_classes then

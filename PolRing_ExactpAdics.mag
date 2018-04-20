@@ -1,0 +1,89 @@
+import "PolRing.mag": CERT;
+
+declare type PGGRngPolExact[PGGPolExact]: PGGRngPol;
+declare attributes PGGRngPolExact: actual, strategy;
+declare type PGGPolExact: PGGPol;
+declare attributes PGGPolExact: actual, strategy;
+
+intrinsic _PolynomialRing(F :: PGGFldExact) -> PGGRngPolExact
+  {The univariate polynomial ring over F.}
+  R := New(PGGRngPolExact);
+  R`actual := PolynomialRing(Actual(F));
+  R`base_ring := F;
+  return R;
+end intrinsic;
+
+intrinsic IsCoercible(R :: PGGRngPolExact, X) -> BoolElt, .
+  {True if X is coercible to an element of R.}
+  ok, Y := IsCoercible(Actual(R), X);
+  if ok then
+    f := New(PGGPolExact);
+    f`actual := Y;
+    f`parent := R;
+    return true, f;
+  elif assigned Y then
+    return false, Y;
+  else
+    return false, "not coercible to the actual ring";
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(R :: PGGRngPolExact, X :: PGGPolExact) -> BoolElt, .
+  {"}
+  if Parent(X) eq R then
+    return true, X;
+  else
+    return IsCoercible(R, Actual(X));
+  end if;
+end intrinsic;
+
+intrinsic 'eq'(R :: PGGRngPolExact, S :: PGGRngPolExact) -> BoolElt, .
+  {Equality.}
+  return Actual(R) eq Actual(S);
+end intrinsic;
+
+intrinsic Print(R :: PGGRngPolExact, lvl :: MonStgElt)
+  {Print.}
+  Print(Actual(R), lvl);
+end intrinsic;
+
+intrinsic Print(f :: PGGPolExact, lvl :: MonStgElt)
+  {"}
+  Print(Actual(f), lvl);
+end intrinsic;
+
+intrinsic Actual(R :: PGGRngPolExact) -> RngUPol_FldPadExact
+  {The actual ring.}
+  return R`actual;
+end intrinsic;
+
+intrinsic Actual(f :: PGGPolExact) -> RngUPolElt_FldPadExact
+  {The actual polynomial.}
+  return f`actual;
+end intrinsic;
+
+intrinsic PrecisionStrategy(R :: PGGRngPolExact) -> .
+  {The precision strategy to use with R.}
+  return assigned R`strategy select R`strategy else PrecisionStrategy(BaseRing(R));
+end intrinsic;
+
+intrinsic PrecisionStrategy(f :: PGGPolExact) -> .
+  {The precision strategy to use with f.}
+  return assigned f`strategy select f`strategy else PrecisionStrategy(Parent(f));
+end intrinsic;
+
+intrinsic _Factorization(f :: PGGPolExact : Extensions:=false) -> [], []
+  {Factorization.}
+  facs0, _, certs0 := Factorization(Actual(f) : Strategy:=PrecisionStrategy(f), Extensions:=Extensions, Certificates);
+  assert forall{x : x in facs0 | x[2] eq 1};
+  facs := [x[1] : x in facs0];
+  certs := [];
+  for c0 in certs0 do
+    c := rec<CERT | F:=c0`F, E:=c0`E, Rho:=Parent(f)!c0`Rho, Pi:=Parent(f)!c0`Pi>;
+    if Extensions then
+      c`Extension := PGGFldExact_Make(c0`Extension, BaseRing(f));
+    end if;
+    Append(~certs, c);
+  end for;
+  return facs, certs;
+end intrinsic;

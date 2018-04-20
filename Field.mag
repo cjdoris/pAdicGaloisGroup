@@ -9,10 +9,10 @@ declare attributes PGGFldStd: actual, base_field, defining_polynomial;
 declare type PGGFldStdElt: PGGFldElt;
 declare attributes PGGFldStdElt: actual;
 
-declare type PGGFldGrpUniv;
-declare attributes PGGFldGrpUniv: group, prime, ramification_groups;
+declare type PGGStrFldGrp[PGGFldGrp];
+declare attributes PGGStrFldGrp: group, prime, ramification_groups, top_field, base_field, ramification_fields, lower_breaks;
 declare type PGGFldGrp: PGGFld;
-declare attributes PGGFldGrp: universe, group;
+declare attributes PGGFldGrp: universe, group, degree, normal_closure, defining_polynomial, ramification_fields, ramification_degree, inertia_degree;
 
 intrinsic PGGFldStd_Make(K :: FldPad) -> PGGFldStd
   {The p-adic field K.}
@@ -25,6 +25,29 @@ intrinsic PGGFldStd_Make(p :: RngIntElt) -> PGGFldStd
   {The p-adic field.}
   require p gt 0 and IsPrime(p): "p must be prime";
   return PGGFldStd_Make(pAdicField(p));
+end intrinsic;
+
+intrinsic PGGFldStd_Make(K :: FldPad, F :: PGGFldStd) -> PGGFldStd
+  {The p-adic field K as an extension of F.}
+  t := [];
+  L := K;
+  while true do
+    if L eq Actual(F) then
+      break;
+    elif IsPrimeField(L) then
+      error "K is not an extension of F";
+    else
+      Append(~t, L);
+      L := BaseField(L);
+    end if;
+  end while;
+  E := F;
+  for L in Reverse(t) do
+    E0 := E;
+    E := PGGFldStd_Make(L);
+    E`base_field := E0;
+  end for;
+  return E;
 end intrinsic;
 
 intrinsic Print(F :: PGGFldStd, lvl :: MonStgElt)
@@ -65,6 +88,12 @@ end intrinsic;
 intrinsic Prime(F :: PGGFldStd) -> RngIntElt
   {The p in p-adic.}
   return Prime(Actual(F));
+end intrinsic;
+
+intrinsic Prime(F :: PGGFldGrp) -> RngIntElt
+  {"}
+  require assigned Universe(F)`prime: "prime not known";
+  return Universe(F)`prime;
 end intrinsic;
 
 intrinsic Degree(F :: PGGFldStd) -> RngIntElt
@@ -217,9 +246,16 @@ intrinsic AutomorphismGroup(E :: PGGFldStd, F :: PGGFldStd) -> GrpPerm
   return AutomorphismGroup(Actual(E), Actual(F));
 end intrinsic;
 
+intrinsic AutomorphismGroup(E :: PGGFldGrp, F :: PGGFldGrp) -> GrpPerm
+  {"}
+  require IsExtensionOf(E, F): "E must be an extension of F";
+  return CosetImage(Normalizer(F`group, E`group), E`group);
+end intrinsic;
+
 intrinsic RamificationTower(E :: PGGFldStd, F :: PGGFldStd) -> []
   {The ramification tower of E/F.}
-  return [PGGFldStd_Make(K) : K in ramification_tower(Actual(E), Actual(F))];
+  t := ramification_tower(Actual(E), Actual(F));
+  return [i eq 1 select F else PGGFldStd_Make(t[i], Self(i-1)) : i in [1..#t]];
 end intrinsic;
 
 intrinsic IsWeaklyZero(x :: PGGFldStdElt) -> BoolElt
@@ -393,7 +429,9 @@ end intrinsic;
 intrinsic ExtConstructor(F :: PGGFldStd, t :: Tup) -> PGGFldStd
   {An extension of F defined by t.}
   if #t eq 1 and Type(t[1]) eq PGGPolStd then
-    return PGGFldStd_Make(ext<Actual(F) | Actual(t[1])>);
+    return PGGFldStd_Make(ext<Actual(F) | Actual(t[1])>, F);
+  elif #t eq 1 and Type(t[1]) eq FldPad then
+    PGGFldStd_Make(t[1], F);
   else
     error "bad constructor";
   end if;
@@ -445,7 +483,13 @@ intrinsic ExistsCoveringStructure(E :: PGGFldStd, F :: PGGFldStd) -> BoolElt, .
   {True if there is a structure containing both E and F.}
   ok, A := ExistsCoveringStructure(Actual(E), Actual(F));
   if ok then
-    return true, PGGFldStd_Make(A);
+    if A eq Actual(E) then
+      return true, E;
+    elif A eq Actual(F) then
+      return true, F;
+    else
+      assert false;
+    end if;
   else
     return false, _;
   end if;
@@ -455,4 +499,328 @@ intrinsic '.'(F :: PGGFldStd, n :: RngIntElt) -> BoolElt, .
   {The nth generator of F.}
   require n eq 1: "n must be 1";
   return F![0,1];
+end intrinsic;
+
+intrinsic PGGFldGrp_Make(G :: Grp : Prime:=false, RamificationGroups:=false, LowerBreaks:=false) -> PGGFldGrp
+  {"}
+  U := New(PGGStrFldGrp);
+  U`group := G;
+  if Prime cmpne false then
+    p := Prime;
+    require Type(p) eq RngIntElt and p gt 0 and IsPrime(p): "Prime must be a prime integer";
+    U`prime := p;
+  end if;
+  if RamificationGroups cmpne false then
+    R := RamificationGroups;
+    require Type(R) eq SeqEnum and #R ge 1 and forall{N : N in R | Type(N) eq Type(G) and N subset G and IsNormal(G,N)} and R[1] eq G and R[#R] eq sub<G|Id(G)> and forall{i : i in [2..#R] | R[i] ne R[i-1] and R[i] subset R[i-1]}: "RamificationGroups must be a sequence of descending normal subgroups of G, starting with G and ending with the trivial group";
+    U`ramification_groups := R;
+  end if;
+  if LowerBreaks cmpne false then
+    vs := LowerBreaks;
+    require Type(vs) eq SeqEnum and #vs ge 1 and Universe(vs) cmpeq Integers() and vs[1] eq -1 and forall{i : i in [2..#vs] | vs[i-1] lt vs[i]}: "LowerBreaks must be an increasing sequence of integers starting at -1";
+    if assigned U`ramification_groups then
+      require #vs eq #U`ramification_groups: "LowerBreaks must have the same length as RamificationGroups";
+    end if;
+    U`lower_breaks := vs;
+  end if;
+  U`top_field := Field(U, sub<U`group | Id(U`group)>);
+  U`base_field := Field(U, U`group);
+  return U`top_field;
+end intrinsic;
+
+intrinsic Parent(F :: PGGFldGrp) -> PGGStrFldGrp
+  {The universe of F.}
+  return F`universe;
+end intrinsic;
+
+intrinsic Universe(F :: PGGFldGrp) -> PGGStrFldGrp
+  {"}
+  return Parent(F);
+end intrinsic;
+
+intrinsic Print(U :: PGGStrFldGrp)
+  {Print.}
+  printf "Set of subfields of a field with Galois group %o", U`group;
+end intrinsic;
+
+intrinsic Field(U :: PGGStrFldGrp, G :: Grp) -> PGGFldGrp
+  {The fixed field of G.}
+  require G subset U`group: "G must be a subgroup of the universe group";
+  F := New(PGGFldGrp);
+  F`group := G;
+  F`universe := U;
+  return F;
+end intrinsic;
+
+intrinsic BaseField(F :: PGGFldGrp) -> PGGFldGrp
+  {The base field of F.}
+  return Universe(F)`base_field;
+end intrinsic;
+
+intrinsic UniverseField(F :: PGGFldGrp) -> PGGFldGrp
+  {The universe field of F, inside which everything lives.}
+  return Universe(F)`top_field;
+end intrinsic;
+
+intrinsic UniverseGroup(F :: PGGFldGrp) -> Grp
+  {The universe group, the Galois group of the universe field.}
+  return Universe(F)`group;
+end intrinsic;
+
+intrinsic Subfield(F :: PGGFldGrp, G :: Grp) -> PGGFldGrp
+  {The subfield of F generated by the group G.}
+  require F`group subset G: "G must contain the group defining F";
+  return Field(Universe(F), G);
+end intrinsic;
+
+intrinsic Extension(F :: PGGFldGrp, G :: Grp) -> PGGFldGrp
+  {The extension of F generated by G.}
+  require G subset F`group: "The group defining F must contain G";
+  return Field(Universe(F), G);
+end intrinsic;
+
+intrinsic Print(F :: PGGFldGrp, lvl :: MonStgElt)
+  {Print.}
+  case lvl:
+  when "Magma":
+    if F eq UniverseField(F) then
+      printf "PGGFldGrp_Make(%m", F`group;
+      params := [];
+      if assigned F`prime then
+        Append(~params, Sprintf("Prime:=%m", F`prime));
+      end if;
+      if assigned F`ramification_groups then
+        Append(~params, Sprintf("RamificationGroups:=%m", F`ramification_groups));
+      end if;
+      if #params ne 0 then
+        printf " : %o", Join(params, ", ");
+      end if;
+      printf ")";
+    else
+      printf "Subfield(%m, %m)", UniverseField(F), F`group;
+    end if;
+  else
+    printf "Field of degree %o", Degree(F);
+    if F eq UniverseField(F) then
+      printf " (the universe)";
+    end if;
+  end case;
+end intrinsic;
+
+intrinsic 'eq'(U :: PGGStrFldGrp, V :: PGGStrFldGrp) -> BoolElt
+  {Equality.}
+  return IsIdentical(U, V);
+end intrinsic;
+
+intrinsic 'eq'(E :: PGGFldGrp, F :: PGGFldGrp) -> BoolElt
+  {Equality.}
+  require Universe(E) eq Universe(F): "different universes";
+  return E`group eq F`group;
+end intrinsic;
+
+intrinsic Degree(F :: PGGFldGrp) -> RngIntElt
+  {Degree of F over its base field.}
+  if not assigned F`degree then
+    F`degree := Degree(F, BaseField(F));
+  end if;
+  return F`degree;
+end intrinsic;
+
+intrinsic Degree(E :: PGGFldGrp, F :: PGGFldGrp) -> RngIntElt
+  {Degree of E/F.}
+  require IsExtensionOf(E, F): "E must be an extension of F";
+  return Index(F`group, E`group);
+end intrinsic;
+
+intrinsic IsExtensionOf(E :: PGGFldGrp, F :: PGGFldGrp) -> BoolElt
+  {True if E is an extension of F.}
+  require Universe(E) eq Universe(F): "different universes";
+  return E`group subset F`group;
+end intrinsic;
+
+intrinsic 'subset'(F :: PGGFldGrp, E :: PGGFldGrp) -> BoolElt
+  {True if F is a subfield of E.}
+  return IsExtensionOf(E, F);
+end intrinsic;
+
+intrinsic 'join'(F :: PGGFldGrp, E :: PGGFldGrp) -> PGGFldGrp
+  {Compositum.}
+  require Universe(E) eq Universe(F): "different universes";
+  return Field(Universe(F), E`group meet F`group);
+end intrinsic;
+
+intrinsic 'meet'(F :: PGGFldGrp, E :: PGGFldGrp) -> PGGFldGrp
+  {Intersection.}
+  require Universe(E) eq Universe(F): "different universes";
+  return Field(Universe(F), sub<UniverseGroup(F) | E`group, F`group>);
+end intrinsic;
+
+intrinsic NormalClosure(E :: PGGFldGrp, F :: PGGFldGrp) -> PGGFldGrp
+  {Normal closure of E/F.}
+  require IsExtensionOf(E, F): "E must be an extension of F";
+  return Field(Universe(F), Core(F`group, E`group));
+end intrinsic;
+
+intrinsic NormalClosure(F :: PGGFldGrp) -> PGGFldGrp
+  {Normal closure of F over its base field.}
+  if not assigned F`normal_closure then
+    F`normal_closure := NormalClosure(F, BaseField(F));
+  end if;
+  return F`normal_closure;
+end intrinsic;
+
+intrinsic IsIsomorphic(E1 :: PGGFldGrp, E2 :: PGGFldGrp, F :: PGGFldGrp) -> BoolElt, GrpElt
+  {True if E1 is isomorphic to E2 over F. If so, also returns an element of the group defining F conjugating E1 to E2.}
+  require IsExtensionOf(E1,F) and IsExtensionOf(E2,F): "E1 and E2 must be extensions of F";
+  ok, g := IsConjugate(F`group, E1`group, E2`group);
+  if ok then
+    assert g in F`group;
+    assert Conjugate(E1,g) eq E2;
+    return true, g;
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic IsIsomorphic(E1 :: PGGFldGrp, E2 :: PGGFldGrp) -> BoolElt, GrpElt
+  {True if E1 is isomorphic to E2 over the base field. If so, also returns an element of the group defining F conjugating E1 to E2.}
+  require Universe(E1) eq Universe(E2): "different universes";
+  return IsIsomorphic(E1, E2, Universe(E1)`base_field);
+end intrinsic;
+
+intrinsic Conjugate(F :: PGGFldGrp, g :: GrpElt) -> PGGFldGrp
+  {Conjugation.}
+  require g in UniverseGroup(F): "g must be an element of the universe group";
+  return Field(Universe(F), F`group^g);
+end intrinsic;
+
+intrinsic IsCoercible(U :: PGGStrFldGrp, F) -> BoolElt, .
+  {True if F is coercible into U.}
+  return false, "wrong type";
+end intrinsic;
+
+intrinsic IsCoercible(U :: PGGStrFldGrp, F :: PGGFldGrp) -> BoolElt, .
+  {"}
+  if Universe(F) eq U then
+    return true, F;
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic UniverseRamificationGroups(F :: PGGFldGrp) -> []
+  {The ramification groups of the universe.}
+  require assigned Universe(F)`ramification_groups: "not known";
+  return Universe(F)`ramification_groups;
+end intrinsic;
+
+intrinsic UniverseRamificationFields(F :: PGGFldGrp) -> []
+  {The ramification fields of the universe.}
+  U := Universe(F);
+  if not assigned U`ramification_fields then
+    U`ramification_fields := [U| Field(U, N) : N in UniverseRamificationGroups(F)];
+  end if;
+  return U`ramification_fields;
+end intrinsic;
+
+intrinsic UniverseFindLowerBreak(F :: PGGFldGrp, v :: FldRatElt) -> RngIntElt
+  {The index of the vth ramification group in the sequence of distinct ramification groups.}
+  U := F`universe;
+  require assigned U`ramification_groups and assigned U`lower_breaks: "universe must have ramification groups and lower breaks";
+  if v le -1 then
+    return 1;
+  end if;
+  i := Max([i : i in [1..#U`lower_breaks] | U`lower_breaks[i] le v]);
+  return i;
+end intrinsic;
+
+intrinsic UniverseFindLowerBreak(F :: PGGFldGrp, v :: RngIntElt) -> RngIntElt
+  {"}
+  return UniverseFindLowerBreak(F, RationalField()!v);
+end intrinsic;
+
+intrinsic UniverseRamificationGroup(F :: PGGFldGrp, v) -> Grp
+  {The vth ramification group.}
+  return F`universe`ramification_groups[UniverseFindLowerBreak(F,v)];
+end intrinsic;
+
+intrinsic UniverseRamificationField(F :: PGGFldGrp, v) -> Grp
+  {The vth ramification group.}
+  return UniverseRamificationFields()[UniverseFindLowerBreak(F,v)];
+end intrinsic;
+
+intrinsic RamificationFields(E :: PGGFldGrp, F :: PGGFldGrp) -> [], []
+  {The ramification fields of E/F.}
+  require IsExtensionOf(E,F): "E must be an extension of F";
+  Ns := UniverseRamificationFields(F);
+  T1 := [(F join N) meet E : N in Ns];
+  T2 := [F join (N meet E) : N in Ns];
+  assert T1 eq T2;
+  idxs := [i : i in [1..#T1] | i eq 1 or T1[i] ne T1[i-1]];
+  T := [T1[i] : i in idxs];
+  if assigned Universe(F)`lower_breaks then
+    vs := Universe(F)`lower_breaks;
+    return T, [vs[i] : i in idxs];
+  else
+    return T, _;
+  end if;
+end intrinsic;
+
+intrinsic RamificationFields(F :: PGGFldGrp) -> [], []
+  {The ramification fields of F over its base field.}
+  if not assigned F`ramification_fields then
+    Fs, vs := RamificationFields(F, BaseField(F));
+    F`ramification_fields := assigned vs select [*Fs,vs*] else [*Fs*];
+  end if;
+  if #F`ramification_fields eq 1 then
+    return F`ramification_fields[1], _;
+  else
+    return F`ramification_fields[1], F`ramification_fields[2];
+  end if;
+end intrinsic;
+
+intrinsic RamificationField(E :: PGGFldGrp, F :: PGGFldGrp, v) -> PGGFldGrp
+  {The vth ramification field between E and F.}
+  return RamificationFields(E,F)[UniverseFindLowerBreak(F,v)];
+end intrinsic;
+
+intrinsic RamificationField(F :: PGGFldGrp, v) -> PGGFldGrp
+  {The vth ramification field below F.}
+  return RamificationFields(F)[UniverseFindLowerBreak(F,v)];
+end intrinsic;
+
+intrinsic RamificationDegree(E :: PGGFldGrp, F :: PGGFldGrp, v) -> RngIntElt
+  {The v-ramification degree of E/F.}
+  return Degree(E, RamificationField(E,F,v));
+end intrinsic;
+
+intrinsic RamificationDegree(F :: PGGFldGrp, v) -> RngIntElt
+  {The v-ramification degree of F over its base field.}
+  return Degree(F, RamificationField(F,v));
+end intrinsic;
+
+intrinsic RamificationDegree(E :: PGGFldGrp, F :: PGGFldGrp) -> RngIntElt
+  {The ramification degree of E/F.}
+  return RamificationDegree(E, F, 0);
+end intrinsic;
+
+intrinsic RamificationDegree(F :: PGGFldGrp) -> RngIntElt
+  {The ramification degree of F over its base field.}
+  if not assigned F`ramification_degree then
+    F`ramification_degree := RamificationDegree(F, 0);
+  end if;
+  return F`ramification_degree;
+end intrinsic;
+
+intrinsic InertiaDegree(E :: PGGFldGrp, F :: PGGFldGrp) -> RngIntElt
+  {The inertia degree of E/F.}
+  return xdiv(Degree(E,F), RamificationDegree(E,F));
+end intrinsic;
+
+intrinsic InertiaDegree(F :: PGGFldGrp) -> RngIntElt
+  {The inertia degree of F over its base field.}
+  if not assigned F`inertia_degree then
+    F`inertia_degree := xdiv(Degree(F), RamificationDegree(F));
+  end if;
+  return F`inertia_degree;
 end intrinsic;

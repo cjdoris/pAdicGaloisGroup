@@ -140,3 +140,14 @@ intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolStd) 
   return Gperm;
 end intrinsic;
 
+intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolGrp) -> GrpPerm
+  {The Galois group of f.}
+  require IsIrreducible(f): "f must be irreducible";
+  F := BaseRing(f);
+  E := Extension(f);
+  R := RamificationFields(E, F);
+  assert #R ge 1;
+  require #R le 2: "not singly ramified";
+  G := GaloisGroup(f);
+  return G;
+end intrinsic;

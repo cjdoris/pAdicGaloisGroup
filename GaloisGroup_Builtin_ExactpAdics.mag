@@ -1,0 +1,16 @@
+intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: PGGPolExact) -> GrpPerm
+  {"}
+  ok, pr, G := ExactpAdics_ExecutePrecisionStrategy(function (pr)
+    xf := BaselineApproximation(Actual(f), pr : FixPr);
+    try
+      return true, GaloisGroup(xf);
+    catch err
+      return false, _;
+    end try;
+  end function, PrecisionStrategy(f));
+  if ok then
+    return G;
+  else
+    error "precision error";
+  end if;
+end intrinsic;

@@ -16,3 +16,9 @@ intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: PGGPolStd) -> GrpP
   return GaloisGroup(Actual(f : FixPr));
 end intrinsic;
 
+intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: PGGPolGrp) -> GrpPerm
+  {"}
+  G := GaloisGroup(f);
+  return G;
+end intrinsic;
+

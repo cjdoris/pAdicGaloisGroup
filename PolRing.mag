@@ -1,11 +1,17 @@
+import "Utils.mag": not_implemented;
+
 declare type PGGRngPol[PGGPol];
 declare attributes PGGRngPol: base_ring;
-declare attributes PGGPol: parent;
+declare attributes PGGPol: parent, coefficients, roots, num_roots, has_root, factorization, factor_degrees, extension, degree, splitting_field;
 
 declare type PGGRngPolStd[PGGPolStd]: PGGRngPol;
 declare attributes PGGRngPolStd: actual;
 declare type PGGPolStd: PGGPol;
-declare attributes PGGPolStd: actual, coefficients, roots, num_roots, has_root, factorization, factor_degrees, extension;
+declare attributes PGGPolStd: actual;
+
+declare type PGGRngPolGrp[PGGPolGrp]: PGGRngPol;
+declare type PGGPolGrp: PGGPol;
+declare attributes PGGPolGrp: factor_fields, galois_group_quo;
 
 intrinsic PolynomialRing(F :: PGGFld) -> PGGRngPol
   {The univariate polynomial ring of F.}
@@ -15,9 +21,21 @@ intrinsic PolynomialRing(F :: PGGFld) -> PGGRngPol
   return F`polynomial_ring;
 end intrinsic;
 
+intrinsic _PolynomialRing(F :: PGGFld) -> PGGRngPol
+  {"}
+  not_implemented("_PolynomialRing:", Type(F));
+end intrinsic;
+
 intrinsic _PolynomialRing(F :: PGGFldStd) -> PGGRngPolStd
   {"}
   R := New(PGGRngPolStd);
+  R`base_ring := F;
+  return R;
+end intrinsic;
+
+intrinsic _PolynomialRing(F :: PGGFldGrp) -> PGGRngPolGrp
+  {"}
+  R := New(PGGRngPolGrp);
   R`base_ring := F;
   return R;
 end intrinsic;
@@ -43,6 +61,11 @@ intrinsic 'eq'(R1 :: PGGRngPol, R2 :: PGGRngPol) -> BoolElt
 end intrinsic;
 
 intrinsic 'eq'(R1 :: PGGRngPolStd, R2 :: PGGRngPolStd) -> BoolElt
+  {"}
+  return BaseRing(R1) eq BaseRing(R2);
+end intrinsic;
+
+intrinsic 'eq'(R1 :: PGGRngPolGrp, R2 :: PGGRngPolGrp) -> BoolElt
   {"}
   return BaseRing(R1) eq BaseRing(R2);
 end intrinsic;
@@ -121,6 +144,22 @@ intrinsic IsCoercible(R :: PGGRngPolStd, X :: []) -> BoolElt, .
   end if;
 end intrinsic;
 
+intrinsic IsCoercible(R :: PGGRngPolGrp, X :: PGGPolGrp) -> BoolElt, .
+  {"}
+  F := BaseRing(X);
+  E := BaseRing(R);
+  if Universe(F) eq Universe(E) then
+    if Parent(X) eq R then
+      return true, X;
+    elif F subset E then
+      _, q := GaloisGroup(X);
+      G := E`group @ q;
+      return true, &*[R| DefiningPolynomial(Field(Universe(F), Stabilizer(G, Rep(o)) @@ q), E) : o in Orbits(G)];
+    end if;
+  end if;
+  return false, _;
+end intrinsic;
+
 intrinsic Actual(f :: PGGPolStd : FixPr:=false) -> RngUPolElt
   {The current actual value of f.}
   xf := f`actual;
@@ -131,17 +170,45 @@ intrinsic Actual(f :: PGGPolStd : FixPr:=false) -> RngUPolElt
   return xf;
 end intrinsic;
 
-intrinsic Degree(f :: PGGPolStd) -> RngIntElt
+intrinsic Degree(f :: PGGPol) -> RngIntElt
+  {Degree.}
+  if not assigned f`degree then
+    f`degree := _Degree(f);
+  end if;
+  return f`degree;
+end intrinsic;
+
+intrinsic _Degree(f :: PGGPol) -> RngIntElt
+  {"}
+  not_implemented("_Degree:", Type(f));
+end intrinsic;
+
+intrinsic _Degree(f :: PGGPolStd) -> RngIntElt
   {Degree.}
   return Degree(Actual(f));
+end intrinsic;
+
+intrinsic _Degree(f :: PGGPolGrp) -> RngIntElt
+  {"}
+  return &+[Integers()| Degree(E, BaseRing(f)) : E in f`factor_fields];
 end intrinsic;
 
 intrinsic Coefficients(f :: PGGPol) -> []
   {The coefficients of f.}
   if not assigned f`coefficients then
-    f`coefficients := [BaseRing(f)| c : c in Coefficients(Actual(f))];
+    f`coefficients := _Coefficients(f);
   end if;
   return f`coefficients;
+end intrinsic;
+
+intrinsic _Coefficients(f :: PGGPol) -> []
+  {"}
+  not_implemented("_Coefficients:", Type(f));
+end intrinsic;
+
+intrinsic _Coefficients(f :: PGGPolStd) -> []
+  {"}
+  return [BaseRing(f)| c : c in Coefficients(Actual(f))];
 end intrinsic;
 
 intrinsic Roots(f :: PGGPol) -> []
@@ -154,7 +221,7 @@ end intrinsic;
 
 intrinsic _Roots(f :: PGGPol) -> []
   {"}
-  error "not implemented: _Roots:", Type(f);
+  not_implemented("_Roots:", Type(f));
 end intrinsic;
 
 intrinsic _Roots(f :: PGGPolStd) -> []
@@ -184,6 +251,11 @@ intrinsic _NumRoots(f :: PGGPolStd) -> RngIntElt
   end if;
 end intrinsic;
 
+intrinsic _NumRoots(f :: PGGPolGrp) -> RngIntElt
+  {"}
+  return Multiplicity(FactorDegrees(f), 1);
+end intrinsic;
+
 intrinsic HasRoot(f :: PGGPol) -> BoolElt
   {True if f has a root.}
   if not assigned f`has_root then
@@ -201,7 +273,15 @@ CERT := recformat<F, E, Pi, Rho, Extension>;
 
 intrinsic Factorization(f :: PGGPol : Extensions:=false) -> [], []
   {The factorization of f, as a sequence of irreducible factors. Assumes f is squarefree, and so does not return multiplicities.}
-  return _Factorization(f : Extensions:=Extensions);
+  if (not assigned f`factorization) or (Extensions and not f`factorization[1]) then
+    f`factorization := [*Extensions, facs, certs*] where facs, certs := _Factorization(f : Extensions:=Extensions);
+  end if;
+  return f`factorization[2], f`factorization[3];
+end intrinsic;
+
+intrinsic _Factorization(f :: PGGPol : Extensions:=false) -> [], []
+  {"}
+  not_implemented("_Factorization:", Type(f));
 end intrinsic;
 
 intrinsic _Factorization(f :: PGGPolStd : Extensions:=false) -> [], []
@@ -212,7 +292,7 @@ intrinsic _Factorization(f :: PGGPolStd : Extensions:=false) -> [], []
   for c0 in certs0 do
     c := rec<CERT | F:=c0`F, E:=c0`E, Pi:=Parent(f)!c0`Pi, Rho:=Parent(f)!c0`Rho>;
     if Extensions then
-      c`Extension := PGGFldStd_Make(c0`Extension);
+      c`Extension := PGGFldStd_Make(c0`Extension, BaseRing(f));
     end if;
     Append(~certs, c);
   end for;
@@ -312,4 +392,81 @@ intrinsic '.'(R :: PGGRngPol, n :: RngIntElt) -> PGGPol
   {The nth generator of R.}
   require n eq 1: "n must be 1";
   return R![0,1];
+end intrinsic;
+
+intrinsic DefiningPolynomial(E :: PGGFldGrp, F :: PGGFldGrp) -> PGGPolGrp
+  {The defining polynomial of E over F.}
+  f := New(PGGPolGrp);
+  f`parent := PolynomialRing(F);
+  f`factor_fields := [E];
+  f`factorization := [*true,[f],[rec<CERT | Extension:=E>]*];
+  return f;
+end intrinsic;
+
+intrinsic DefiningPolynomial(F :: PGGFldGrp) -> PGGPolGrp
+  {The defining polynomial of F over the base field.}
+  if not assigned F`defining_polynomial then
+    F`defining_polynomial := DefiningPolynomial(F, BaseField(F));
+  end if;
+  return F`defining_polynomial;
+end intrinsic;
+
+intrinsic Print(f :: PGGPolGrp)
+  {Print.}
+  printf "Polynomial of degree %o", Degree(f);
+end intrinsic;
+
+intrinsic SplittingField(f :: PGGPolGrp) -> PGGFldGrp
+  {The splitting field of f.}
+  if not assigned f`splitting_field then
+    F := BaseRing(f);
+    f`splitting_field := &join[Universe(F)| NormalClosure(E,F) : E in f`factor_fields];
+  end if;
+  return f`splitting_field;
+end intrinsic;
+
+intrinsic GaloisGroup(f :: PGGPolGrp) -> GrpPerm, Map
+  {The Galois group of f, and the quotient map from the defining group of the base field to it.}
+  if not assigned f`galois_group_quo then
+    F := BaseRing(f);
+    G := F`group;
+    require Degree(f) gt 0: "must be a non-constant polynomial";
+    if Degree(f) eq 1 then
+      A := SymmetricGroup(1);
+      q := hom<G -> A | [Id(A) : i in [1..Ngens(G)]]>;
+    else
+      Hs := [E`group : E in f`factor_fields];
+      qs := [CosetAction(G,H) : H in Hs];
+      As := [Codomain(q) : q in qs];
+      A0, incls, projs := DirectProduct(As);
+      genimgs := [&*[incls[j](qs[j](g)) : j in [1..#Hs]] where g:=G.i : i in [1..Ngens(G)]];
+      A := sub<A0 | genimgs>;
+      q := hom<G -> A | genimgs>;
+    end if;
+    f`galois_group_quo := q;
+  end if;
+  return Codomain(f`galois_group_quo), f`galois_group_quo;
+end intrinsic;
+
+intrinsic '&*'(fs :: [PGGPolGrp]) -> PGGPolGrp
+  {Product.}
+  g := New(PGGPolGrp);
+  g`parent := Universe(fs);
+  g`factor_fields := &cat[f`factor_fields : f in fs];
+  g`factorization := [*true, &cat[f`factorization[2] : f in fs], &cat[f`factorization[3] : f in fs]*];
+  return g;
+end intrinsic;
+
+intrinsic '*'(f :: PGGPolGrp, g :: PGGPolGrp) -> PGGPolGrp
+  {Multiply.}
+  require Parent(f) eq Parent(g): "different parents";
+  return &*[f,g];
+end intrinsic;
+
+intrinsic PGGPolGrp_Make(G :: GrpPerm) -> PGGPolGrp
+  {A polynomial with Galois group G.}
+  U := PGGFldGrp_Make(G);
+  f := &*[PolynomialRing(BaseField(U))| DefiningPolynomial(Subfield(U,Stabilizer(G,Rep(o)))) : o in Orbits(G)];
+  f`galois_group_quo := hom<G -> G | [G.i : i in [1..Ngens(G)]]>;
+  return f;
 end intrinsic;
