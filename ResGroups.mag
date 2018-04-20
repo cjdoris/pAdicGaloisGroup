@@ -633,7 +633,7 @@ intrinsic PossibleSubgroups(s :: PGGAlgState_ResGroups_RootsMaximal) -> []
   return s`possible_subgroups;
 end intrinsic;
 
-intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_All, resolvent :: RngUPolElt[FldPad], subgroup :: GrpPerm)
+intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_All, resolvent :: PGGPol, subgroup :: GrpPerm)
   {Use the resolvent to get information about the Galois group.}
   PGG_GlobalTimer_Push("resolvent stat");
   rstat := ResolventStat(s`algorithm`statistic, resolvent);
@@ -647,14 +647,14 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_All, resolvent :: RngUPolE
   PGG_GlobalTimer_Pop();
 end intrinsic;
 
-intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_RootsMaximal, resolvent :: RngUPolElt[FldPad], subgroup :: GrpPerm)
+intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_RootsMaximal, resolvent :: PGGPol, subgroup :: GrpPerm)
   {"}
   PGG_GlobalTimer_Push("assert");
   poss := PossibleSubgroups(s);
   assert #poss gt 0;
   assert IsConjugate(Group(s`resolvent_overgroup), subgroup, Rep(poss[1]));
   PGG_GlobalTimer_Swap("has root");
-  ok := has_root(resolvent);
+  ok := HasRoot(resolvent);
   if ok then
     PGG_GlobalTimer_Swap("descend");
     vprint PGG_GaloisGroup: "descending";
@@ -672,12 +672,12 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_RootsMaximal, resolvent ::
   PGG_GlobalTimer_Pop();
 end intrinsic;
 
-intrinsic ProcessResolvent(s ::PGGAlgState_ResGroups_Sequence, resolvent :: RngUPolElt[FldPad], subgroup :: GrpPerm)
+intrinsic ProcessResolvent(s ::PGGAlgState_ResGroups_Sequence, resolvent :: PGGPol, subgroup :: GrpPerm)
   {"}
   ProcessResolvent(CurrentState(s), resolvent, subgroup);
 end intrinsic;
 
-intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, resolvent :: RngUPolElt[FldPad], subgroup :: GrpPerm)
+intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, resolvent :: PGGPol, subgroup :: GrpPerm)
   {"}
   PGG_GlobalTimer_Push("resolvent stat");
   rstat := ResolventStat(s`algorithm`statistic, resolvent);
@@ -732,7 +732,7 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal, resolvent :: RngU
   PGG_GlobalTimer_Pop();
 end intrinsic;
 
-intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal2, resolvent :: RngUPolElt[FldPad], subgroup :: GrpPerm)
+intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal2, resolvent :: PGGPol, subgroup :: GrpPerm)
   {"}
   PGG_GlobalTimer_Push("resolvent stat");
   rstat := ResolventStat(s`algorithm`statistic, resolvent);

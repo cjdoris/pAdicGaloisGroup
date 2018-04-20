@@ -27,7 +27,7 @@ declare attributes PGGAlg_ResEval_Global_Model_RootOfUnity: minimize, complement
 
 declare type PGGAlg_ResEval_Global_Model_RootOfUniformizer: PGGAlg_ResEval_Global_Model;
 
-intrinsic Start(alg :: PGGAlg_ResEval_Global, f :: RngUPolElt[FldPad]) -> PGGAlgState_ResEval_Global
+intrinsic Start(alg :: PGGAlg_ResEval_Global, f :: PGGPol) -> PGGAlgState_ResEval_Global
   {Starts the algorithm and returns its state.}
   s := New(PGGAlgState_ResEval_Global);
   s`algorithm := alg;
@@ -56,7 +56,7 @@ intrinsic ComplexRoots(s :: PGGAlgState_ResEval_Global, pr :: RngIntElt) -> []
   return PowerSequence(PowerSequence(C)) ! s`complex_roots;
 end intrinsic;
 
-intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, I, U :: GrpPerm) -> RngUPolElt
+intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, I, U :: GrpPerm) -> PGGPol
   {The resolvent associated to the invariant I.}
   W := Group(Codomain(s`overgroup_embedding));
   assert U subset W;
@@ -78,7 +78,7 @@ intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, I, U :: GrpPerm) -> RngUPol
       err := Max([Abs(c) : c in Coefficients(R - Rxs[1])] cat [0]);
       assert err lt 1e-20;
       if IsSquarefree(R) then
-        return ChangeRing(R, s`base_field_model`local_field);
+        return PolynomialRing(s`base_field_model`local_field) ! R;
       end if;
     else
       not_implemented("Resolvent: only implemented over Q");
@@ -135,10 +135,14 @@ end intrinsic;
 
 intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_Symmetric)
   {Print.}
-  print "symmetric";
-  IndentPush();
-  printf "galois group = %o", alg`galois_group_alg cmpne false select alg`galois_group_alg else "unset";
-  IndentPop();
+  printf "symmetric";
+  if alg`galois_group_alg cmpne false then
+    print "";
+    IndentPush();
+    printf "galois group = ";
+    Print(alg`galois_group_alg);
+    IndentPop();
+  end if;
 end intrinsic;
 
 intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_Factors)

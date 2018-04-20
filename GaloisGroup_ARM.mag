@@ -22,7 +22,7 @@ intrinsic Print(alg :: PGGAlg_GaloisGroup_ARM)
   IndentPop();
 end intrinsic;
 
-intrinsic RamificationGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: RngUPolElt[FldPad], u :: FldRatElt) -> GrpPerm
+intrinsic RamificationGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: PGGPol, u :: FldRatElt) -> GrpPerm
   {The u-th ramification group of f.}
   if u ge 0 then
     not_implemented("RamificationGroup except GaloisGroup");

@@ -11,9 +11,8 @@ intrinsic Print(alg :: PGGAlg_GaloisGroup_Builtin)
   printf "builtin";
 end intrinsic;
 
-intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: RngUPolElt[FldPad]) -> GrpPerm
+intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: PGGPolStd) -> GrpPerm
   {The Galois group of f.}
-  G := GaloisGroup(f);
-  return G;
+  return GaloisGroup(Actual(f : FixPr));
 end intrinsic;
 

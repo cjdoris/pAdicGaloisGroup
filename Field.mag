@@ -1,0 +1,458 @@
+import "Utils.mag": is_extension_of, xdiv, ramification_tower, precision_error, trim_apr, not_implemented;
+
+declare type PGGFld[PGGFldElt];
+declare attributes PGGFld: polynomial_ring;
+declare attributes PGGFldElt: parent;
+
+declare type PGGFldStd[PGGFldStdElt]: PGGFld;
+declare attributes PGGFldStd: actual, base_field, defining_polynomial;
+declare type PGGFldStdElt: PGGFldElt;
+declare attributes PGGFldStdElt: actual;
+
+declare type PGGFldGrpUniv;
+declare attributes PGGFldGrpUniv: group, prime, ramification_groups;
+declare type PGGFldGrp: PGGFld;
+declare attributes PGGFldGrp: universe, group;
+
+intrinsic PGGFldStd_Make(K :: FldPad) -> PGGFldStd
+  {The p-adic field K.}
+  F := New(PGGFldStd);
+  F`actual := K;
+  return F;
+end intrinsic;
+
+intrinsic PGGFldStd_Make(p :: RngIntElt) -> PGGFldStd
+  {The p-adic field.}
+  require p gt 0 and IsPrime(p): "p must be prime";
+  return PGGFldStd_Make(pAdicField(p));
+end intrinsic;
+
+intrinsic Print(F :: PGGFldStd, lvl :: MonStgElt)
+  {Print.}
+  printf "%O", F`actual, lvl;
+end intrinsic;
+
+intrinsic Actual(F :: PGGFldStd) -> FldPad
+  {The actual field.}
+  return F`actual;
+end intrinsic;
+
+intrinsic DefaultPrecision(F :: PGGFldStd) -> RngIntElt
+  {The default precision of F.}
+  return F`actual`DefaultPrecision;
+end intrinsic;
+
+intrinsic SetDefaultPrecision(F :: PGGFldStd, k :: RngIntElt)
+  {Sets the default precision of F to k.}
+  F`actual`DefaultPrecision := k;
+end intrinsic;
+
+intrinsic 'eq'(F1 :: PGGFld, F2 :: PGGFld) -> BoolElt
+  {Equality.}
+  return IsIdentical(F1, F2);
+end intrinsic;
+
+intrinsic 'eq'(F1 :: PGGFldStd, F2 :: PGGFldStd) -> BoolElt
+  {"}
+  return Actual(F1) eq Actual(F2);
+end intrinsic;
+
+intrinsic IsPrimeField(F :: PGGFldStd) -> BoolElt
+  {True if F is a completion of Q.}
+  return IsPrimeField(Actual(F));
+end intrinsic;
+
+intrinsic Prime(F :: PGGFldStd) -> RngIntElt
+  {The p in p-adic.}
+  return Prime(Actual(F));
+end intrinsic;
+
+intrinsic Degree(F :: PGGFldStd) -> RngIntElt
+  {The degree of F over its base field.}
+  return Degree(Actual(F));
+end intrinsic;
+
+intrinsic InertiaDegree(F :: PGGFldStd) -> RngIntElt
+  {The inertia degree of F over its base field.}
+  return InertiaDegree(Actual(F));
+end intrinsic;
+
+intrinsic RamificationDegree(F :: PGGFldStd) -> RngIntElt
+  {The ramification degree of F over its base field.}
+  return RamificationDegree(Actual(F));
+end intrinsic;
+
+intrinsic Degree(E :: PGGFldStd, F :: PGGFldStd) -> RngIntElt
+  {The degree of E over F.}
+  return Degree(Actual(E), Actual(F));
+end intrinsic;
+
+intrinsic InertiaDegree(E :: PGGFldStd, F :: PGGFldStd) -> RngIntElt
+  {The inertia degree of E over F.}
+  return InertiaDegree(Actual(E), Actual(F));
+end intrinsic;
+
+intrinsic RamificationDegree(E :: PGGFldStd, F :: PGGFldStd) -> RngIntElt
+  {The ramification degree of E over F.}
+  return RamificationDegree(Actual(E), Actual(F));
+end intrinsic;
+
+intrinsic AbsoluteDegree(F :: PGGFldStd) -> RngIntElt
+  {The absolute degree of F.}
+  return AbsoluteDegree(Actual(F));
+end intrinsic;
+
+intrinsic AbsoluteInertiaDegree(F :: PGGFldStd) -> RngIntElt
+  {The absolute inertia degree of F.}
+  return AbsoluteInertiaDegree(Actual(F));
+end intrinsic;
+
+intrinsic AbsoluteRamificationDegree(F :: PGGFldStd) -> RngIntElt
+  {The absolute ramification degree of F.}
+  return AbsoluteRamificationDegree(Actual(F));
+end intrinsic;
+
+intrinsic Parent(x :: PGGFldElt) -> PGGFld
+  {The parent field of x.}
+  return x`parent;
+end intrinsic;
+
+intrinsic IsCoercible(F :: PGGFld, X) -> BoolElt, .
+  {True if X is coercible into F.}
+  return false, "wrong type";
+end intrinsic;
+
+intrinsic IsCoercible(F :: PGGFld, X :: PGGFldElt) -> BoolElt, .
+  {"}
+  if Parent(X) eq F then
+    return true, X;
+  else
+    return false, "wrong parent";
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(F :: PGGFldStd, X) -> BoolElt, .
+  {"}
+  ok, xx := IsCoercible(Actual(F), X);
+  if ok then
+    return true, Element(F, xx);
+  elif assigned xx then
+    return false, xx;
+  else
+    return false, "cannot coerce to actual field";
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(F :: PGGFldStd, X :: PGGFldStdElt) -> BoolElt, .
+  {"}
+  if Parent(X) eq F then
+    return true, X;
+  end if;
+  return IsCoercible(F, Actual(X));
+end intrinsic;
+
+intrinsic IsCoercible(F :: PGGFldStd, X :: FldPadElt) -> BoolElt, .
+  {"}
+  if Parent(X) eq Actual(F) then
+    return true, Element(F, X);
+  end if;
+  ok, xx := IsCoercible(Actual(F), X);
+  if ok then
+    idx := xdiv(AbsoluteRamificationDegree(F), AbsoluteRamificationDegree(Parent(X)));
+    if (not IsWeaklyZero(X)) /*and Precision(Actual(F)) eq Infinity() and Precision(xx) lt Precision(X)*idx*/ then
+      // SetDefaultPrecision(F, Precision(X)*idx);
+      // xx := Actual(F) ! X;
+      assert Precision(xx) ge Precision(X)*idx;
+    end if;
+    return true, Element(F, xx);
+  elif assigned xx then
+    return false, xx;
+  else
+    return false, "cannot coerce to actual field";
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(F :: PGGFldStd, X :: []) -> BoolElt, .
+  {"}
+  if IsPrimeField(F) then
+    return false, "not an extension";
+  end if;
+  ok, Y := CanChangeUniverse(X, BaseField(F));
+  if ok then
+    return true, Element(F, Actual(F) ! [Actual(x) : x in Y]);
+  elif assigned Y then
+    return false, Y;
+  else
+    return false, "cannot coerce to base field";
+  end if;
+end intrinsic;
+
+intrinsic Element(F :: PGGFldStd, actual :: FldPadElt) -> PGGFldStdElt
+  {An element of F.}
+  require Parent(actual) eq Actual(F): "actual must be an element of Actual(F)";
+  x := New(PGGFldStdElt);
+  x`parent := F;
+  x`actual := actual;
+  return x;
+end intrinsic;
+
+intrinsic Print(x :: PGGFldStdElt, lvl :: MonStgElt)
+  {Print.}
+  printf "%o", x`actual, lvl;
+end intrinsic;
+
+intrinsic RationalApproximation(x :: PGGFldStdElt) -> FldRatElt
+  {A rational number approximating x.}
+  require IsPrimeField(Parent(x)): "x must be in a prime field";
+  return RationalField() ! Actual(x);
+end intrinsic;
+
+intrinsic Actual(x :: PGGFldStdElt) -> FldPadElt
+  {The actual value of x.}
+  return x`actual;
+end intrinsic;
+
+intrinsic AutomorphismGroup(E :: PGGFldStd, F :: PGGFldStd) -> GrpPerm
+  {The automorphism group of E/F.}
+  return AutomorphismGroup(Actual(E), Actual(F));
+end intrinsic;
+
+intrinsic RamificationTower(E :: PGGFldStd, F :: PGGFldStd) -> []
+  {The ramification tower of E/F.}
+  return [PGGFldStd_Make(K) : K in ramification_tower(Actual(E), Actual(F))];
+end intrinsic;
+
+intrinsic IsWeaklyZero(x :: PGGFldStdElt) -> BoolElt
+  {True if x is weakly zero.}
+  return IsWeaklyZero(Actual(x));
+end intrinsic;
+
+intrinsic WeakValuation(x :: PGGFldStdElt) -> RngIntElt
+  {A lower bound on the valuation of x. It is correct if x is not weakly zero.}
+  return Valuation(Actual(x));
+end intrinsic;
+
+intrinsic Valuation(x :: PGGFldStdElt) -> RngIntElt
+  {The valuation of x. Returns an error if x is weakly but not precisely zero.}
+  v := WeakValuation(x);
+  if IsWeaklyZero(x) and v lt Infinity() then
+    precision_error();
+  end if;
+  return v;
+end intrinsic;
+
+intrinsic AbsolutePrecision(x :: PGGFldStdElt) -> RngIntElt
+  {Absolute precision.}
+  return AbsolutePrecision(Actual(x));
+end intrinsic;
+
+intrinsic ValuationEq(x :: PGGFldStdElt, n :: RngIntElt) -> BoolElt
+  {True if the valuation of x is n.}
+  if WeakValuation(x) gt n then
+    return false;
+  elif IsWeaklyZero(x) then
+    precision_error();
+  else
+    return WeakValuation(x) eq n;
+  end if;
+end intrinsic;
+
+intrinsic ValuationGe(x :: PGGFldStdElt, n :: RngIntElt) -> BoolElt
+  {True if the valuation of x is at least n.}
+  if WeakValuation(x) ge n then
+    return true;
+  elif IsWeaklyZero(x) then
+    precision_error();
+  else
+    return false;
+  end if;
+end intrinsic;
+
+intrinsic ResidueClassField(F :: PGGFldStd) -> FldFin, Map
+  {The residue class field of F.}
+  FF, m := ResidueClassField(Integers(Actual(F)));
+  return FF, map<F -> FF | x :-> Actual(x) @ m, y :-> F ! Actual(F) ! (y @@ m)>;
+end intrinsic;
+
+intrinsic ChangeAbsolutePrecision(x :: PGGFldStdElt, n :: RngIntElt) -> PGGFldStdElt
+  {Changes the absolute precision of x to n.}
+  if IsWeaklyZero(x) or ValuationGe(x, n) then
+    return Zero(Parent(x), n);
+  else
+    return Parent(x) ! ChangePrecision(Actual(x), n - Valuation(x));
+  end if;
+end intrinsic;
+
+intrinsic Zero(F :: PGGFldStd, n :: RngIntElt) -> PGGFldStdElt
+  {The zero of F to absolute precision n.}
+  z := (Actual(F)!1) - (Actual(F)!1);
+  return F ! ShiftValuation(z, n - AbsolutePrecision(z));
+end intrinsic;
+
+intrinsic HasIsomorphism(L1 :: PGGFldStd, L2 :: PGGFldStd, K :: PGGFldStd : MaximizeAPr:=true) -> BoolElt, Map
+  {True if there is a K-isomorphism L1 to L2.}
+
+  // check inputs
+  ok, t1 := IsExtensionOf(L1, K);
+  assert ok;
+  ok, t2 := IsExtensionOf(L2, K);
+  assert ok;
+
+  // case degrees unequal
+  if Degree(L1, K) ne Degree(L2, K) then
+    return false, _;
+  elif RamificationDegree(L1, K) ne RamificationDegree(L2, K) then
+    return false, _;
+  end if;
+  d := Degree(L1, K);
+
+  // case d=1
+  assert d eq Degree(L2, K);
+  if d eq 1 then
+    return true, map<L1 -> L2 | x :-> L2!K!x, y :-> L1!K!y>;
+  end if;
+
+  // case K is the direct base field
+  if #t1 eq 2 and #t2 eq 2 then
+    assert BaseField(L1) eq K;
+    assert BaseField(L2) eq K;
+    f1 := DefiningPolynomial(L1);
+    f2 := DefiningPolynomial(L2);
+    FUDGE := (e eq 1 select 0 else 2*e) where e:=AbsoluteRamificationDegree(L1);
+    roots1 := Roots(ChangeRing(f1, L2));
+    if #roots1 eq 0 then
+      error if HasRoot(ChangeRing(f2, L1)), "precision error";
+      return false, _;
+    end if;
+    root1 := roots1[1];
+    roots2 := Roots(ChangeRing(f2, L1));
+    error if #roots2 eq 0, "precision error";
+    idxs := [i : i in [1..#roots2] | IsWeaklyEqual(trim_apr(Actual(L1).1,FUDGE), trim_apr(&+[Actual(L1)| Actual(cs[i]) * r^(i-1) : i in [1..#cs]],FUDGE) where cs:=Eltseq(root1)) where r:=Actual(roots2[i])];
+    error if #idxs ne 1, "precision error";
+    root2 := roots2[idxs[1]];
+    if MaximizeAPr then
+      root1 := MaximizeAbsolutePrecision(root1);
+      root2 := MaximizeAbsolutePrecision(root2);
+    end if;
+    return true, map<L1 -> L2 |
+      x :-> &+[Actual(L2)| Actual(cs[i]) * Actual(root1)^(i-1) : i in [1..#cs]] where cs:=Eltseq(x),
+      y :-> &+[Actual(L1)| Actual(cs[i]) * Actual(root2)^(i-1) : i in [1..#cs]] where cs:=Eltseq(y)>;
+  end if;
+
+  // general case
+  not_implemented("HasIsomorphism: general towers of extensions");
+end intrinsic;
+
+intrinsic IsExtensionOf(L :: PGGFldStd, K :: PGGFldStd) -> BoolElt, []
+  {True if L is an extension of K. If so, returns the sequence of fields from K to L.}
+  if L eq K then
+    return true, [K];
+  elif IsPrimeField(L) then
+    return false, _;
+  else
+    ok, twr := IsExtensionOf(BaseField(L), K);
+    if ok then
+      return true, Append(twr, L);
+    else
+      return false, _;
+    end if;
+  end if;
+end intrinsic;
+
+intrinsic BaseField(F :: PGGFldStd) -> PGGFldStd
+  {The base field of F.}
+  if not assigned F`base_field then
+    require not IsPrimeField(F): "F must be an extension";
+    F`base_field := PGGFldStd_Make(BaseField(Actual(F)));
+  end if;
+  return F`base_field;
+end intrinsic;
+
+intrinsic MaximizeAbsolutePrecision(x :: PGGFldStdElt) -> PGGFldStdElt
+  {Maximizes the absolute precision of x.}
+  if IsWeaklyZero(x) then
+    return Parent(x) ! 0;
+  else
+    return Parent(x) ! ChangePrecision(Actual(x), Precision(Parent(Actual(x))));
+  end if;
+end intrinsic;
+
+intrinsic DefiningPolynomial(E :: PGGFldStd) -> PGGPolStd
+  {The defining polynomial of E over its base field.}
+  if not assigned E`defining_polynomial then
+    E`defining_polynomial := PolynomialRing(BaseField(E)) ! DefiningPolynomial(Actual(E));
+  end if;
+  return E`defining_polynomial;
+end intrinsic;
+
+intrinsic DefiningPolynomial(E :: PGGFldStd, F :: PGGFldStd) -> PGGPolStd
+  {The defining polynomial of E over F.}
+  return PolynomialRing(F) ! DefiningPolynomial(Actual(E), Actual(F));
+end intrinsic;
+
+intrinsic ExtConstructor(F :: PGGFldStd, t :: Tup) -> PGGFldStd
+  {An extension of F defined by t.}
+  if #t eq 1 and Type(t[1]) eq PGGPolStd then
+    return PGGFldStd_Make(ext<Actual(F) | Actual(t[1])>);
+  else
+    error "bad constructor";
+  end if;
+end intrinsic;
+
+intrinsic Eltseq(x :: PGGFldStdElt) -> []
+  {The coefficients of x as a vector over the base field.}
+  F := Parent(x);
+  if AbsolutePrecision(x) eq Infinity() then
+    assert IsWeaklyZero(x);
+    return [BaseField(F)| 0 : i in [1..Degree(F)]];
+  else
+    return [BaseField(F)| c : c in  Eltseq(Actual(x))];
+  end if;
+end intrinsic;
+
+intrinsic '&+'(xs :: [PGGFldStdElt]) -> PGGFldStdElt
+  {Sum.}
+  F := Universe(xs);
+  return F ! &+[Actual(F)| Actual(x) : x in xs];
+end intrinsic;
+
+intrinsic '+'(x :: PGGFldElt, y :: PGGFldElt) -> PGGFldElt
+  {Plus.}
+  ok, F := ExistsCoveringStructure(Parent(x), Parent(y));
+  require ok: "different fields";
+  return &+[F|x,y];
+end intrinsic;
+
+intrinsic '&*'(xs :: [PGGFldStdElt]) -> PGGFldStdElt
+  {Product.}
+  F := Universe(xs);
+  return F ! &*[Actual(F)| Actual(x) : x in xs];
+end intrinsic;
+
+intrinsic '*'(x :: PGGFldElt, y :: PGGFldElt) -> PGGFldElt
+  {Multiply.}
+  ok, F := ExistsCoveringStructure(Parent(x), Parent(y));
+  require ok: "different fields";
+  return &*[F|x,y];
+end intrinsic;
+
+intrinsic '^'(x :: PGGFldElt, n :: RngIntElt) -> PGGFldElt
+  {Power.}
+  return Parent(x) ! (Actual(x)^n);
+end intrinsic;
+
+intrinsic ExistsCoveringStructure(E :: PGGFldStd, F :: PGGFldStd) -> BoolElt, .
+  {True if there is a structure containing both E and F.}
+  ok, A := ExistsCoveringStructure(Actual(E), Actual(F));
+  if ok then
+    return true, PGGFldStd_Make(A);
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic '.'(F :: PGGFldStd, n :: RngIntElt) -> BoolElt, .
+  {The nth generator of F.}
+  require n eq 1: "n must be 1";
+  return F![0,1];
+end intrinsic;

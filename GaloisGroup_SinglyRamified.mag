@@ -16,13 +16,14 @@ end intrinsic;
 // some example polynomials to try this on:
 // Example 9.* from Greve, Pauli "On ramification polygons..."
 // Example 3.24 from Milstead "Computing Galois groups..." (thesis)
-intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: RngUPolElt[FldPad]) -> GrpPerm
+intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolStd) -> GrpPerm
   {The Galois group of f.}
+  xf := Actual(f : FixPr);
   // check f is irreducible and find the extension it defines
-  d := Degree(f);
-  facs, certs := factorization(f : Extensions);
+  d := Degree(xf);
+  facs, certs := factorization(xf : Extensions);
   error if #facs ne 1, "only implemented for irreducible f";
-  K := BaseRing(f);
+  K := BaseRing(xf);
   cert := certs[1];
   L := cert`Extension;
   assert Degree(L, K) eq d;

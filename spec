@@ -22,4 +22,6 @@
   ResChoice.mag
   ResEval.mag
   ResPriority.mag
+  Field.mag
+  PolRing.mag
 }

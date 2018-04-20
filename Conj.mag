@@ -18,7 +18,7 @@ declare attributes PGGConj_Unramified: top_field;
 declare type PGGConj_TotRam: PGGConj, PGGGrpPerm_RawSubgroup;
 declare attributes PGGConj_TotRam: top_field;
 
-intrinsic PGGConj_Symmetric_Make(f :: RngUPolElt[FldPad] : GaloisGroupAlg:=false, TopField:=false, IsTransitive:=false, KnownGroup:=false) -> PGGConj_Symmetric
+intrinsic PGGConj_Symmetric_Make(f :: PGGPol : GaloisGroupAlg:=false, TopField:=false, IsTransitive:=false, KnownGroup:=false) -> PGGConj_Symmetric
   {Makes a conjugacy.}
   c := New(PGGConj_Symmetric);
   Init(~c, Degree(f));
@@ -43,7 +43,7 @@ intrinsic PGGConj_Symmetric_Make(f :: RngUPolElt[FldPad] : GaloisGroupAlg:=false
   return c;
 end intrinsic;
 
-intrinsic PGGConj_Unramified_Make(f :: RngUPolElt[FldPad] : TopField:=false) -> PGGConj_Unramified
+intrinsic PGGConj_Unramified_Make(f :: PGGPol : TopField:=false) -> PGGConj_Unramified
   {"}
   require TopField cmpne false: "f must be known to be irreducible";
   c := New(PGGConj_Unramified);
@@ -58,7 +58,7 @@ intrinsic PGGConj_Unramified_Make(f :: RngUPolElt[FldPad] : TopField:=false) -> 
   return c;
 end intrinsic;
 
-intrinsic PGGConj_TotRam_Make(f :: RngUPolElt[FldPad] : TopField:=false) -> PGGConj_TotRam
+intrinsic PGGConj_TotRam_Make(f :: PGGPol : TopField:=false) -> PGGConj_TotRam
   {"}
   require TopField cmpne false: "f must be known to be irreducible";
   L := TopField;
@@ -82,7 +82,7 @@ intrinsic PGGConj_TotRam_Make(f :: RngUPolElt[FldPad] : TopField:=false) -> PGGC
   return c;
 end intrinsic;
 
-intrinsic PGGConj_Factors_Make(f :: RngUPolElt[FldPad], facs :: Tup) -> PGGConj
+intrinsic PGGConj_Factors_Make(f :: PGGPol, facs :: Tup) -> PGGConj
   {"}
   require forall{c : c in facs | ISA(Type(c), PGGConj)}: "facs must be a tuple of PGGConj";
   c := New(PGGConj_Factors);
@@ -100,7 +100,7 @@ intrinsic PGGConj_Factors_Make(f :: RngUPolElt[FldPad], facs :: Tup) -> PGGConj
   return c;
 end intrinsic;
 
-intrinsic PGGConj_Tower_Make(f :: RngUPolElt[FldPad], tower :: Tup) -> PGGConj
+intrinsic PGGConj_Tower_Make(f :: PGGPol, tower :: Tup) -> PGGConj
   {"}
   require forall{c : c in tower | ISA(Type(c), PGGConj)}: "tower must be a tuple of PGGConj";
   c := New(PGGConj_Tower);

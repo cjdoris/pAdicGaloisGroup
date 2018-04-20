@@ -344,72 +344,73 @@ intrinsic GroupStat(S :: PGGStat_GaloisGroup, G :: GrpPerm) -> PGGStatVal
   return MakeValue(S, G);
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat, R :: RngUPolElt[FldPad]) -> PGGStatVal
+intrinsic ResolventStat(S :: PGGStat, R :: PGGPol) -> PGGStatVal
   {The value of the statistic on the resolvent.}
   error "not implemented: ResolventStat:", Type(S);
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat_HasRoot, R :: RngUPolElt[FldPad]) -> PGGStatVal
+intrinsic ResolventStat(S :: PGGStat_HasRoot, R :: PGGPol) -> PGGStatVal
   {"}
-  return MakeValue(S, #roots(R : Lift:=false) gt 0);
+  return MakeValue(S, HasRoot(R));
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat_NumRoots, R :: RngUPolElt[FldPad]) -> PGGStatVal
+intrinsic ResolventStat(S :: PGGStat_NumRoots, R :: PGGPol) -> PGGStatVal
   {"}
-  return MakeValue(S, #roots(R : Lift:=false));
+  return MakeValue(S, NumRoots(R));
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat_FactorDegrees, R :: RngUPolElt[FldPad]) -> PGGStatVal
+intrinsic ResolventStat(S :: PGGStat_FactorDegrees, R :: PGGPol) -> PGGStatVal
   {"}
-  return MakeValue(S, {* Degree(fac) : fac in factorization(R : Lift:=false) *});
+  return MakeValue(S, {* d : d in FactorDegrees(R) *});
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat_Degree, R :: RngUPolElt[FldPad]) -> PGGStatVal
+intrinsic ResolventStat(S :: PGGStat_Degree, R :: PGGPol) -> PGGStatVal
   {"}
   return MakeValue(S, Degree(R));
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat_AutGroup, R :: RngUPolElt[FldPad]) -> PGGStatVal
+intrinsic ResolventStat(S :: PGGStat_AutGroup, R :: PGGPol) -> PGGStatVal
   {"}
   K := BaseRing(R);
-  L := extension(R);
+  L := Extension(R);
   aut := AutomorphismGroup(L, K);
   return MakeValue(S, ConjugacyClasses(S, Degree(aut)) ! aut);
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat_Tup, R :: RngUPolElt[FldPad]) -> PGGStatVal
+intrinsic ResolventStat(S :: PGGStat_Tup, R :: PGGPol) -> PGGStatVal
   {"}
   return MakeValue(S, <ResolventStat(S2, R) : S2 in S`stats>);
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat_Factors, R :: RngUPolElt[FldPad]) -> PGGStatVal
+intrinsic ResolventStat(S :: PGGStat_Factors, R :: PGGPol) -> PGGStatVal
   {"}
-  return MakeValue(S, {* ResolventStat(S`stat, fac) : fac in factorization(R) *});
+  return MakeValue(S, {* ResolventStat(S`stat, fac) : fac in Factorization(R) *});
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat_Factors2, R :: RngUPolElt[FldPad]) -> PGGStatVal
+intrinsic ResolventStat(S :: PGGStat_Factors2, R :: PGGPol) -> PGGStatVal
   {"}
   return MakeValue(S,
     < [ ResolventStat(S`stat1, fac) : fac in facs ]
-    , [ [ {* ResolventStat(S`stat2, fac2) : fac2 in factorization(ChangeRing(fac, L)) *}
+    , [ [ {* ResolventStat(S`stat2, fac2) : fac2 in Factorization(ChangeRing(fac, L)) *}
           : fac in facs
         ]
         where L := certs[i]`Extension
         : i in [1..#facs]
       ]
     >
-    where facs, certs := factorization(R : Extensions)
+    where facs, certs := Factorization(R : Extensions)
   );
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat_Stab, R :: RngUPolElt[FldPad]) -> PGGStatVal
+intrinsic ResolventStat(S :: PGGStat_Stab, R :: PGGPol) -> PGGStatVal
   {"}
-  facs, certs := factorization(R : Extensions);
-  error if #facs ne 1, "only applies to irreducible polynomials";
-  return MakeValue(S, ResolventStat(S`stat, ChangeRing(R, certs[1]`Extension)));
+  L := Extension(R);
+  // facs, certs := Factorization(R : Extensions);
+  // error if #facs ne 1, "only applies to irreducible polynomials";
+  return MakeValue(S, ResolventStat(S`stat, ChangeRing(R, L)));
 end intrinsic;
 
-intrinsic ResolventStat(S :: PGGStat_GaloisGroup, R :: RngUPolElt[FldPad]) -> PGGStatVal
+intrinsic ResolventStat(S :: PGGStat_GaloisGroup, R :: PGGPol) -> PGGStatVal
   {"}
   if assigned S`alg then
     return MakeValue(S, PGG_GaloisGroup(R : Alg:=S`alg));

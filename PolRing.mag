@@ -1,0 +1,315 @@
+declare type PGGRngPol[PGGPol];
+declare attributes PGGRngPol: base_ring;
+declare attributes PGGPol: parent;
+
+declare type PGGRngPolStd[PGGPolStd]: PGGRngPol;
+declare attributes PGGRngPolStd: actual;
+declare type PGGPolStd: PGGPol;
+declare attributes PGGPolStd: actual, coefficients, roots, num_roots, has_root, factorization, factor_degrees, extension;
+
+intrinsic PolynomialRing(F :: PGGFld) -> PGGRngPol
+  {The univariate polynomial ring of F.}
+  if not assigned F`polynomial_ring then
+    F`polynomial_ring := _PolynomialRing(F);
+  end if;
+  return F`polynomial_ring;
+end intrinsic;
+
+intrinsic _PolynomialRing(F :: PGGFldStd) -> PGGRngPolStd
+  {"}
+  R := New(PGGRngPolStd);
+  R`base_ring := F;
+  return R;
+end intrinsic;
+
+intrinsic BaseRing(R :: PGGRngPol) -> PGGFld
+  {The base ring of R.}
+  return R`base_ring;
+end intrinsic;
+
+intrinsic Parent(f :: PGGPol) -> PGGRngPol
+  {The parent ring of f.}
+  return f`parent;
+end intrinsic;
+
+intrinsic BaseRing(f :: PGGPol) -> PGGFld
+  {The base ring of f.}
+  return BaseRing(Parent(f));
+end intrinsic;
+
+intrinsic 'eq'(R1 :: PGGRngPol, R2 :: PGGRngPol) -> BoolElt
+  {Equality.}
+  return IsIdentical(R1, R2);
+end intrinsic;
+
+intrinsic 'eq'(R1 :: PGGRngPolStd, R2 :: PGGRngPolStd) -> BoolElt
+  {"}
+  return BaseRing(R1) eq BaseRing(R2);
+end intrinsic;
+
+intrinsic Print(R :: PGGRngPolStd, lvl :: MonStgElt)
+  {Print.}
+  printf "%O", Actual(R), lvl;
+end intrinsic;
+
+intrinsic Print(f :: PGGPolStd)
+  {"}
+  printf "%o", f`actual;
+end intrinsic;
+
+intrinsic Actual(R :: PGGRngPolStd) -> RngUPol
+  {The actual ring.}
+  if not assigned R`actual then
+    R`actual := PolynomialRing(Actual(BaseRing(R)));
+  end if;
+  return R`actual;
+end intrinsic;
+
+intrinsic Element(R :: PGGRngPolStd, xf :: RngUPolElt[FldPad]) -> PGGPolStd
+  {An element of R.}
+  require Parent(xf) eq Actual(R): "xf must be an element of Actual(R)";
+  f := New(PGGPolStd);
+  f`actual := xf;
+  f`parent := R;
+  return f;
+end intrinsic;
+
+intrinsic IsCoercible(R :: PGGRngPol, X) -> BoolElt, .
+  {True if X is coercible into R.}
+  return false, "wrong type";
+end intrinsic;
+
+intrinsic IsCoercible(R :: PGGRngPol, X :: PGGPol) -> BoolElt, .
+  {"}
+  if Parent(X) eq R then
+    return true, X;
+  else
+    return false, "wrong parent";
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(R :: PGGRngPolStd, X) -> BoolElt, .
+  {"}
+  ok, Y := IsCoercible(Actual(R), X);
+  if ok then
+    return true, Element(R, Y);
+  elif assigned Y then
+    return false, Y;
+  else
+    return false, "not coercible to the actual ring";
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(R :: PGGRngPolStd, X :: PGGPolStd) -> BoolElt, .
+  {"}
+  if Parent(X) eq R then
+    return true, X;
+  else
+    return IsCoercible(R, Actual(X));
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(R :: PGGRngPolStd, X :: []) -> BoolElt, .
+  {"}
+  ok, Y := CanChangeUniverse(X, BaseRing(R));
+  if ok then
+    return true, Element(R, Actual(R)![Actual(x) : x in Y]);
+  elif assigned Y then
+    return false, Y;
+  else
+    return false, "not coercible to base ring";
+  end if;
+end intrinsic;
+
+intrinsic Actual(f :: PGGPolStd : FixPr:=false) -> RngUPolElt
+  {The current actual value of f.}
+  xf := f`actual;
+  if FixPr and Precision(BaseRing(xf)) eq Infinity() then
+    pr := Max([1] cat [IsWeaklyZero(c) select 0 else Precision(c) : c in Coefficients(xf)]);
+    xf := PolynomialRing(ChangePrecision(BaseRing(xf), pr)) ! xf;
+  end if;
+  return xf;
+end intrinsic;
+
+intrinsic Degree(f :: PGGPolStd) -> RngIntElt
+  {Degree.}
+  return Degree(Actual(f));
+end intrinsic;
+
+intrinsic Coefficients(f :: PGGPol) -> []
+  {The coefficients of f.}
+  if not assigned f`coefficients then
+    f`coefficients := [BaseRing(f)| c : c in Coefficients(Actual(f))];
+  end if;
+  return f`coefficients;
+end intrinsic;
+
+intrinsic Roots(f :: PGGPol) -> []
+  {The roots of f, as a sequence. Assumes f is squarefree, and so does not return multiplicities.}
+  if not assigned f`roots then
+    f`roots := _Roots(f);
+  end if;
+  return f`roots;
+end intrinsic;
+
+intrinsic _Roots(f :: PGGPol) -> []
+  {"}
+  error "not implemented: _Roots:", Type(f);
+end intrinsic;
+
+intrinsic _Roots(f :: PGGPolStd) -> []
+  {"}
+  return [BaseRing(f)| root : root in PGG_Roots(Actual(f))];
+end intrinsic;
+
+intrinsic NumRoots(f :: PGGPol) -> RngIntElt
+  {The number of roots of f.}
+  if not assigned f`num_roots then
+    f`num_roots := _NumRoots(f);
+  end if;
+  return f`num_roots;
+end intrinsic;
+
+intrinsic _NumRoots(f :: PGGPol) -> RngIntElt
+  {"}
+  return #Roots(f);
+end intrinsic;
+
+intrinsic _NumRoots(f :: PGGPolStd) -> RngIntElt
+  {"}
+  if assigned f`roots then
+    return #f`roots;
+  else
+    return #PGG_Roots(Actual(f) : Lift:=false);
+  end if;
+end intrinsic;
+
+intrinsic HasRoot(f :: PGGPol) -> BoolElt
+  {True if f has a root.}
+  if not assigned f`has_root then
+    f`has_root := _HasRoot(f);
+  end if;
+  return f`has_root;
+end intrinsic;
+
+intrinsic _HasRoot(f :: PGGPol) -> BoolElt
+  {"}
+  return NumRoots(f) ne 0;
+end intrinsic;
+
+CERT := recformat<F, E, Pi, Rho, Extension>;
+
+intrinsic Factorization(f :: PGGPol : Extensions:=false) -> [], []
+  {The factorization of f, as a sequence of irreducible factors. Assumes f is squarefree, and so does not return multiplicities.}
+  return _Factorization(f : Extensions:=Extensions);
+end intrinsic;
+
+intrinsic _Factorization(f :: PGGPolStd : Extensions:=false) -> [], []
+  {"}
+  facs0, certs0 := PGG_Factorization(Actual(f) : Extensions:=Extensions);
+  facs := [Parent(f)| fac : fac in facs0];
+  certs := [];
+  for c0 in certs0 do
+    c := rec<CERT | F:=c0`F, E:=c0`E, Pi:=Parent(f)!c0`Pi, Rho:=Parent(f)!c0`Rho>;
+    if Extensions then
+      c`Extension := PGGFldStd_Make(c0`Extension);
+    end if;
+    Append(~certs, c);
+  end for;
+  if Extensions then
+    for i in [1..#facs] do
+      facs[i]`extension := certs[i]`Extension;
+    end for;
+  end if;
+  return facs, certs;
+end intrinsic;
+
+intrinsic FactorDegrees(f :: PGGPol) -> {**}
+  {The degrees of factors of f.}
+  if not assigned f`factor_degrees then
+    f`factor_degrees := _FactorDegrees(f);
+  end if;
+  return f`factor_degrees;
+end intrinsic;
+
+intrinsic _FactorDegrees(f :: PGGPol) -> {**}
+  {"}
+  return {*Integers()| Degree(fac) : fac in Factorization(f)*};
+end intrinsic;
+
+intrinsic _FactorDegrees(f :: PGGPolStd) -> {**}
+  {"}
+  if assigned f`factorization then
+    return {*Degree(fac) : fac in f`factorization*};
+  else
+    return {*Degree(fac) : fac in PGG_Factorization(Actual(f) : Lift:=false)*};
+  end if;
+end intrinsic;
+
+intrinsic NumFactors(f :: PGGPol) -> RngIntElt
+  {The number of factors of f.}
+  return #FactorDegrees(f);
+end intrinsic;
+
+intrinsic IsIrreducible(f :: PGGPol) -> RngIntElt
+  {True if f is irreducible.}
+  return NumFactors(f) eq 1;
+end intrinsic;
+
+intrinsic Extension(f :: PGGPol) -> PGGFld
+  {The extension defined by f, which must be irreducible.}
+  if not assigned f`extension then
+    f`extension := _Extension(f);
+  end if;
+  return f`extension;
+end intrinsic;
+
+intrinsic _Extension(f :: PGGPol) -> PGGFld
+  {"}
+  facs, certs := Factorization(f : Extensions);
+  require #facs eq 1: "f must be irreducible";
+  return certs[1]`Extension;  
+end intrinsic;
+
+intrinsic ChangeRing(f :: PGGPol, F :: PGGFld) -> PGGPol
+  {Changes the base ring of f to F.}
+  return PolynomialRing(F) ! f;
+end intrinsic;
+
+intrinsic IsEisenstein(f :: PGGPol) -> BoolElt
+  {True if f is Eisenstein.}
+  d := Degree(f);
+  return d ge 1 and ValuationEq(Coefficient(f,0),1) and ValuationEq(Coefficient(f,d),0) and forall{i : i in [1..d-1] | ValuationGe(Coefficient(f,i),1)};
+end intrinsic;
+
+intrinsic IsInertial(f :: PGGPol) -> BoolElt
+  {True if f is inertial.}
+  d := Degree(f);
+  return d ge 1 and ValuationEq(Coefficient(f,0),0) and ValuationEq(Coefficient(f,d),0) and forall{i : i in [1..d-1] | ValuationGe(Coefficient(f,i),0)} and IsIrreducible(Polynomial([c@m : c in Coefficients(f)] where _,m:=ResidueClassField(BaseRing(f))));
+end intrinsic;
+
+intrinsic Coefficient(f :: PGGPol, i :: RngIntElt) -> PGGFldElt
+  {The ith coefficient of f.}
+  require i ge 0: "i must be at least 0";
+  if i le Degree(f) then
+    return Coefficients(f)[i+1];
+  else
+    return BaseRing(f) ! 0;
+  end if;
+end intrinsic;
+
+intrinsic IsWeaklyEqual(f :: PGGPolStd, g :: PGGPolStd) -> BoolElt
+  {True if f and g are weakly equal.}
+  return IsWeaklyEqual(Actual(f), Actual(g));
+end intrinsic;
+
+intrinsic Polynomial(cs :: [PGGFldElt]) -> PGGPol
+  {The polynomial with the given coefficients.}
+  return PolynomialRing(Universe(cs)) ! cs;
+end intrinsic;
+
+intrinsic '.'(R :: PGGRngPol, n :: RngIntElt) -> PGGPol
+  {The nth generator of R.}
+  require n eq 1: "n must be 1";
+  return R![0,1];
+end intrinsic;

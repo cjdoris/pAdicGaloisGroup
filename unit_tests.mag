@@ -142,8 +142,8 @@ polys :=
 
 gg_func := procedure (params)
   p,f,pr,G,alg := Explode(params);
-  K := pAdicField(p,pr);
-  R<x> := PolynomialRing(K);
+  K := PGGFldStd_Make(pAdicField(p,pr));
+  R := PolynomialRing(K);
   ans := PGG_GaloisGroup(R ! f : Alg:=alg);
   assert Degree(f) eq Degree(ans);
   assert IsConjugate(Sym(Degree(f)), ans, G);
