@@ -3,7 +3,7 @@ import "Utils.mag": Q, not_implemented, largest_coefficient, reduce_coefficients
 declare type PGGGloMod;
 
 declare type PGGGloMod_Fld: PGGGloMod;
-declare attributes PGGGloMod_Fld: local_field, global_field, embeddings, primes;
+declare attributes PGGGloMod_Fld: local_field, global_field, embeddings, approximations, primes;
 
 declare type PGGGloMod_UPol: PGGGloMod;
 declare attributes PGGGloMod_UPol: local_pol, global_pol;
@@ -24,14 +24,20 @@ declare attributes PGGGloMod_RootOfUnity: primitive_root, aut_powers, sum_powers
 declare type PGGGloMod_RootOfUniformizer: PGGGloMod_Fld, PGGGloMod_UPol;
 declare attributes PGGGloMod_RootOfUniformizer: degree, global_uniformizer, global_zeta_pol;
 
-intrinsic Approximation(m :: PGGGloMod_Fld, x :: PGGFldElt : Pr:=false) -> FldElt
+intrinsic Approximation(m :: PGGGloMod_Fld, x :: PGGFldElt, pr :: RngIntElt) -> FldElt
   {Takes a global approximation to x across all embeddings.}
-  if #m`embeddings eq 1 then
-    return x @@ m`embeddings[1];
+  if #m`approximations eq 1 then
+    return m`approximations[1](x, pr);
   else
-    k := Pr cmpeq false select AbsolutePrecision(x) else Min(AbsolutePrecision(x), Pr);
-    return m`global_field ! CRT([Integers(m`global_field)| x @@ e : e in m`embeddings], [p^k : p in m`primes]);
+    return m`global_field ! CRT([Integers(m`global_field)| a(x,pr) : a in m`approximations], [p^pr : p in m`primes]);
   end if;
+end intrinsic;
+
+intrinsic Approximation(m :: PGGGloMod_Fld, x :: PGGFldElt, pr :: Infty) -> FldElt
+  {Takes a global approximation to x across all embeddings.}
+  require pr eq Infinity(): "expecting positive infinity";
+  require AbsolutePrecision(x) eq pr and IsWeaklyZero(x): "expecting x to be precisely zero";
+  return m`global_field ! 0;
 end intrinsic;
 
 intrinsic GlobalModel(F :: PGGFld) -> PGGGloMod
@@ -40,8 +46,13 @@ intrinsic GlobalModel(F :: PGGFld) -> PGGGloMod
     m := New(PGGGloMod_Rational);
     m`local_field := F;
     m`global_field := Q;
-    m`embeddings := [map<Q -> F | x :-> x, y :-> RationalApproximation(y)>];
-    m`primes := [ideal<Integers(Q) | Prime(F)>];
+    m`embeddings := [map<Q -> F | x :-> x>];
+    m`approximations := [function (y, pr)
+      y := F ! y;
+      assert pr le AbsolutePrecision(y);
+      return RationalApproximation(y);
+    end function];
+    m`primes := [ideal<Z | Prime(F)>];
     return m;
   else
     not_implemented("global_model: non-prime field");
@@ -72,6 +83,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: PGGPol,
       m`global_pol := Polynomial([bm`global_field|0,1]);
       m`global_field := bm`global_field;
       m`embeddings := bm`embeddings;
+      m`approximations := bm`approximations;
       m`primes := bm`primes;
     else
       if BaseField(locext) eq locfld then
@@ -108,7 +120,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: PGGPol,
         end if;
         vprint PGG_GaloisGroup, 1: "pr =", pr;
         PGG_GlobalTimer_Push("approximation");
-        glopol := Polynomial([reduce_coefficients(Approximation(bm, c : Pr:=pr*ramdeg), p^pr) : c in Coefficients(locpol)]);
+        glopol := Polynomial([reduce_coefficients(Approximation(bm, c, pr*ramdeg), p^pr) : c in Coefficients(locpol)]);
         // glopol := Polynomial([reduce_coefficients(c, Prime(K)^pr) : c in Coefficients(glopol0)]);
         vprint PGG_GaloisGroup, 2: "glopol =", glopol;
         PGG_GlobalTimer_Swap("embed");
@@ -140,14 +152,19 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: PGGPol,
       m`local_field := locext;
       m`global_pol := glopol;
       m`global_field := gloext;
-      m`embeddings := [map<gloext -> locext | x :-> (locext2![c@e : c in Eltseq(x)]) @@ isom, y :-> gloext![c@@e : c in fldpad_eltseq(y @ isom)]> where locext2:=locext2s[i] where isom:=isoms[i] where e:=bm`embeddings[i] : i in [1..nembs]];
+      m`embeddings := [map<gloext -> locext | x :-> (locext2![c@e : c in Eltseq(x)]) @@ isom> where locext2:=locext2s[i] where isom:=isoms[i] where e:=bm`embeddings[i] : i in [1..nembs]];
+      m`approximations := [function (y, pr)
+        y := locext ! y;
+        pr0 := Ceiling(pr / ramdeg);
+        return gloext ! [a(c, pr0) : c in Eltseq(y @ isom)];
+      end function where ramdeg:=RamificationDegree(locext) where isom:=isoms[i] where a:=bm`approximations[i] : i in [1..nembs]];
       m`primes := [Factorization(Integers(m`global_field) !! p)[1][1] : p in bm`primes];
     end if;
   else
     vprint PGG_GaloisGroup: "WARNING: not minimizing global coefficients (if the complex precision explodes, or complex root finding fails, this might be why) (it might even hang right here)";
-    vprint PGG_GaloisGroup: "WARNING: assuming coefficients to default precision are sufficient";
+    vprint PGG_GaloisGroup: "WARNING: assuming coefficients to current precision are sufficient";
     m`local_pol := f;
-    m`global_pol := Polynomial([Approximation(bm, c) : c in Coefficients(f)]);
+    m`global_pol := Polynomial([Approximation(bm, c, AbsolutePrecision(c)) : c in Coefficients(f)]);
   end if;
   PGG_GlobalTimer_Pop();
   return m, Whom;
@@ -364,8 +381,10 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUnity, f :: PGGPo
   ps := [ideal<Integers(gL) | [gen @ aut : gen in Generators(p0)]> : aut in gLauts, p0 in p0s];
   // make representative embeddings of gL to L
   Lembs0 := [];
+  Lapprs0 := [];
   for i in [1..#bm`embeddings] do
     e := bm`embeddings[i];
+    a := bm`approximations[i];
     e0 := Membs[i];
     loczpol := Polynomial([K| MaximizeAbsolutePrecision(c @ e0) : c in Coefficients(zpolM)]);
     L2 := ext<K | loczpol>;
@@ -373,15 +392,21 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUnity, f :: PGGPo
     assert ok;
     Append(~Lembs0, map<gL -> L
       | x :-> (&+[L2| (L2.1)^(i-1) * (cs[i]@e) : i in [1..#cs]])@@isom where cs:=Eltseq(x)
-      , y :-> &+[gL| (gL.1)^(i-1) * (cs[i]@@e) : i in [1..#cs]] where cs:=Eltseq(y@isom)
     >);
+    Append(~Lapprs0, function (y, pr)
+      y := L!y;
+      cs := Eltseq(y @ isom);
+      return &+[gL| (gL.1)^(i-1) * a(cs[i], pr) : i in [1..#cs]];
+    end function);
   end for;
   // make all embeddings
-  Lembs := [map<gL -> L | x :-> x @ aut @ e, y :-> y @@ e @@ aut> : aut in gLauts, e in Lembs0];
+  Lembs := [map<gL -> L | x :-> x @ aut @ e> : aut in gLauts, e in Lembs0];
+  Lapprs := [func<y, pr | a(y,pr) @@ aut> : aut in gLauts, a in Lapprs0];
 
   // create the model
   m := New(PGGGloMod_RootOfUnity);
   m`embeddings := Lembs;
+  m`approximations := Lapprs;
   m`primes := ps;
   m`local_field := L;
   m`global_field := gL;
@@ -446,19 +471,28 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer, f ::
   piK := Coefficient(DefiningPolynomial(L, K), 0);
   assert AbsolutePrecision(piK) ge 2;
   assert Valuation(piK) eq 1;
-  gpiK0 := Approximation(bm, piK);
+  gpiK0 := Approximation(bm, piK, 2);
   gpiK := reduce_coefficients(gpiK0, p^2);
   gL := ext<gK | Polynomial([case<i | 0:gpiK, d:1, default: 0> : i in [0..d]])>;
 
   // extend each embedding
   Lembs := [];
-  for e in bm`embeddings do
+  Lapprs := [];
+  for i in [1..#bm`embeddings] do
+    e := bm`embeddings[i];
+    a := bm`approximations[i];
     L2 := ext<K | Polynomial([K| case<i | 0:e(gpiK), d:1, default: 0> : i in [0..d]])>;
     ok, isom := HasIsomorphism(L, L2, K);
     assert ok;
     Append(~Lembs, map<gL -> L
       | x :-> (&+[L2| (cs[i]@e) * (L2.1)^(i-1) : i in [1..#cs]])@@isom where cs:=Eltseq(x)
-      , y :-> &+[gL| (cs[i]@@e) * (gL.1)^(i-1) : i in [1..#cs]] where cs:=Eltseq(y@isom)>);
+    >);
+    Append(~Lapprs, function (y, pr)
+      y := L ! y;
+      pr0 := Ceiling(pr / d);
+      cs := Eltseq(y @ isom);
+      return &+[gL| a(cs[i], pr0) * (gL.1)^(i-1) : i in [1..#cs]];
+    end function);
   end for;
 
   // extend each prime
@@ -467,6 +501,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer, f ::
   // make the model
   m := New(PGGGloMod_RootOfUniformizer);
   m`embeddings := Lembs;
+  m`approximations := Lapprs;
   m`primes := ps;
   m`local_field := L;
   m`global_field := gL;
