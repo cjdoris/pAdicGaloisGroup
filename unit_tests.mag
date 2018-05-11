@@ -42,13 +42,7 @@ if assigned Verbosity then
   SetVerbose("PGG_GaloisGroup", eval Verbosity);
 end if;
 
-if assigned UseNew and eval UseNew then
-  PGG_UseExactpAdicsFactorization();
-  PGG_UseExactpAdicsRoots();
-else
-  PGG_UseBuiltinFactorization();
-  PGG_UseBuiltinRoots();
-end if;
+Time := assigned Time and eval Time;
 
 Sym := SymmetricGroup;
 Wr := WreathProduct;
@@ -140,16 +134,81 @@ polys :=
   where DP:=DirectProduct
 ;
 
-gg_func := procedure (params)
-  p,f,pr,G,alg := Explode(params);
-  K := PGGFldStd_Make(pAdicField(p,pr));
-  R := PolynomialRing(K);
-  ans := PGG_GaloisGroup(R ! f : Alg:=alg);
-  assert Degree(f) eq Degree(ans);
-  assert IsConjugate(Sym(Degree(f)), ans, G);
-end procedure;
+function gg_func(mode)
+  case mode:
+  when "std", "stdnew":
+    return procedure (params)
+      case mode:
+      when "std":
+        PGG_UseBuiltinRoots();
+        PGG_UseBuiltinFactorization();
+      when "stdnew":
+        PGG_UseExactpAdicsRoots();
+        PGG_UseExactpAdicsFactorization();
+      else
+        assert false;
+      end case;
+      p,f,pr,G,alg := Explode(params);
+      K := PGGFldStd_Make(pAdicField(p,pr));
+      R := PolynomialRing(K);
+      xf := R ! f;
+      ans := PGG_GaloisGroup(xf : Alg:=alg, Time:=Time);
+      assert Degree(f) eq Degree(ans);
+      assert IsConjugate(Sym(Degree(f)), ans, G);
+    end procedure;
+  when "exact":
+    return procedure (params)
+      // even though we are using exact p-adics, the Builtin and SinglyRamified strategies use normal p-adics internally, and in particular SinglyRamified does factoring; hence we set the factoring algorithm so that we don't get warnings that it is unset. This could be parameterised, but since we have exact p-adics, we may as well use the factoring algorithm they supply; if there are problems with the other algorithms, this should be picked up by the "std" unit tests.
+      PGG_UseExactpAdicsRoots();
+      PGG_UseExactpAdicsFactorization();
+      // check the right packages are attached
+      ok, ExactpAdicField := IsIntrinsic("ExactpAdicField");
+      error if not ok, "ExactpAdics package not attached";
+      ok, PGGFldExact_Make := IsIntrinsic("PGGFldExact_Make");
+      error if not ok, "spec_ExactpAdics not attached";
+      ok, swa := IsIntrinsic("ExactpAdics_SetWarningAction");
+      assert ok;
+      swa("get_approx", "Ignore");
+      // set up the problem
+      p,f,pr,G,alg := Explode(params);
+      K := PGGFldExact_Make(ExactpAdicField(p));
+      K`strategy := [* <"limit", pr>, 100, <"randomize">, <"double"> *];
+      R := PolynomialRing(K);
+      xf := R ! f;
+      // IncreaseBaselinePrecision(xf, pr);
+      // find the Galois group
+      ans := PGG_GaloisGroup(xf : Alg:=alg, Time:=Time);
+      // check the answer
+      assert Degree(f) eq Degree(ans);
+      assert IsConjugate(Sym(Degree(f)), ans, G);  
+    end procedure;
+  else
+    assert false;
+  end case;
+end function;
 
-gg_tests := [rec<TEST | name:="GaloisGroup", func:=gg_func, params:=<p,f,pr,G,alg>, filter:=afilt2 join ffilt1 join {x : x in Split(alg,"[], ") | x in Filter}> : algdata in algs, fdata in pdata[2], pdata in polys | ffilt1 subset afilt1 and afilt2 subset ffilt2 where alg,afilt1,afilt2 := Explode(algdata) where f,pr,G,ffilt1,ffilt2 := Explode(fdata) where p:=pdata[1]];
+// has_exact := IsIntrinsic("ExactpAdics_Version");
+// if not has_exact then
+//   print "Warning: Not testing ExactpAdics functionality ('stdnew' and 'exact')";
+// end if;
+
+gg_tests := [
+  rec<TEST |
+    name:="GaloisGroup",
+    func:=gg_func(mode),
+    params:=<p,f,pr,G,alg>,
+    filter:=afilt2 join ffilt1 join {x : x in Split(alg,"[], ") | x in Filter join Unfilter} join {mode} join {"gg"}
+  >
+  : mode in ["std", "stdnew", "exact"],
+    algdata in algs,
+    fdata in pdata[2],
+    pdata in polys
+  | ffilt1 subset afilt1
+    and afilt2 subset ffilt2
+    where alg,afilt1,afilt2 := Explode(algdata)
+    where f,pr,G,ffilt1,ffilt2 := Explode(fdata)
+    where p:=pdata[1]
+];
 
 all_tests := gg_tests;
 

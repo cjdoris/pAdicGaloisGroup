@@ -40,18 +40,14 @@ intrinsic Approximation(m :: PGGGloMod_Fld, x :: PGGFldElt, pr :: Infty) -> FldE
   return m`global_field ! 0;
 end intrinsic;
 
-intrinsic GlobalModel(F :: PGGFld) -> PGGGloMod
+intrinsic GlobalModel(F :: PGGFldWrap) -> PGGGloMod
   {A global model for F.}
   if IsPrimeField(F) then
     m := New(PGGGloMod_Rational);
     m`local_field := F;
     m`global_field := Q;
     m`embeddings := [map<Q -> F | x :-> x>];
-    m`approximations := [function (y, pr)
-      y := F ! y;
-      assert pr le AbsolutePrecision(y);
-      return RationalApproximation(y);
-    end function];
+    m`approximations := [func<y, pr | RationalApproximation(F!y, pr)>];
     m`primes := [ideal<Z | Prime(F)>];
     return m;
   else
@@ -64,7 +60,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model, f :: PGGPol, bm :: PGG
   error "not implemented: GlobalModel:", Type(alg), Type(f), Type(bm);
 end intrinsic;
 
-intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: PGGPol, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: PGGPolWrap, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
   {"}
   locW := PGGConj_Symmetric_Make(f : GaloisGroupAlg:=alg`galois_group_alg, TopField:=TopField);
   gloW := PGGGrpPerm_Symmetric_Make(Degree(f));
@@ -102,7 +98,6 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: PGGPol,
         not_implemented("symmetric global models for ramified but not totally ramified extensions");
       end if;
       nembs := #bm`embeddings;
-      assert IsWeaklyEqual(DefiningPolynomial(locext), locpol);
       // minimize the coefficients of glopol
       K := BaseRing(locpol);
       p := Prime(K);
@@ -170,7 +165,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: PGGPol,
   return m, Whom;
 end intrinsic;
 
-intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Factors, f :: PGGPol, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Factors, f :: PGGPolWrap, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
   {"}
   if TopField cmpeq false then
     PGG_GlobalTimer_Push("factorize");
@@ -190,7 +185,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Factors, f :: PGGPol, b
   return m, hom;
 end intrinsic;
 
-intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RamTower, f :: PGGPol, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RamTower, f :: PGGPolWrap, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
   {"}
   if TopField cmpeq false then
     PGG_GlobalTimer_Push("factorize");
@@ -224,7 +219,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RamTower, f :: PGGPol, 
   return m, hom;
 end intrinsic;
 
-intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Select, f :: PGGPol, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Select, f :: PGGPolWrap, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
   {"}
   PGG_GlobalTimer_Push("predicates");
   K := BaseRing(f);
@@ -258,7 +253,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Select, f :: PGGPol, bm
   error "cases were not exhaustive";
 end intrinsic;
 
-intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUnity, f :: PGGPol, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUnity, f :: PGGPolWrap, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
   {"}
   // check the inputs
   K := BaseRing(f);
@@ -391,7 +386,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUnity, f :: PGGPo
     ok, isom := HasIsomorphism(L, L2, K);
     assert ok;
     Append(~Lembs0, map<gL -> L
-      | x :-> (&+[L2| (L2.1)^(i-1) * (cs[i]@e) : i in [1..#cs]])@@isom where cs:=Eltseq(x)
+      | x :-> (&+[L2| Generator(L2)^(i-1) * (L2!(cs[i]@e)) : i in [1..#cs]])@@isom where cs:=Eltseq(x)
     >);
     Append(~Lapprs0, function (y, pr)
       y := L!y;
@@ -432,7 +427,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUnity, f :: PGGPo
   return m, Whom;
 end intrinsic;
 
-intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer, f :: PGGPol, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer, f :: PGGPolWrap, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
   {"}
 
   // check the inputs
@@ -468,9 +463,12 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer, f ::
   assert IsDivisibleBy(EulerPhi(d), #zauts);
 
   // the global field
-  piK := Coefficient(DefiningPolynomial(L, K), 0);
-  assert AbsolutePrecision(piK) ge 2;
-  assert Valuation(piK) eq 1;
+  piK := -(Generator(L)^d);
+  while Parent(piK) ne K do
+    piK := Eltseq(piK)[1];
+  end while;
+  // piK := Coefficient(DefiningPolynomial(L, K), 0);
+  assert ValuationEq(piK, 1);
   gpiK0 := Approximation(bm, piK, 2);
   gpiK := reduce_coefficients(gpiK0, p^2);
   gL := ext<gK | Polynomial([case<i | 0:gpiK, d:1, default: 0> : i in [0..d]])>;
@@ -485,7 +483,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer, f ::
     ok, isom := HasIsomorphism(L, L2, K);
     assert ok;
     Append(~Lembs, map<gL -> L
-      | x :-> (&+[L2| (cs[i]@e) * (L2.1)^(i-1) : i in [1..#cs]])@@isom where cs:=Eltseq(x)
+      | x :-> (&+[L2| (L2!(cs[i]@e)) * Generator(L2)^(i-1) : i in [1..#cs]])@@isom where cs:=Eltseq(x)
     >);
     Append(~Lapprs, function (y, pr)
       y := L ! y;

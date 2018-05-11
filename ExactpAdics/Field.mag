@@ -1,0 +1,274 @@
+import "../Utils.mag": Z, Q, not_implemented, ramification_tower, tower, fldpad_eltseq;
+
+use_strategy := func< | ExactpAdics_Implementation() eq 1>;
+
+declare type PGGFldExact[PGGFldExactElt]: PGGFldWrap;
+declare attributes PGGFldExact: strategy;
+declare type PGGFldExactElt: PGGFldWrapElt;
+declare attributes PGGFldExactElt: strategy;
+
+intrinsic PGGFldExact_Make(K :: FldPadExact) -> PGGFldExact
+  {Converts K to our representation.}
+  F := New(PGGFldExact);
+  F`actual := K;
+  return F;
+end intrinsic;
+
+intrinsic PGGFldExact_Make(p :: RngIntElt) -> PGGFldExact
+  {The exact p-adic field.}
+  return PGGFldExact_Make(ExactpAdicField(p));
+end intrinsic;
+
+intrinsic PGGFldExact_Make(K :: FldPadExact, F :: PGGFldExact) -> PGGFldExact
+  {The p-adic field K as an extension of F.}
+  t := [];
+  L := K;
+  while true do
+    if L eq Actual(F) then
+      break;
+    elif IsPrimeField(L) then
+      error "K is not an extension of F";
+    else
+      Append(~t, L);
+      L := BaseField(L);
+    end if;
+  end while;
+  E := F;
+  for L in Reverse(t) do
+    E0 := E;
+    E := PGGFldExact_Make(L);
+    E`base_field := E0;
+  end for;
+  return E;
+end intrinsic;
+
+intrinsic IsCoercible(F :: PGGFldExact, X) -> BoolElt, .
+  {True if X is coercible to an element of F.}
+  ok, Y := IsCoercible(Actual(F), X);
+  if ok then
+    x := New(PGGFldExactElt);
+    x`actual := Y;
+    x`parent := F;
+    return true, x;
+  elif assigned Y then
+    return false, Y;
+  else
+    return false, "not coercible to the actual field";
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(F :: PGGFldExact, X :: PGGFldExactElt) -> BoolElt, .
+  {"}
+  if Parent(X) eq F then
+    return true, X;
+  else
+    return IsCoercible(F, Actual(X));
+  end if;
+end intrinsic;
+
+intrinsic IsCoercible(F :: PGGFldExact, X :: []) -> BoolElt, .
+  {"}
+  if IsPrimeField(F) then
+    return false, _;
+  end if;
+  ok, Y := CanChangeUniverse(X, BaseField(F));
+  if ok then
+    return true, F ! Actual(F) ! [Actual(x) : x in Y];
+  else
+    return false, "coefficients not coercible to base field" cat (assigned Y select ": " cat Y else "");
+  end if;
+end intrinsic;
+
+intrinsic 'eq'(E :: PGGFldExact, F :: PGGFldExact) -> BoolElt, .
+  {Equality.}
+  return Actual(E) eq Actual(F);
+end intrinsic;
+
+intrinsic Prime(F :: PGGFldExact) -> RngIntElt
+  {The p in p-adic.}
+  return Prime(Actual(F));
+end intrinsic;
+
+intrinsic PrecisionStrategy(F :: PGGFldExact) -> .
+  {The precision strategy to use with F.}
+  return use_strategy() select false else assigned F`strategy select F`strategy else assigned F`base_field select PrecisionStrategy(F`base_field) else "default";
+end intrinsic;
+
+intrinsic PrecisionStrategy(x :: PGGFldExactElt) -> .
+  {The precision strategy to use with x.}
+  return use_strategy() select false else assigned x`strategy select x`strategy else PrecisionStrategy(Parent(x));
+end intrinsic;
+
+intrinsic IsPrimeField(F :: PGGFldExact) -> BoolElt
+  {True if F is the prime p-adic field Q_p.}
+  return IsPrimeField(Actual(F));
+end intrinsic;
+
+intrinsic AbsolutePrecision(x :: PGGFldExactElt) -> RngIntElt
+  {The absolute precision of x.}
+  return Value(AbsolutePrecision(Actual(x)));
+end intrinsic;
+
+intrinsic RationalApproximation(x :: PGGFldExactElt, pr :: RngIntElt) -> FldRatElt
+  {A rational approximation of x to absolute precision pr.}
+  require IsPrimeField(Parent(x)): "x must lie in a prime field";
+  return Q ! Approximation(Actual(x), pr);
+end intrinsic;
+
+intrinsic IsWeaklyZero(x :: PGGFldExactElt) -> BoolElt
+  {True if x is weakly zero.}
+  return IsWeaklyZero(Actual(x));
+end intrinsic;
+
+intrinsic _DefiningPolynomial(E :: PGGFldExact) -> PGGPolExact
+  {The defining polynomial of E over its base field.}
+  return PolynomialRing(BaseField(E)) ! DefiningPolynomial(Actual(E));
+end intrinsic;
+
+intrinsic Degree(E :: PGGFldExact, F :: PGGFldExact) -> RngIntElt
+  {The degree of E/F.}
+  return Degree(Actual(E), Actual(F));
+end intrinsic;
+
+intrinsic InertiaDegree(E :: PGGFldExact, F :: PGGFldExact) -> RngIntElt
+  {The inertia degree of E/F.}
+  return InertiaDegree(Actual(E), Actual(F));
+end intrinsic;
+
+intrinsic RamificationDegree(E :: PGGFldExact, F :: PGGFldExact) -> RngIntElt
+  {The ramification degree of E/F.}
+  return RamificationDegree(Actual(E), Actual(F));
+end intrinsic;
+
+intrinsic Degree(E :: PGGFldExact) -> RngIntElt
+  {The degree of E over its base field.}
+  return Degree(Actual(E));
+end intrinsic;
+
+intrinsic InertiaDegree(E :: PGGFldExact) -> RngIntElt
+  {The inertia degree of E over its base field.}
+  return InertiaDegree(Actual(E));
+end intrinsic;
+
+intrinsic RamificationDegree(E :: PGGFldExact) -> RngIntElt
+  {The ramification degree of E over its base field.}
+  return RamificationDegree(Actual(E));
+end intrinsic;
+
+intrinsic AbsoluteDegree(E :: PGGFldExact) -> RngIntElt
+  {The absolute degree of E.}
+  return AbsoluteDegree(Actual(E));
+end intrinsic;
+
+intrinsic AbsoluteInertiaDegree(E :: PGGFldExact) -> RngIntElt
+  {The absolute inertia degree of E.}
+  return AbsoluteInertiaDegree(Actual(E));
+end intrinsic;
+
+intrinsic AbsoluteRamificationDegree(E :: PGGFldExact) -> RngIntElt
+  {The absolute ramification degree of E.}
+  return AbsoluteRamificationDegree(Actual(E));
+end intrinsic;
+
+intrinsic ValuationEq(x :: PGGFldExactElt, n :: RngIntElt) -> BoolElt
+  {True if the valuation of x is n.}
+  return ValuationEq(Actual(x), n);
+end intrinsic;
+
+intrinsic ValuationGe(x :: PGGFldExactElt, n :: RngIntElt) -> BoolElt
+  {True if the valuation of x is at least n.}
+  return ValuationGe(Actual(x), n);
+end intrinsic;
+
+intrinsic MaximizeAbsolutePrecision(x :: PGGFldExactElt) -> PGGFldExactElt
+  {Maximizes the abolute precision of x. In this case, does nothing.}
+  return x;
+end intrinsic;
+
+intrinsic ExtConstructor(F :: PGGFldExact, t :: Tup) -> PGGFldExact
+  {An extension of F defined by t.}
+  if #t eq 1 and Type(t[1]) eq PGGPolExact then
+    return PGGFldExact_Make(ext<Actual(F) | Actual(t[1])>, F);
+  elif #t eq 1 and Type(t[1]) eq FldPadExact then
+    PGGFldExact_Make(t[1], F);
+  else
+    error "bad constructor";
+  end if;
+end intrinsic;
+
+intrinsic HasIsomorphism(E1 :: PGGFldExact, E2 :: PGGFldExact, F :: PGGFldExact) -> BoolElt, .
+  {True if there is an isomorphism E1 to E2 fixing F.}
+  if use_strategy() then
+    ok, isom := HasIsomorphism(Actual(E1), Actual(E2), Actual(F) : Strategy:=PrecisionStrategy(E1));
+  else
+    ok, isom := HasIsomorphism(Actual(E1), Actual(E2), Actual(F));
+  end if;
+  if ok then
+    return true, map<E1 -> E2 | x :-> Actual(x) @ isom, y :-> Actual(y) @@ isom>;
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic _ResidueClassField(F :: PGGFldExact) -> FldFin, Map
+  {The residue class field of F.}
+  FF, m := ResidueClassField(Actual(F));
+  return FF, map<F -> FF | x :-> Actual(x) @ m, y :-> y @@ m>;
+end intrinsic;
+
+intrinsic IsExtensionOf(E :: PGGFldExact, F :: PGGFldExact) -> BoolElt
+  {True if E is an extension of F.}
+  ok := IsExtensionOf(Actual(E), Actual(F));
+  return ok;
+end intrinsic;
+
+intrinsic RamificationTower(E :: PGGFldExact, F :: PGGFldExact) -> []
+  {The ramification tower of extensions from F to E.}
+  t := use_strategy()
+    select RamificationFiltration(Actual(E), Actual(F) : Strategy:=PrecisionStrategy(E))
+    else   RamificationFiltration(Actual(E), Actual(F));
+  assert t[1] eq Actual(F);
+  assert Degree(t[#t], t[1]) eq Degree(E, F);
+  return [i eq 1 select F else PGGFldExact_Make(t[i], Self(i-1)) : i in [1..#t]];
+end intrinsic;
+
+intrinsic _Eltseq(x :: PGGFldExactElt) -> []
+  {Represents x as a sequence of coefficients in the base field.}
+  return [BaseField(Parent(x))| c : c in Eltseq(Actual(x))];
+end intrinsic;
+
+intrinsic '&+'(xs :: [PGGFldExactElt]) -> PGGFldExactElt
+  {Sum.}
+  return Universe(xs) ! &+[Actual(Universe(xs))| Actual(x) : x in xs];
+end intrinsic;
+
+intrinsic '&*'(xs :: [PGGFldExactElt]) -> PGGFldExactElt
+  {Product.}
+  return Universe(xs) ! &*[Actual(Universe(xs))| Actual(x) : x in xs];
+end intrinsic;
+
+intrinsic DefiningPolynomial(E :: PGGFldExact, F :: PGGFldExact) -> PGGPolExact
+  {The defining polynomial of E/F.}
+  return PolynomialRing(F) ! DefiningPolynomial(Actual(E), Actual(F));
+end intrinsic;
+
+intrinsic _Generator(E :: PGGFldExact) -> PGGFldExactElt
+  {Generator of E over its base field.}
+  return E ! (Actual(E).1);
+end intrinsic;
+
+intrinsic '^'(x :: PGGFldExactElt, n :: RngIntElt) -> PGGFldElt
+  {Power.}
+  return Parent(x) ! (Actual(x)^n);
+end intrinsic;
+
+intrinsic '-'(x :: PGGFldExactElt) -> PGGFldStdElt
+  {Negation.}
+  return Parent(x) ! (-Actual(x));
+end intrinsic;
+
+intrinsic AutomorphismGroup(E :: PGGFldExact, F :: PGGFldExact) -> GrpPerm
+  {The automorphism group of `E/F`.}
+  G, m := AutomorphismGroup(Actual(E), Actual(F));
+  return G;
+end intrinsic;

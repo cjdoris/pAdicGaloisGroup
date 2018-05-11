@@ -1,14 +1,21 @@
 import "Utils.mag": not_implemented;
 
+// base type
 declare type PGGRngPol[PGGPol];
 declare attributes PGGRngPol: base_ring;
 declare attributes PGGPol: parent, coefficients, roots, num_roots, has_root, factorization, factor_degrees, extension, degree, splitting_field;
 
-declare type PGGRngPolStd[PGGPolStd]: PGGRngPol;
-declare attributes PGGRngPolStd: actual;
-declare type PGGPolStd: PGGPol;
-declare attributes PGGPolStd: actual;
+// base wrapping type
+declare type PGGRngPolWrap[PGGPolWrap]: PGGRngPol;
+declare attributes PGGRngPolWrap: actual;
+declare type PGGPolWrap: PGGPol;
+declare attributes PGGPolWrap: actual;
 
+// standard p-adics (FldPad)
+declare type PGGRngPolStd[PGGPolStd]: PGGRngPolWrap;
+declare type PGGPolStd: PGGPolWrap;
+
+// group representation
 declare type PGGRngPolGrp[PGGPolGrp]: PGGRngPol;
 declare type PGGPolGrp: PGGPol;
 declare attributes PGGPolGrp: factor_fields, galois_group_quo;
@@ -116,10 +123,8 @@ intrinsic IsCoercible(R :: PGGRngPolStd, X) -> BoolElt, .
   ok, Y := IsCoercible(Actual(R), X);
   if ok then
     return true, Element(R, Y);
-  elif assigned Y then
-    return false, Y;
   else
-    return false, "not coercible to the actual ring";
+    return false, "not coercible to the actual ring" cat (assigned Y select ": " cat Y else "");
   end if;
 end intrinsic;
 
@@ -137,10 +142,8 @@ intrinsic IsCoercible(R :: PGGRngPolStd, X :: []) -> BoolElt, .
   ok, Y := CanChangeUniverse(X, BaseRing(R));
   if ok then
     return true, Element(R, Actual(R)![Actual(x) : x in Y]);
-  elif assigned Y then
-    return false, Y;
   else
-    return false, "not coercible to base ring";
+    return false, "not coercible to base ring" cat (assigned Y select ": " cat Y else "");
   end if;
 end intrinsic;
 
@@ -394,23 +397,6 @@ intrinsic '.'(R :: PGGRngPol, n :: RngIntElt) -> PGGPol
   return R![0,1];
 end intrinsic;
 
-intrinsic DefiningPolynomial(E :: PGGFldGrp, F :: PGGFldGrp) -> PGGPolGrp
-  {The defining polynomial of E over F.}
-  f := New(PGGPolGrp);
-  f`parent := PolynomialRing(F);
-  f`factor_fields := [E];
-  f`factorization := [*true,[f],[rec<CERT | Extension:=E>]*];
-  return f;
-end intrinsic;
-
-intrinsic DefiningPolynomial(F :: PGGFldGrp) -> PGGPolGrp
-  {The defining polynomial of F over the base field.}
-  if not assigned F`defining_polynomial then
-    F`defining_polynomial := DefiningPolynomial(F, BaseField(F));
-  end if;
-  return F`defining_polynomial;
-end intrinsic;
-
 intrinsic Print(f :: PGGPolGrp)
   {Print.}
   printf "Polynomial of degree %o", Degree(f);
@@ -469,4 +455,21 @@ intrinsic PGGPolGrp_Make(G :: GrpPerm) -> PGGPolGrp
   f := &*[PolynomialRing(BaseField(U))| DefiningPolynomial(Subfield(U,Stabilizer(G,Rep(o)))) : o in Orbits(G)];
   f`galois_group_quo := hom<G -> G | [G.i : i in [1..Ngens(G)]]>;
   return f;
+end intrinsic;
+
+intrinsic DefiningPolynomial(E :: PGGFldGrp, F :: PGGFldGrp) -> PGGPolGrp
+  {The defining polynomial of E over F.}
+  f := New(PGGPolGrp);
+  f`parent := PolynomialRing(F);
+  f`factor_fields := [E];
+  f`factorization := [*true,[f],[rec<CERT | Extension:=E>]*];
+  return f;
+end intrinsic;
+
+intrinsic DefiningPolynomial(F :: PGGFldGrp) -> PGGPolGrp
+  {The defining polynomial of F over the base field.}
+  if not assigned F`defining_polynomial then
+    F`defining_polynomial := DefiningPolynomial(F, BaseField(F));
+  end if;
+  return F`defining_polynomial;
 end intrinsic;

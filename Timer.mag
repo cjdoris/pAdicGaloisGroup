@@ -91,6 +91,17 @@ intrinsic Update(t :: PGGTimer, label :: [MonStgElt])
   Update(t, 0, label);
 end intrinsic;
 
+intrinsic GetLabel(t :: PGGTimer) -> []
+  {Gets the current label.}
+  return t`current_label;
+end intrinsic;
+
+intrinsic SetLabel(t :: PGGTimer, label :: [MonStgElt])
+  {Sets the label.}
+  Update(t, t`current_label);
+  t`current_label := label;
+end intrinsic;
+
 intrinsic Push(t :: PGGTimerBase, x :: MonStgElt)
   {Assings time to the current label, then appends x to the label.}
   Update(t, t`current_label);

@@ -1,14 +1,21 @@
-import "Utils.mag": is_extension_of, xdiv, ramification_tower, precision_error, trim_apr, not_implemented;
+import "Utils.mag": is_extension_of, xdiv, ramification_tower, precision_error, trim_apr, not_implemented, Q, Z;
 
+// Base type for any representation of a p-adic field
 declare type PGGFld[PGGFldElt];
 declare attributes PGGFld: polynomial_ring;
 declare attributes PGGFldElt: parent;
 
-declare type PGGFldStd[PGGFldStdElt]: PGGFld;
-declare attributes PGGFldStd: actual, base_field, defining_polynomial;
-declare type PGGFldStdElt: PGGFldElt;
-declare attributes PGGFldStdElt: actual;
+// Base type for any p-adic field wrapping another representation
+declare type PGGFldWrap[PGGFldWrapElt]: PGGFld;
+declare attributes PGGFldWrap: actual, base_field, defining_polynomial, residue_class_field, generator;
+declare type PGGFldWrapElt: PGGFldElt;
+declare attributes PGGFldWrapElt: actual, eltseq;
 
+// Wraps Magma's standard p-adics (FldPad)
+declare type PGGFldStd[PGGFldStdElt]: PGGFldWrap;
+declare type PGGFldStdElt: PGGFldWrapElt;
+
+// Represents fields as the fixed field of some subgroup of some universal galois group
 declare type PGGStrFldGrp[PGGFldGrp];
 declare attributes PGGStrFldGrp: group, prime, ramification_groups, top_field, base_field, ramification_fields, lower_breaks;
 declare type PGGFldGrp: PGGFld;
@@ -50,12 +57,12 @@ intrinsic PGGFldStd_Make(K :: FldPad, F :: PGGFldStd) -> PGGFldStd
   return E;
 end intrinsic;
 
-intrinsic Print(F :: PGGFldStd, lvl :: MonStgElt)
+intrinsic Print(F :: PGGFldWrap, lvl :: MonStgElt)
   {Print.}
-  printf "%O", F`actual, lvl;
+  printf "%O", Actual(F), lvl;
 end intrinsic;
 
-intrinsic Actual(F :: PGGFldStd) -> FldPad
+intrinsic Actual(F :: PGGFldWrap) -> FldPad
   {The actual field.}
   return F`actual;
 end intrinsic;
@@ -225,9 +232,9 @@ intrinsic Element(F :: PGGFldStd, actual :: FldPadElt) -> PGGFldStdElt
   return x;
 end intrinsic;
 
-intrinsic Print(x :: PGGFldStdElt, lvl :: MonStgElt)
+intrinsic Print(x :: PGGFldWrapElt, lvl :: MonStgElt)
   {Print.}
-  printf "%o", x`actual, lvl;
+  printf "%o", Actual(x), lvl;
 end intrinsic;
 
 intrinsic RationalApproximation(x :: PGGFldStdElt) -> FldRatElt
@@ -236,7 +243,7 @@ intrinsic RationalApproximation(x :: PGGFldStdElt) -> FldRatElt
   return RationalField() ! Actual(x);
 end intrinsic;
 
-intrinsic Actual(x :: PGGFldStdElt) -> FldPadElt
+intrinsic Actual(x :: PGGFldWrapElt) -> FldPadElt
   {The actual value of x.}
   return x`actual;
 end intrinsic;
@@ -304,10 +311,24 @@ intrinsic ValuationGe(x :: PGGFldStdElt, n :: RngIntElt) -> BoolElt
   end if;
 end intrinsic;
 
-intrinsic ResidueClassField(F :: PGGFldStd) -> FldFin, Map
+intrinsic ResidueClassField(F :: PGGFldWrap) -> FldFin, Map
   {The residue class field of F.}
+  if not assigned F`residue_class_field then
+    FF, m := _ResidueClassField(F);
+    assert Type(FF) eq FldFin;
+    assert Characteristic(FF) eq Prime(F);
+    assert Type(m) eq Map;
+    assert Domain(m) eq F;
+    assert Codomain(m) eq FF;
+    F`residue_class_field := [* FF, m *];
+  end if;
+  return Explode(F`residue_class_field);
+end intrinsic;
+
+intrinsic _ResidueClassField(F :: PGGFldStd) -> FldFin, Map
+  {"}
   FF, m := ResidueClassField(Integers(Actual(F)));
-  return FF, map<F -> FF | x :-> Actual(x) @ m, y :-> F ! Actual(F) ! (y @@ m)>;
+  return FF, map<F -> FF | x :-> Actual(x) @ m, y :-> Actual(F) ! (y @@ m)>;
 end intrinsic;
 
 intrinsic ChangeAbsolutePrecision(x :: PGGFldStdElt, n :: RngIntElt) -> PGGFldStdElt
@@ -395,13 +416,18 @@ intrinsic IsExtensionOf(L :: PGGFldStd, K :: PGGFldStd) -> BoolElt, []
   end if;
 end intrinsic;
 
-intrinsic BaseField(F :: PGGFldStd) -> PGGFldStd
+intrinsic BaseField(F :: PGGFldWrap) -> PGGFldWrap
   {The base field of F.}
   if not assigned F`base_field then
     require not IsPrimeField(F): "F must be an extension";
-    F`base_field := PGGFldStd_Make(BaseField(Actual(F)));
+    F`base_field := _BaseField(F);
   end if;
   return F`base_field;
+end intrinsic;
+
+intrinsic _BaseField(F :: PGGFldStd) -> PGGFldStd
+  {"}
+  return PGGFldStd_Make(BaseField(Actual(F)));
 end intrinsic;
 
 intrinsic MaximizeAbsolutePrecision(x :: PGGFldStdElt) -> PGGFldStdElt
@@ -413,12 +439,17 @@ intrinsic MaximizeAbsolutePrecision(x :: PGGFldStdElt) -> PGGFldStdElt
   end if;
 end intrinsic;
 
-intrinsic DefiningPolynomial(E :: PGGFldStd) -> PGGPolStd
+intrinsic DefiningPolynomial(E :: PGGFldWrap) -> PGGPol
   {The defining polynomial of E over its base field.}
   if not assigned E`defining_polynomial then
-    E`defining_polynomial := PolynomialRing(BaseField(E)) ! DefiningPolynomial(Actual(E));
+    E`defining_polynomial := _DefiningPolynomial(E);
   end if;
   return E`defining_polynomial;
+end intrinsic;
+
+intrinsic _DefiningPolynomial(E :: PGGFldStd) -> PGGPolStd
+  {"}
+  return PolynomialRing(BaseField(E)) ! DefiningPolynomial(Actual(E));
 end intrinsic;
 
 intrinsic DefiningPolynomial(E :: PGGFldStd, F :: PGGFldStd) -> PGGPolStd
@@ -437,15 +468,9 @@ intrinsic ExtConstructor(F :: PGGFldStd, t :: Tup) -> PGGFldStd
   end if;
 end intrinsic;
 
-intrinsic Eltseq(x :: PGGFldStdElt) -> []
-  {The coefficients of x as a vector over the base field.}
-  F := Parent(x);
-  if AbsolutePrecision(x) eq Infinity() then
-    assert IsWeaklyZero(x);
-    return [BaseField(F)| 0 : i in [1..Degree(F)]];
-  else
-    return [BaseField(F)| c : c in  Eltseq(Actual(x))];
-  end if;
+intrinsic '&+'(xs :: [PGGFldElt]) -> PGGFldElt
+  {Sum.}
+  not_implemented("&+:", ElementType(Universe(xs)));
 end intrinsic;
 
 intrinsic '&+'(xs :: [PGGFldStdElt]) -> PGGFldStdElt
@@ -461,6 +486,11 @@ intrinsic '+'(x :: PGGFldElt, y :: PGGFldElt) -> PGGFldElt
   return &+[F|x,y];
 end intrinsic;
 
+intrinsic '&*'(xs :: [PGGFldElt]) -> PGGFldElt
+  {Product.}
+  not_implemented("&*:", ElementType(Universe(xs)));
+end intrinsic;
+
 intrinsic '&*'(xs :: [PGGFldStdElt]) -> PGGFldStdElt
   {Product.}
   F := Universe(xs);
@@ -474,9 +504,14 @@ intrinsic '*'(x :: PGGFldElt, y :: PGGFldElt) -> PGGFldElt
   return &*[F|x,y];
 end intrinsic;
 
-intrinsic '^'(x :: PGGFldElt, n :: RngIntElt) -> PGGFldElt
+intrinsic '^'(x :: PGGFldStdElt, n :: RngIntElt) -> PGGFldElt
   {Power.}
   return Parent(x) ! (Actual(x)^n);
+end intrinsic;
+
+intrinsic '-'(x :: PGGFldStdElt) -> PGGFldStdElt
+  {Negation.}
+  return Parent(x) ! (-Actual(x));
 end intrinsic;
 
 intrinsic ExistsCoveringStructure(E :: PGGFldStd, F :: PGGFldStd) -> BoolElt, .
@@ -824,3 +859,55 @@ intrinsic InertiaDegree(F :: PGGFldGrp) -> RngIntElt
   end if;
   return F`inertia_degree;
 end intrinsic;
+
+intrinsic RationalApproximation(x :: PGGFldStdElt, pr :: RngIntElt) -> FldRatElt
+  {A rational approximation of x, to absolute precision pr.}
+  ok, xx := IsCoercible(Q, Actual(x));
+  require ok: xx;
+  require pr le AbsolutePrecision(x): "pr must be at most the absolute precision of x";
+  return xx;
+end intrinsic;
+
+intrinsic Eltseq(x :: PGGFldWrapElt) -> []
+  {Represents x as a sequence of elements of its base field.}
+  if not assigned x`eltseq then
+    require not IsPrimeField(Parent(x)): "x must lie in an extension";
+    cs := _Eltseq(x);
+    assert Universe(cs) eq BaseField(Parent(x));
+    x`eltseq := cs;
+  end if;
+  return x`eltseq;
+end intrinsic;
+
+intrinsic _Eltseq(x :: PGGFldStdElt) -> []
+  {The coefficients of x as a vector over the base field.}
+  F := Parent(x);
+  if AbsolutePrecision(x) eq Infinity() then
+    assert IsWeaklyZero(x);
+    return [BaseField(F)| ];
+  else
+    return [BaseField(F)| c : c in Eltseq(Actual(x))];
+  end if;
+end intrinsic;
+
+intrinsic Generator(E :: PGGFldWrap) -> PGGFldWrapElt
+  {The generator of E over its base field.}
+  if not assigned E`generator then
+    require not IsPrimeField(E): "E must be an extension";
+    gen := _Generator(E);
+    assert Parent(gen) eq E;
+    E`generator := gen;
+  end if;
+  return E`generator;
+end intrinsic;
+
+intrinsic _Generator(E :: PGGFldWrap) -> PGGFldWrapElt
+  {"}
+  not_implemented("_Generator:", Type(E));
+end intrinsic;
+
+intrinsic _Generator(E :: PGGFldStd) -> PGGFldStdElt
+  {"}
+  return E ! (Actual(E).1);
+end intrinsic;
+

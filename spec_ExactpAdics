@@ -1,7 +1,6 @@
 {
   +spec
-  Field_ExactpAdics.mag
-  PolRing_ExactpAdics.mag
-  GaloisGroup_Builtin_ExactpAdics.mag
-  GaloisGroup_SinglyRamified_ExactpAdics.mag
+  ExactpAdics {
+    +spec
+  }
 }

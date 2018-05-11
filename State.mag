@@ -109,6 +109,24 @@ intrinsic PGG_GlobalTimer_Push(x)
   end if;
 end intrinsic;
 
+intrinsic PGG_GlobalTimer_GetLabel() -> []
+  {Gets the current label.}
+  ok, t := PGG_HasGlobalTimer();
+  if ok then
+    return GetLabel(t);
+  else
+    return [];
+  end if;
+end intrinsic;
+
+intrinsic PGG_GlobalTimer_SetLabel(label)
+  {Sets the current label.}
+  ok, t := PGG_HasGlobalTimer();
+  if ok then
+    SetLabel(t, label);
+  end if;
+end intrinsic;
+
 intrinsic PGG_GlobalTimer_Pop()
   {Pop.}
   ok, t := PGG_HasGlobalTimer();

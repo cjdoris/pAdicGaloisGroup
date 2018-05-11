@@ -1,0 +1,41 @@
+intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolExact) -> GrpPerm
+  {The Galois group of f.}
+  require IsIrreducible(f): "f must be irreducible";
+  K := BaseRing(f);
+  L := Extension(f);
+  require #Faces(RamificationPolygon(Actual(L),Actual(K))) le 1: "f must define a singly ramified extension";
+  case ExactpAdics_Implementation():
+  when 1:
+    ok, run := IsIntrinsic("ExactpAdics_ExectutePrecisionStrategy");
+    assert ok;
+    ok, getx := IsIntrinsic("BaselineApproximation");
+    assert ok;
+    ok, pr, G := run(function (pr)
+      xf := getx(Actual(f), pr);
+      try
+        return true, GaloisGroup(alg, PolynomialRing(PGGFldStd_Make(BaseRing(xf)))!xf);
+      catch err
+        return false, _;
+      end try;
+    end function, PrecisionStrategy(f));
+    if ok then
+      return G;
+    else
+      error "precision error";
+    end if;
+  when 2:
+    ok, getx := IsIntrinsic("EpochApproximation");
+    assert ok;
+    for epoch in [1..99999] do
+      xf := getx(Actual(f), epoch);
+      try
+        G := GaloisGroup(alg, PolynomialRing(PGGFldStd_Make(BaseRing(xf))) ! xf);
+      catch err
+        continue epoch;
+      end try;
+      return G;
+    end for;
+  else
+    assert false;
+  end case;
+end intrinsic;
