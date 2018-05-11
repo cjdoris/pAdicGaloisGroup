@@ -445,7 +445,7 @@ function tower_from_uniformizers(L, K, pis : alg:="LA")
       end case;
       assert Degree(f2) eq n;
       assert is_eisenstein(f2);
-      L2new := ext<K2new | ChangePrecision(f2, Precision(L2))>;
+      L2new := ext<K2new | ChangePrecision(f2, Precision(K2new))>;
       LtoL2new := map<L -> L2new | x :-> &+[L2new| L2new.1^(i-1) * cs[i] : i in [1..#cs]] where cs:=Eltseq(x)>;
       // rename for iterating
       K2 := K2new;
