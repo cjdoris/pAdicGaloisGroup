@@ -49,8 +49,6 @@ intrinsic RamificationGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: PGGPol, u :: Fld
   //     ProcessResolvent(gst, R, U);
   //   end for;
   // end if;
-  groups := {};
-  cores := {};
   PGG_GlobalTimer_Swap("check done");
   if not IsDone(gst) then
     vprint PGG_GaloisGroup: "main loop...";
@@ -58,22 +56,6 @@ intrinsic RamificationGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: PGGPol, u :: Fld
       PGG_GlobalTimer_Swap("subgroup");
       U := Subgroup(gst);
       vprint PGG_GaloisGroup: "subgroup index =", Index(W, U);
-      vprint PGG_GaloisGroup: "subgroup core index =", Index(W, Core(W, U));
-      vprint PGG_GaloisGroup: "orbit-relative index =", Index(Stabilizer(W, Orbits(U)), U);
-      vprint PGG_GaloisGroup: "orbit-relative core index =", Index(Core(W, Stabilizer(W, Orbits(U))), Core(W, U));
-      if U in groups then
-        vprint PGG_GaloisGroup: "subgroup used before";
-      else
-        vprint PGG_GaloisGroup: "subgroup new";
-        Include(~groups, U);
-        C := Core(W, U);
-        if C in cores then
-          vprint PGG_GaloisGroup: "subgroup core seen before";
-        else
-          vprint PGG_GaloisGroup: "subgroup core new";
-          Include(~cores, C);
-        end if;
-      end if;
       PGG_GlobalTimer_Swap("invariant");
       I := RelativeInvariant(W, U);
       vprint PGG_GaloisGroup: "invariant =", I;
