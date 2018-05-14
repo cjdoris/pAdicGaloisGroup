@@ -117,3 +117,8 @@ intrinsic _Roots(f :: PGGPolExact) -> []
   assert forall{r : r in rs | r[2] eq 1};
   return [BaseRing(f)| r[1] : r in rs];
 end intrinsic;
+
+intrinsic AssignNames(~R :: PGGRngPolExact, names :: [MonStgElt])
+  {Assigns names to generators of R.}
+  AssignNames(~R`actual, names);
+end intrinsic;

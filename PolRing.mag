@@ -473,3 +473,8 @@ intrinsic DefiningPolynomial(F :: PGGFldGrp) -> PGGPolGrp
   end if;
   return F`defining_polynomial;
 end intrinsic;
+
+intrinsic AssignNames(~R :: PGGRngPolStd, names :: [MonStgElt])
+  {Assigns names to generators of R.}
+  AssignNames(~R`actual, names);
+end intrinsic;
