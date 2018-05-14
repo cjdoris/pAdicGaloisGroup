@@ -738,7 +738,7 @@ intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal2, resolvent :: PGG
   rstat := ResolventStat(s`algorithm`statistic, resolvent);
   vprint PGG_GaloisGroup: "resolvent statistic =", rstat;
   h := CosetAction(Group(s`resolvent_overgroup), subgroup);
-  vprint PGG_GaloisGroup: "pool resolvents =", [<Q, GroupStat(n,h)> where Q:=Rep(n`class) @ s`overgroup_embedding @ h : n in s`pool];
+  vprint PGG_GaloisGroup, 2: "pool resolvents =", [<Q, GroupStat(n,h)> where Q:=Rep(n`class) @ s`overgroup_embedding @ h : n in s`pool];
   // eliminate any children not containing the galois group
   PGG_GlobalTimer_Swap("filter children");
   ok_children := false;
