@@ -132,16 +132,18 @@ A function which can be applied to polynomials and groups, with the property tha
 
 How to choose the subgroup.
 
-- `SUBGROUP_TRANCHE`: Consider each group in each tranche in turn.
-- `[SUBGROUP_TRANCHE, SUBGROUP_PRIORITY]`: Consider each group in each tranche in turn, ordered by some priority.
+- `SUBGROUP_TRANCHE`: Consider each group in each tranche in turn and select the first useful one.
+- `[SUBGROUP_TRANCHE, SUBGROUP_PRIORITY]`: As above, but the tranches are reordered according to some priority.
 
 ### `SUBGROUP_TRANCHE`
 
 How to select sets of subgroups.
 
 - `All`: All subgroups.
-- `Index [If:EXPRESSION, Sort:EXPRESSION]`: All subgroups by index. Only uses indices where `If` evaluates true, and sorts by `Sort`, both expressions in `idx` (the index). `If` may additionally be in variables `has_special` (true if there exists a special tranche) and `sidx0` (the index of the first special tranche, or 0 if there is none): some tranches may be dynamically marked as special from outside the tranche, e.g. the `Maximal` `GROUP_ALG` with `DescendWhen:NoSubgroup` marks tranches containing useful groups as special, giving a means to dynamically control how many tranches to use based on what was previously useful.
-- `OrbitIndex [If:EXPRESSION, Sort:EXPRESSION]`: All subgroups by orbit-index and index. Orbit-index is the index of the stabilizer of the orbits of the group. Only uses indices where `If` evaluates true, and sorts by `Sort`, both expressions in `idx` (the index), `oidx` (orbit index) and `ridx` (remaining index, `idx/oidx`). `If` may additionally be in variables `has_special` and `sidx0`, with the same meanings as for `Index`.
+- `Index [If:EXPRESSION, Sort:EXPRESSION, Take:SUBGROUP_TAKE]`: All subgroups by index. Only uses indices where `If` evaluates true, and sorts by `Sort`, both expressions in `idx` (the index). `If` may additionally be in variables `has_special` (true if there exists a special tranche) and `sidx0` (the index of the first special tranche, or 0 if there is none): some tranches may be dynamically marked as special from outside the tranche, e.g. the `Maximal` `GROUP_ALG` with `DescendWhen:NoSubgroup` marks tranches containing useful groups as special, giving a means to dynamically control how many tranches to use based on what was previously useful. `Take` controls which subgroups are used, and is one of:
+  - `All` (default): All subgroups with the given index.
+  - `Random[Limit:INTEGER, Dedupe:BOOL, NewTries:INTEGER, RandomTries:INTEGER]`: A most `Limit` (required) randomly-generated subgroups with the given index. It tries `RandomTries` (default 10) times to randomly generate a group with the given index. If `Dedupe` (default true) is true, it tries this `NewTries` (default 100) times to find one which we haven't seen before.
+- `OrbitIndex [If:EXPRESSION, Sort:EXPRESSION, Take:SUBGROUP_TAKE]`: All subgroups by orbit-index and index. Orbit-index is the index of the stabilizer of the orbits of the group. Only uses indices where `If` evaluates true, and sorts by `Sort`, both expressions in `idx` (the index), `oidx` (orbit index) and `ridx` (remaining index, `idx/oidx`). `If` may additionally be in variables `has_special` and `sidx0`, with the same meanings as for `Index`. `Take` has the same meaning as for `Index`.
 
 ### `SUBGROUP_PRIORITY`
 

@@ -591,6 +591,16 @@ function dedupe_conjugage_subgroups(G, Hs)
   return [Rep(c) : c in {CG ! H : H in Hs}];
 end function;
 
+function dedupe_conjugage_subgroups_simple(G, Hs)
+  newHs := [];
+  for H in Hs do
+    if not exists{H2 : H2 in newHs | IsConjugate(G, H, H2)} then
+      Append(~newHs, H);
+    end if;
+  end for;
+  return newHs;
+end function;
+
 // non-checking version
 // TODO: consider _is_subpartition_of({*1^^9*},{*2,3,4*}); currently we try assigning 1 to each of 2, 3, 4, and then assign 1 again, and keep going; but since we are assigning the same thing over and over, the order that these occur in is unimportant, so we are repeating work; hence, we should do a strategy which assigns all of the same element in one go
 function _is_subpartition_of(P, Q)
@@ -864,3 +874,32 @@ end procedure;
 function seq_shuffle(xs)
   return [xs[i^g] : i in [1..#xs]] where g:=Random(SymmetricGroup(#xs));
 end function;
+
+intrinsic PGG_has_random_subgroup(G :: Grp, is_valid, is_semivalid : MaxTries:=Infinity()) -> BoolElt, Grp
+  {Tries to find a subgroup H of G such that `is_valid(H)` is true. For all subgroups K of all such H, we must have `is_semivalid(K)` true. On success, returns true and a random such H. Otherwise, returns false. Can fail if MaxTries is exceeded.}
+  ntries := 0;
+  while ntries lt MaxTries do
+    ntries +:= 1;
+    H := sub<G | Id(G)>;
+    while true do
+      if is_valid(H) then
+        return true, H;
+      elif H eq G then
+        break;
+      elif is_semivalid(H) then
+        H := sub<G | H, Random(G)>;
+      else
+        break;
+      end if;
+    end while;
+  end while;
+  return false, _;
+end intrinsic;
+
+intrinsic PGG_has_random_subgroup_of_index(G :: Grp, n :: RngIntElt : MaxTries:=Infinity()) -> BoolElt, Grp
+  {"}
+  if not IsDivisibleBy(#G, n) then
+    return false, _;
+  end if;
+  return PGG_has_random_subgroup(G, func<H | Index(G,H) eq n>, func<H | IsDivisibleBy(Index(G,H), n)> : MaxTries:=MaxTries);
+end intrinsic;

@@ -65,11 +65,13 @@ intrinsic HasSubgroup(s :: PGGAlgState_ResChoice_Tranche : NoForget:=false) -> B
       return false, _;
     end if;
     assert #tranche gt 0;
+    vprint PGG_GaloisGroup: "#tranche =", #tranche;
     PGG_GlobalTimer_Swap("prioritize");
-    tranche2 := Prioritize(Filter(PGG_ToIter(tranche), func<i | IsUseful(s`parent, i)>), s`algorithm`priority, s`parent);
-    ok, i := HasNext(tranche2);
+    tranche2 := Prioritize(PGG_ToIter(tranche), s`algorithm`priority, s`parent);
+    ok, i, j := FilterHasNext(tranche2, func<i | IsUseful(s`parent, i)>);
     PGG_GlobalTimer_Pop();
     if ok then
+      vprint PGG_GaloisGroup: "using tranche item", j;
       if not NoForget then
         Forget(i);
       end if;

@@ -24,6 +24,9 @@ declare attributes PGGGloMod_RootOfUnity: primitive_root, aut_powers, sum_powers
 declare type PGGGloMod_RootOfUniformizer: PGGGloMod_Fld, PGGGloMod_UPol;
 declare attributes PGGGloMod_RootOfUniformizer: degree, global_uniformizer, global_zeta_pol;
 
+declare type PGGGloMod_UPol_Cheat: PGGGloMod_UPol;
+declare attributes PGGGloMod_UPol_Cheat: model, overgroup_embedding;
+
 intrinsic Approximation(m :: PGGGloMod_Fld, x :: PGGFldElt, pr :: RngIntElt) -> FldElt
   {Takes a global approximation to x across all embeddings.}
   if #m`approximations eq 1 then
@@ -55,9 +58,24 @@ intrinsic GlobalModel(F :: PGGFldWrap) -> PGGGloMod
   end if;
 end intrinsic;
 
-intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model, f :: PGGPol, bm :: PGGGloMod : TopField:=false) -> PGGGloMod
+intrinsic GlobalModel(F :: PGGFldGrp) -> PGGGloMod
+  {"}
+  m := New(PGGGloMod_Fld);
+  m`local_field := F;
+  return m;
+end intrinsic;
+
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model, f :: PGGPol, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
   {Global model with the given base model, and the corresponding hom W -> W2 where Gal(f)<W and Gal(model)<W2.}
   error "not implemented: GlobalModel:", Type(alg), Type(f), Type(bm);
+end intrinsic;
+
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Cheat, f :: PGGPol, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+  {"}
+  m := New(PGGGloMod_UPol_Cheat);
+  m`local_pol := f;
+  m`model, m`overgroup_embedding := GlobalModel(alg`next, f, bm : TopField:=TopField);
+  return m, m`overgroup_embedding;
 end intrinsic;
 
 intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: PGGPolWrap, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
@@ -169,7 +187,17 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: PGGPolW
   return m, Whom;
 end intrinsic;
 
-intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Factors, f :: PGGPolWrap, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Symmetric, f :: PGGPolGrp, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+  {"}
+  locW := PGGConj_Symmetric_Make(f : GaloisGroupAlg:=alg`galois_group_alg, TopField:=TopField);
+  gloW := PGGGrpPerm_Symmetric_Make(Degree(f));
+  Whom := IdentityHomomorphism(locW, gloW);
+  m := New(PGGGloMod_Symmetric);
+  m`local_pol := f;
+  return m, Whom;
+end intrinsic;
+
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Factors, f :: PGGPol, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
   {"}
   if TopField cmpeq false then
     PGG_GlobalTimer_Push("factorize");
@@ -189,7 +217,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Factors, f :: PGGPolWra
   return m, hom;
 end intrinsic;
 
-intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RamTower, f :: PGGPolWrap, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RamTower, f :: PGGPol, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
   {"}
   if TopField cmpeq false then
     PGG_GlobalTimer_Push("factorize");
@@ -208,22 +236,24 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_RamTower, f :: PGGPolWr
   m2 := bm;
   hs := [**];
   for i in [2..#t] do
-    m2, h2 := GlobalModel(alg`next, DefiningPolynomial(t[i]), m2 : TopField:=t[i]);
+    m2, h2 := GlobalModel(alg`next, DefiningPolynomial(t[i], t[i-1]), m2 : TopField:=t[i]);
     Append(~m`tower, m2);
     Append(~hs, h2);
   end for;
-  PGG_GlobalTimer_Swap("primitive element");
-  m`global_field := m2`global_field;
-  gloroot, glopol := random_primitive_element(m2`global_field, bm`global_field);
-  m`global_pol := glopol;
-  m`global_pol_root := gloroot;
+  if assigned m2`global_field then
+    PGG_GlobalTimer_Swap("primitive element");
+    m`global_field := m2`global_field;
+    gloroot, glopol := random_primitive_element(m2`global_field, bm`global_field);
+    m`global_pol := glopol;
+    m`global_pol_root := gloroot;
+  end if;
   PGG_GlobalTimer_Pop();
   dom := PGGConj_Tower_Make(f, <Domain(h) : h in hs>);
   hom := PGGHomGrpPerm_WrProd_Make(<h : h in hs> : Domain:=dom);
   return m, hom;
 end intrinsic;
 
-intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Select, f :: PGGPolWrap, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
+intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_Select, f :: PGGPol, bm :: PGGGloMod : TopField:=false) -> PGGGloMod, PGGHomGrpPerm
   {"}
   PGG_GlobalTimer_Push("predicates");
   K := BaseRing(f);

@@ -3,6 +3,8 @@ freeze;
 declare type PGGState;
 declare attributes PGGState: timer, factorization_func, roots_func;
 
+declare verbose PGG_GlobalTimer, 1;
+
 STATE := New(PGGState);
 
 intrinsic PGG_Factorization(f :: RngUPolElt[FldPad] : Extensions:=false, Lift:=true) -> [], []
@@ -91,6 +93,7 @@ intrinsic PGG_StopGlobalTimer()
   {Stops the global timer.}
   s := STATE;
   require assigned s`timer: "no timer";
+  vprint PGG_GlobalTimer: "global timer: stop";
   delete s`timer;
 end intrinsic;
 
@@ -98,11 +101,13 @@ intrinsic PGG_StartGlobalTimer()
   {Starts the global timer.}
   s := STATE;
   require not assigned s`timer: "global timer already on";
+  vprint PGG_GlobalTimer: "global timer: start";
   s`timer := PGG_Timer();
 end intrinsic;
 
 intrinsic PGG_GlobalTimer_Push(x)
   {Push.}
+  vprint PGG_GlobalTimer: "global timer: push:", x;
   ok, t := PGG_HasGlobalTimer();
   if ok then
     Push(t, x);
@@ -121,6 +126,7 @@ end intrinsic;
 
 intrinsic PGG_GlobalTimer_SetLabel(label)
   {Sets the current label.}
+  vprint PGG_GlobalTimer: "global timer: set label:", label;
   ok, t := PGG_HasGlobalTimer();
   if ok then
     SetLabel(t, label);
@@ -137,6 +143,7 @@ end intrinsic;
 
 intrinsic PGG_GlobalTimer_Pop(x)
   {Pop.}
+  vprint PGG_GlobalTimer: "global timer: pop:", x;
   ok, t := PGG_HasGlobalTimer();
   if ok then
     Pop(t, x);
@@ -145,6 +152,7 @@ end intrinsic;
 
 intrinsic PGG_GlobalTimer_Pop(x, y)
   {Pop.}
+  vprint PGG_GlobalTimer: "global timer: pop:", x, y;
   ok, t := PGG_HasGlobalTimer();
   if ok then
     Pop(t, x, y);
@@ -153,6 +161,7 @@ end intrinsic;
 
 intrinsic PGG_GlobalTimer_Swap(x)
   {Swap.}
+  vprint PGG_GlobalTimer: "global timer: swap:", x;
   ok, t := PGG_HasGlobalTimer();
   if ok then
     Swap(t, x);
@@ -161,6 +170,7 @@ end intrinsic;
 
 intrinsic PGG_GlobalTimer_Log(x)
   {Log.}
+  vprint PGG_GlobalTimer: "global timer: log:", x;
   ok, t := PGG_HasGlobalTimer();
   if ok then
     Log(t, x);

@@ -17,9 +17,9 @@ declare type PGGFldStdElt: PGGFldWrapElt;
 
 // Represents fields as the fixed field of some subgroup of some universal galois group
 declare type PGGStrFldGrp[PGGFldGrp];
-declare attributes PGGStrFldGrp: group, prime, ramification_groups, top_field, base_field, ramification_fields, lower_breaks;
+declare attributes PGGStrFldGrp: group, prime, splitting_polynomial, ramification_groups, top_field, base_field, ramification_fields, lower_breaks;
 declare type PGGFldGrp: PGGFld;
-declare attributes PGGFldGrp: universe, group, degree, normal_closure, defining_polynomial, ramification_fields, ramification_degree, inertia_degree;
+declare attributes PGGFldGrp: universe, group, degree, normal_closure, defining_polynomial, ramification_tower, ramification_degree, inertia_degree;
 
 intrinsic PGGFldStd_Make(K :: FldPad) -> PGGFldStd
   {The p-adic field K.}
@@ -547,7 +547,12 @@ intrinsic PGGFldGrp_Make(G :: Grp : Prime:=false, RamificationGroups:=false, Low
   end if;
   if RamificationGroups cmpne false then
     R := RamificationGroups;
-    require Type(R) eq SeqEnum and #R ge 1 and forall{N : N in R | Type(N) eq Type(G) and N subset G and IsNormal(G,N)} and R[1] eq G and R[#R] eq sub<G|Id(G)> and forall{i : i in [2..#R] | R[i] ne R[i-1] and R[i] subset R[i-1]}: "RamificationGroups must be a sequence of descending normal subgroups of G, starting with G and ending with the trivial group";
+    require Type(R) eq SeqEnum: "RamificationGroups must be a sequence";
+    require #R ge 1: "RamificationGroups must have length at least 1";
+    require forall{N : N in R | Type(N) eq Type(G) and N subset G and IsNormal(G,N)}: "RamificationGroups must be normal subgroups of G";
+    require R[1] eq G: "First RamificationGroup must be G";
+    require R[#R] eq sub<G|Id(G)>: "Last RamificationGroup must be trivial";
+    require forall{i : i in [2..#R] | R[i] ne R[i-1] and R[i] subset R[i-1]}: "RamificationGroups must be properly descending";
     U`ramification_groups := R;
   end if;
   if LowerBreaks cmpne false then
@@ -600,6 +605,18 @@ end intrinsic;
 intrinsic UniverseGroup(F :: PGGFldGrp) -> Grp
   {The universe group, the Galois group of the universe field.}
   return Universe(F)`group;
+end intrinsic;
+
+intrinsic UniverseSplittingPolynomial(F :: PGGFldGrp) -> PGGPolGrp
+  {A polynomial with Galois group equal to the universe group.}
+  if not assigned F`universe`splitting_polynomial then
+    U := UniverseField(F);
+    G := UniverseGroup(F);
+    f := &*[PolynomialRing(BaseField(U))| DefiningPolynomial(Subfield(U, Stabilizer(G,Rep(o)))) : o in Orbits(G)];
+    f`galois_group_quo := hom<G -> G | [G.i : i in [1..Ngens(G)]]>;
+    F`universe`splitting_polynomial := f;
+  end if;
+  return F`universe`splitting_polynomial;
 end intrinsic;
 
 intrinsic Subfield(F :: PGGFldGrp, G :: Grp) -> PGGFldGrp
@@ -784,8 +801,8 @@ intrinsic UniverseRamificationField(F :: PGGFldGrp, v) -> Grp
   return UniverseRamificationFields()[UniverseFindLowerBreak(F,v)];
 end intrinsic;
 
-intrinsic RamificationFields(E :: PGGFldGrp, F :: PGGFldGrp) -> [], []
-  {The ramification fields of E/F.}
+intrinsic RamificationTower(E :: PGGFldGrp, F :: PGGFldGrp) -> [], []
+  {The tower of ramification fields of E/F.}
   require IsExtensionOf(E,F): "E must be an extension of F";
   Ns := UniverseRamificationFields(F);
   T1 := [(F join N) meet E : N in Ns];
@@ -801,27 +818,27 @@ intrinsic RamificationFields(E :: PGGFldGrp, F :: PGGFldGrp) -> [], []
   end if;
 end intrinsic;
 
-intrinsic RamificationFields(F :: PGGFldGrp) -> [], []
+intrinsic RamificationTower(F :: PGGFldGrp) -> [], []
   {The ramification fields of F over its base field.}
-  if not assigned F`ramification_fields then
-    Fs, vs := RamificationFields(F, BaseField(F));
-    F`ramification_fields := assigned vs select [*Fs,vs*] else [*Fs*];
+  if not assigned F`ramification_tower then
+    Fs, vs := RamificationTower(F, BaseField(F));
+    F`ramification_tower := assigned vs select [*Fs,vs*] else [*Fs*];
   end if;
-  if #F`ramification_fields eq 1 then
-    return F`ramification_fields[1], _;
+  if #F`ramification_tower eq 1 then
+    return F`ramification_tower[1], _;
   else
-    return F`ramification_fields[1], F`ramification_fields[2];
+    return F`ramification_tower[1], F`ramification_tower[2];
   end if;
 end intrinsic;
 
 intrinsic RamificationField(E :: PGGFldGrp, F :: PGGFldGrp, v) -> PGGFldGrp
   {The vth ramification field between E and F.}
-  return RamificationFields(E,F)[UniverseFindLowerBreak(F,v)];
+  return RamificationTower(E,F)[UniverseFindLowerBreak(F,v)];
 end intrinsic;
 
 intrinsic RamificationField(F :: PGGFldGrp, v) -> PGGFldGrp
   {The vth ramification field below F.}
-  return RamificationFields(F)[UniverseFindLowerBreak(F,v)];
+  return RamificationTower(F)[UniverseFindLowerBreak(F,v)];
 end intrinsic;
 
 intrinsic RamificationDegree(E :: PGGFldGrp, F :: PGGFldGrp, v) -> RngIntElt

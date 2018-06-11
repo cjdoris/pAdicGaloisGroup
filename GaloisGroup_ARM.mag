@@ -1,4 +1,4 @@
-import "Utils.mag": not_implemented;
+import "Utils.mag": not_implemented, Z;
 
 declare type PGGAlg_GaloisGroup_ARM: PGGAlg_GaloisGroup;
 declare attributes PGGAlg_GaloisGroup_ARM: groups_alg, resolvent_alg, use_easy_resolvents;
@@ -21,6 +21,48 @@ intrinsic Print(alg :: PGGAlg_GaloisGroup_ARM)
   printf "use easy resolvents = %o", alg`use_easy_resolvents;
   IndentPop();
 end intrinsic;
+
+procedure getraminfo(~r, f);
+  // // UNCOMMENT THIS WHEN EXACTPADICS PACKAGE IS LOADED TO KEEP TRACK OF WHAT RAMIFICATION WE HAVE SEEN SO FAR
+  // if Type(f) eq PGGPolExact then
+  //   // initial value
+  //   if not assigned r then
+  //     r := rec<recformat<min_resdeg, min_tamedeg, vs, min_wilddeg, min_ramdeg, min_deg> | min_resdeg:=1, min_tamedeg:=1, vs:={**}, min_wilddeg:=1, min_ramdeg:=1, min_deg:=1>;
+  //   end if;
+  //   K := Actual(BaseRing(f));
+  //   p := Prime(K);
+  //   _, _, certs := Factorization(Actual(f) : Extensions);
+  //   for cert in certs do
+  //     L := cert`Extension;
+  //     r`min_resdeg := LCM(r`min_resdeg, cert`F);
+  //     if cert`E gt 1 then
+  //       uvs := Vertices(TransitionFunction(L, K));
+  //       assert #uvs ge 2;
+  //       us := [uv[1] : uv in uvs];
+  //       vs := [uv[2] : uv in uvs];
+  //       assert vs[1] eq 0;
+  //       dudvs := [Z| (us[i]-us[i-1])/(vs[i]-vs[i-1]) : i in [2..#us]] cat [cert`E];
+  //       idxs := [Z| dudvs[i] / dudvs[i-1] : i in [2..#dudvs]];
+  //       print "vs =", vs;
+  //       print "idxs =", idxs;
+  //       if IsPowerOf(cert`E, p) then
+  //         assert vs[2] gt 1;
+  //         i0 := 1;
+  //       else
+  //         assert not IsDivisibleBy(idxs[1], p);
+  //         assert vs[2] eq 1;
+  //         r`min_tamedeg := LCM(r`min_tamedeg, idxs[1]);
+  //         i0 := 2;
+  //       end if;
+  //       r`vs := r`vs join ({*vs[i+1]^^w where ok,w:=IsPowerOf(idxs[i],p) : i in [i0..#idxs]*} diff r`vs);
+  //     end if;
+  //   end for;
+  //   r`min_wilddeg := p^#r`vs;
+  //   r`min_ramdeg := r`min_tamedeg * r`min_wilddeg;
+  //   r`min_deg := r`min_resdeg * r`min_ramdeg;
+  //   print "raminfo =", r;
+  // end if;
+end procedure;
 
 intrinsic RamificationGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: PGGPol, u :: FldRatElt) -> GrpPerm
   {The u-th ramification group of f.}
@@ -49,19 +91,36 @@ intrinsic RamificationGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: PGGPol, u :: Fld
   //     ProcessResolvent(gst, R, U);
   //   end for;
   // end if;
+  getraminfo(~raminfo, f);
   PGG_GlobalTimer_Swap("check done");
   if not IsDone(gst) then
     vprint PGG_GaloisGroup: "main loop...";
     repeat
       PGG_GlobalTimer_Swap("subgroup");
       U := Subgroup(gst);
-      vprint PGG_GaloisGroup: "subgroup index =", Index(W, U);
-      PGG_GlobalTimer_Swap("invariant");
-      I := RelativeInvariant(W, U);
-      vprint PGG_GaloisGroup: "invariant =", I;
-      PGG_GlobalTimer_Swap("resolvent");
-      R := Resolvent(rst, I, U);
-      vprint PGG_GaloisGroup: "resolvent =", R;
+      if ISA(Type(U), SeqEnum) then
+        I := [];
+        R := [];
+        for i in [1..#U] do
+          vprint PGG_GaloisGroup: "subgroup", i, "index =", Index(W, U[i]);
+          PGG_GlobalTimer_Swap("invariant");
+          Append(~I, RelativeInvariant(W, U[i]));
+          vprint PGG_GaloisGroup: "invariant", i, "=", I[i];
+          PGG_GlobalTimer_Swap("resolvent");
+          Append(~R, Resolvent(rst, I[i], U[i]));
+          getraminfo(~raminfo, R[i]);
+          vprint PGG_GaloisGroup: "resolvent", i, "=", R[i];
+        end for;
+      else
+        vprint PGG_GaloisGroup: "subgroup index =", Index(W, U);
+        PGG_GlobalTimer_Swap("invariant");
+        I := RelativeInvariant(W, U);
+        vprint PGG_GaloisGroup: "invariant =", I;
+        PGG_GlobalTimer_Swap("resolvent");
+        R := Resolvent(rst, I, U);
+        getraminfo(~raminfo, R);
+        vprint PGG_GaloisGroup: "resolvent =", R;
+      end if;
       PGG_GlobalTimer_Swap("process resolvent");
       ProcessResolvent(gst, R, U);
       PGG_GlobalTimer_Swap("check done");

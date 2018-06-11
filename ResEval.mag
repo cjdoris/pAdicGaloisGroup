@@ -27,6 +27,9 @@ declare attributes PGGAlg_ResEval_Global_Model_RootOfUnity: minimize, complement
 
 declare type PGGAlg_ResEval_Global_Model_RootOfUniformizer: PGGAlg_ResEval_Global_Model;
 
+declare type PGGAlg_ResEval_Global_Model_Cheat: PGGAlg_ResEval_Global_Model;
+declare attributes PGGAlg_ResEval_Global_Model_Cheat: next;
+
 intrinsic Start(alg :: PGGAlg_ResEval_Global, f :: PGGPol) -> PGGAlgState_ResEval_Global
   {Starts the algorithm and returns its state.}
   s := New(PGGAlgState_ResEval_Global);
@@ -34,7 +37,8 @@ intrinsic Start(alg :: PGGAlg_ResEval_Global, f :: PGGPol) -> PGGAlgState_ResEva
   PGG_GlobalTimer_Push("base field model");
   s`base_field_model := GlobalModel(BaseRing(f));
   PGG_GlobalTimer_Swap("polynomial model");
-  s`pol_model, s`overgroup_embedding := GlobalModel(alg`model, f, s`base_field_model);
+  model_alg := ISA(Type(f), PGGPolGrp) select PGGAlg_ResEval_Global_Model_Cheat_Make(:Next:=alg`model) else alg`model;
+  s`pol_model, s`overgroup_embedding := GlobalModel(model_alg, f, s`base_field_model);
   s`precision := -Infinity();
   PGG_GlobalTimer_Pop();
   return s;
@@ -58,6 +62,11 @@ end intrinsic;
 
 intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, I, U :: GrpPerm) -> PGGPol
   {The resolvent associated to the invariant I.}
+  return Resolvent(s, s`pol_model, I, U);
+end intrinsic;
+
+intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, m :: PGGGloMod, I, U :: GrpPerm) -> PGGPol
+  {"}
   W := Group(Codomain(s`overgroup_embedding));
   assert U subset W;
   ntries := 0;
@@ -84,6 +93,23 @@ intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, I, U :: GrpPerm) -> PGGPol
       not_implemented("Resolvent: only implemented over Q");
     end if;
   end while;
+end intrinsic;
+
+intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, m :: PGGGloMod_UPol_Cheat, I, U :: GrpPerm) -> PGGPol
+  {"}
+  return Resolvent(s, m, m`local_pol, I, U);
+end intrinsic;
+
+intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, m :: PGGGloMod_UPol_Cheat, f :: PGGPolGrp, I, U :: GrpPerm) -> PGGPol
+  {"}
+  G := GaloisGroup(f);
+  N := SplittingField(f);
+  assert G subset Group(Domain(m`overgroup_embedding));
+  W := Group(Codomain(m`overgroup_embedding));
+  h := CosetAction(W, U);
+  GR := G @ m`overgroup_embedding @ h;
+  R := &*[DefiningPolynomial(Subfield(N, G meet (Stabilizer(GR, Rep(o)) @@ h @@ m`overgroup_embedding)), BaseRing(f)) : o in Orbits(GR)];
+  return R;
 end intrinsic;
 
 intrinsic PGGAlg_ResEval_Global_Model_Symmetric_Make( : GaloisGroupAlg:=false) -> PGGAlg_ResEval_Global_Model_Symmetric
@@ -130,6 +156,13 @@ end intrinsic;
 intrinsic PGGAlg_ResEval_Global_Model_RootOfUniformizer_Make() -> PGGAlg_ResEval_Global_Model_RootOfUniformizer
   {The "RootOfUniformizer" global model algorithm.}
   a := New(PGGAlg_ResEval_Global_Model_RootOfUniformizer);
+  return a;
+end intrinsic;
+
+intrinsic PGGAlg_ResEval_Global_Model_Cheat_Make(:Next:=false) -> PGGAlg_ResEval_Global_Model_Cheat
+  {The "Cheat" global model algorithm.}
+  a := New(PGGAlg_ResEval_Global_Model_Cheat);
+  a`next := Next cmpne false select Next else PGGAlg_ResEval_Global_Model_Symmetric_Make();
   return a;
 end intrinsic;
 
@@ -181,6 +214,11 @@ end intrinsic;
 intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer)
   {"}
   printf "root of uniformizer";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_Cheat)
+  {"}
+  printf "cheat ->"; Print(alg`next);
 end intrinsic;
 
 intrinsic PGGAlg_ResEval_Global_Make(:Model:=false) -> PGGAlg_ResEval_Global

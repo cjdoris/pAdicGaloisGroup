@@ -7,22 +7,33 @@ declare type PGGAlg_ResPriority_Reverse: PGGAlg_ResPriority;
 declare attributes PGGAlg_ResPriority_Reverse: priority;
 declare type PGGAlg_ResPriority_Key: PGGAlg_ResPriority;
 declare attributes PGGAlg_ResPriority_Key: key;
+declare type PGGAlg_ResPriority_Truncate: PGGAlg_ResPriority;
+declare attributes PGGAlg_ResPriority_Truncate: priority, limit;
 
-intrinsic PGGAlg_ResPriority_Null_Make() -> PGGAlg_ResPriority_Null_Make
+intrinsic PGGAlg_ResPriority_Null_Make() -> PGGAlg_ResPriority_Null
   {The "Null" subgroups priority.}
   alg := New(PGGAlg_ResPriority_Null);
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResPriority_Random_Make() -> PGGAlg_ResPriority_Random_Make
+intrinsic PGGAlg_ResPriority_Random_Make() -> PGGAlg_ResPriority_Random
   {The "Random" subgroups priority.}
   alg := New(PGGAlg_ResPriority_Random);
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_ResPriority_Reverse_Make(:Priority:=false) -> PGGAlg_ResPriority_Reverse_Make
+intrinsic PGGAlg_ResPriority_Reverse_Make(:Priority:=false) -> PGGAlg_ResPriority_Reverse
   {The "Reverse" subgroups priority.}
   alg := New(PGGAlg_ResPriority_Reverse);
+  alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_ResPriority_Truncate_Make(limit :: RngIntElt : Priority:=false) -> PGGAlg_ResPriority_Truncate
+  {The "truncate" subgroups priority.}
+  require limit ge 0: "limit must be at least 0";
+  alg := New(PGGAlg_ResPriority_Truncate);
+  alg`limit := limit;
   alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
   return alg;
 end intrinsic;
@@ -47,7 +58,12 @@ end intrinsic;
 
 intrinsic Print(alg :: PGGAlg_ResPriority_Reverse)
   {"}
-  print "reverse of %o", alg`priority;
+  printf "reverse of %o", alg`priority;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResPriority_Truncate)
+  {"}
+  printf "truncate %o of %o", alg`limit, alg`priority;
 end intrinsic;
 
 intrinsic Print(alg :: PGGAlg_ResPriority_Key)
@@ -83,3 +99,16 @@ intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Key, s :: PGGAlgState_ResGroups)
   end function);
 end intrinsic;
 
+intrinsic Prioritize(X, P :: PGGAlg_ResPriority_Truncate, s :: PGGAlgState_ResGroups) -> .
+  {"}
+  Y := Prioritize(X, P`priority, s);
+  xs := ToList(Y);
+  if #xs gt P`limit then
+    for i in [P`limit..#xs] do
+      Forget(xs[i]);
+    end for;
+    return PGG_ToIter(xs[1..P`limit]);
+  else
+    return Y;
+  end if;
+end intrinsic;

@@ -1,7 +1,7 @@
 declare type _PGGSetSubgrpcls[_PGGSubgrpcls];
 
 declare type PGGSetSubgrpcls2[PGGSubgrpcls2]: _PGGSetSubgrpcls;
-declare attributes PGGSetSubgrpcls2: conjugacy, statistic, tranche, root_node, count;
+declare attributes PGGSetSubgrpcls2: group, statistic, tranche, root_node, count;
 declare type PGGSubgrpcls2: _PGGSubgrpcls;
 declare attributes PGGSubgrpcls2: up, stat, parent, group, node, id;
 declare type PGGSetSubgrpcls2_Branch;
@@ -9,14 +9,18 @@ declare attributes PGGSetSubgrpcls2_Branch: up, stat, parent, down, quotient;
 declare type PGGSetSubgrpcls2_Ambig;
 declare attributes PGGSetSubgrpcls2_Ambig: up, stat, parent, down;
 
-intrinsic PGG_SubgroupClasses(conj :: PGGConj : Tranche:=false, Statistic:=false) -> PGGSetSubgrpcls2
-  {The conjugacy classes of subgroups of conj`group.}
+intrinsic PGG_SubgroupClasses(G :: PGGGrpPerm : Tranche:=false, Statistic:=false) -> PGGSetSubgrpcls2
+  {The conjugacy classes of subgroups of G.}
   X := New(PGGSetSubgrpcls2);
-  X`conjugacy := conj;
-  X`tranche := Start(Tranche cmpne false select Tranche else PGGAlg_Tranche_OrbitIndex_Make(:Verbosity:=2, Filter:=PGG_Expression_BinOp('and', PGG_Expression_BinOp('le', PGG_Expression_FreeVariable("idx"), PGG_Expression_Const(8)) ,PGG_Expression_BinOp('le', PGG_Expression_FreeVariable("ridx"), PGG_Expression_Const(2)))), conj);
+  X`group := G;
+  X`tranche := Start(Tranche cmpne false select Tranche else PGGAlg_Tranche_OrbitIndex_Make(:Verbosity:=2,
+    Filter:=PGG_Expression_All([*
+      PGG_Expression_BinOp(func<x,y | IsDivisibleBy(y,x)>, PGG_Expression_FreeVariable("idx"), PGG_Expression_Const(p^3) : Infix, Name:="mle"),
+      PGG_Expression_BinOp(func<x,y | IsDivisibleBy(y,x)>, PGG_Expression_FreeVariable("ridx"), PGG_Expression_Const(p) : Infix, Name:="mle")
+    *]) where p:=&*[Integers()| fac[1] : fac in FactoredOrder(Group(G))], Dedupe:=false), G);
   X`statistic := Statistic cmpne false select Statistic else PGGStat_Tup_Make(<PGGStat_Order_Make(), PGGStat_FactorDegrees_Make()>);
   X`count := 0;
-  X`root_node := MakeLeaf(X, conj`group, X);
+  X`root_node := MakeLeaf(X, G`group, X);
   return X;
 end intrinsic;
 
@@ -58,7 +62,7 @@ intrinsic 'eq'(C1 :: PGGSubgrpcls2, C2 :: PGGSubgrpcls2) -> BoolElt
   {Equality.}
   require Parent(C1) eq Parent(C2): "from different sets";
   assert IsIdentical(C1, C2) eq (C1`id eq C2`id);
-  // assert IsIdentical(C1, C2) eq IsConjugate(C1`parent`conjugacy`group, C1`group, C2`group);
+  // assert IsIdentical(C1, C2) eq IsConjugate(C1`parent`group`group, C1`group, C2`group);
   return IsIdentical(C1, C2);
 end intrinsic;
 
@@ -78,7 +82,7 @@ end intrinsic;
 
 intrinsic IsCoercible(X :: PGGSetSubgrpcls2, C :: GrpPerm) -> BoolElt, .
   {"}
-  if C subset X`conjugacy`group then
+  if C subset X`group`group then
     return true, Find(X`root_node, C);
   else
     return false, "not a subgroup of the right group";
@@ -87,7 +91,7 @@ end intrinsic;
 
 intrinsic Find(N :: PGGSubgrpcls2, G :: GrpPerm) -> PGGSubgrpcls2
   {Finds the conjugacy class of G.}
-  if IsConjugate(N`parent`conjugacy`group, N`group, G) then
+  if IsConjugate(N`parent`group`group, N`group, G) then
     return N;
   else
     Reset(N`parent`tranche);
@@ -95,7 +99,7 @@ intrinsic Find(N :: PGGSubgrpcls2, G :: GrpPerm) -> PGGSubgrpcls2
       ok, t := HasTranche(N`parent`tranche);
       if ok then
         for i in Tranche(N`parent`tranche) do
-          q := CosetAction(N`parent`conjugacy`group, Group(i));
+          q := CosetAction(N`parent`group`group, Group(i));
           Nstat := GroupStat(N`parent`statistic, q(N`group));
           Gstat := GroupStat(N`parent`statistic, q(G));
           if Nstat ne Gstat then
@@ -169,7 +173,7 @@ end intrinsic;
 intrinsic Find(A :: PGGSetSubgrpcls2_Ambig, G :: GrpPerm) -> PGGSubgrpcls2
   {"}
   for N in A`down do
-    if IsConjugate(A`parent`conjugacy`group, N`group, G) then
+    if IsConjugate(A`parent`group`group, N`group, G) then
       return N;
     end if;
   end for;

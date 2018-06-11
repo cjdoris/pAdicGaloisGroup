@@ -1,4 +1,4 @@
-import "Utils.mag": has_root, roots, factorization, extension, not_implemented, is_subpartition_of, all_binnings, mset_apply;
+import "Utils.mag": has_root, roots, factorization, extension, not_implemented, is_subpartition_of, all_binnings, mset_apply, xdiv, Z;
 
 declare type PGGStat;
 declare type PGGStat_EqSimple: PGGStat;
@@ -18,17 +18,25 @@ declare attributes PGGStat_Factors2: strict, stat1, stat2;
 declare type PGGStat_Stab: PGGStat_EqSimple;
 declare attributes PGGStat_Stab: stat;
 declare type PGGStat_GaloisGroup: PGGStat;
-declare attributes PGGStat_GaloisGroup: alg;
+declare attributes PGGStat_GaloisGroup: alg, degmax;
+declare type PGGStat_SubfieldDegrees: PGGStat_EqSimple; // pair <(L:K), {*(M:K) : L/M/K*}>
+declare type PGGStat_FactorDegreesSeq: PGGStat_EqSimple;
 
 declare type PGGStatVal;
-declare attributes PGGStatVal: stat, value, hash, hashable;
+declare attributes PGGStatVal: stat, value, norbits, hash, hashable;
 
-intrinsic MakeValue(S :: PGGStat, value) -> PGGStatVal
+intrinsic MakeValue(S :: PGGStat, value, norbits :: RngIntElt) -> PGGStatVal
   {A value for the statistic S.}
   x := New(PGGStatVal);
   x`stat := S;
   x`value := value;
+  x`norbits := norbits;
   return x;
+end intrinsic;
+
+intrinsic MakeValue(S :: PGGStat, value) -> PGGStatVal
+  {"}
+  return MakeValue(S, value, 1);
 end intrinsic;
 
 intrinsic Hash(v :: PGGStatVal) -> .
@@ -100,12 +108,14 @@ end intrinsic;
 intrinsic 'eq'(v1 :: PGGStatVal, v2 :: PGGStatVal) -> BoolElt
   {Equality.}
   require v1`stat eq v2`stat: "must be values of the same statistic";
+  require v1`norbits eq v2`norbits: "must have the same number of orbits";
   return 'eq'(v1`stat, v1, v2);
 end intrinsic;
 
 intrinsic 'subset'(v1 :: PGGStatVal, v2 :: PGGStatVal) -> BoolElt
   {True if v1 is possibly a statistic for a subgroup of the group v2 is a subset for.}
   require v1`stat eq v2`stat: "must be values of the same statistic";
+  require v1`norbits eq v2`norbits: "must have the same number of orbits";
   return 'subset'(v1`stat, v1, v2);
 end intrinsic;
 
@@ -127,6 +137,11 @@ end intrinsic;
 intrinsic PGGStat_FactorDegrees_Make() -> PGGStat_FactorDegrees
   {Makes a new PGGStat.}
   return New(PGGStat_FactorDegrees);
+end intrinsic;
+
+intrinsic PGGStat_FactorDegreesSeq_Make() -> PGGStat_FactorDegreesSeq
+  {"}
+  return New(PGGStat_FactorDegreesSeq);
 end intrinsic;
 
 intrinsic PGGStat_AutGroup_Make() -> PGGStat_AutGroup
@@ -174,12 +189,19 @@ intrinsic PGGStat_Stab_Make(:Stat:=false) -> PGGStat_Stab
   return S;
 end intrinsic;
 
-intrinsic PGGStat_GaloisGroup_Make(:Alg:=false) -> PGGStat_GaloisGroup
+intrinsic PGGStat_GaloisGroup_Make(:Alg:=false,DegreeLimit:=false) -> PGGStat_GaloisGroup
   {"}
   S := New(PGGStat_GaloisGroup);
+  S`degmax := DegreeLimit cmpne false select DegreeLimit else Infinity();
   if Alg cmpne false then
     S`alg := Alg;
   end if;
+  return S;
+end intrinsic;
+
+intrinsic PGGStat_SubfieldDegrees_Make() -> PGGStat_SubfieldDegrees
+  {"}
+  S := New(PGGStat_SubfieldDegrees);
   return S;
 end intrinsic;
 
@@ -196,6 +218,11 @@ end intrinsic;
 intrinsic Print(S :: PGGStat_FactorDegrees)
   {"}
   printf "degrees of factors";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_FactorDegreesSeq)
+  {"}
+  printf "degrees of factors (sequence)";
 end intrinsic;
 
 intrinsic Print(S :: PGGStat_AutGroup)
@@ -252,14 +279,28 @@ intrinsic Print(S :: PGGStat_GaloisGroup)
   {"}
   printf "galois group";
   if assigned S`alg then
-    printf " -> ";
+    print "";
+    IndentPush();
+    printf "alg = ";
     Print(S`alg);
+    IndentPop();
+  end if;
+  if S`degmax lt Infinity() then
+    print "";
+    IndentPush();
+    printf "max degree = %o", S`degmax;
+    IndentPop();
   end if;
 end intrinsic;
 
 intrinsic Print(S :: PGGStat_Order)
   {"}
   printf "galois group order";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_SubfieldDegrees)
+  {"}
+  printf "degrees of subfields";
 end intrinsic;
 
 intrinsic ConjugacyClasses(S :: PGGStat_AutGroup, d :: RngIntElt) -> PGGSetSubgrpcls
@@ -275,7 +316,12 @@ end intrinsic;
 
 intrinsic GroupStat(S :: PGGStat, G :: GrpPerm) -> PGGStatVal
   {The value of the statistic on the group.}
-  error "not implemented: GroupStat:", Type(S);
+  return GroupStat(S, G, [GSet(G)]);
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat, G :: GrpPerm, os :: [GSetIndx[RngIntElt]]) -> PGGStatVal
+  {The value of the statistic on the group, with the distinguished orbits os.}
+  not_implemented("GroupStat:", Type(S));
 end intrinsic;
 
 intrinsic GroupStat(S :: PGGStat_HasRoot, G :: GrpPerm) -> PGGStatVal
@@ -291,6 +337,18 @@ end intrinsic;
 intrinsic GroupStat(S :: PGGStat_FactorDegrees, G :: GrpPerm) -> PGGStatVal
   {"}
   return MakeValue(S, {* #o : o in Orbits(G) *});
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_FactorDegreesSeq, G :: GrpPerm, os :: [GSetIndx[RngIntElt]]) -> PGGStatVal
+  {"}
+  assert #os ge 1;
+  if #os eq 1 then
+    return MakeValue(S, {* #o : o in Orbits(OrbitImage(G, os[1])) *});
+  elif #os eq 2 then
+    return MakeValue(S, {* <#o, GroupStat(S, Go, os[2..#os])> where Go:=Stabilizer(G,Rep(o)) : o in Orbits(G,os[1]) *}, #os);
+  else
+    not_implemented("GroupStat: PGGStat_FactorDegreesSeq: more than 2 orbits");
+  end if;
 end intrinsic;
 
 intrinsic GroupStat(S :: PGGStat_Degree, G :: GrpPerm) -> PGGStatVal
@@ -346,12 +404,24 @@ end intrinsic;
 
 intrinsic GroupStat(S :: PGGStat_GaloisGroup, G :: GrpPerm) -> PGGStatVal
   {"}
-  return MakeValue(S, G);
+  return MakeValue(S, Degree(G) le S`degmax select G else sub<G | []>);
+end intrinsic;
+
+intrinsic GroupStat(S :: PGGStat_SubfieldDegrees, G :: GrpPerm) -> PGGStatVal
+  {"}
+  error if not IsTransitive(G), "only applies to transitive groups";
+  d := Degree(G);
+  return MakeValue(S, <d, {* xdiv(d, #X) : X in AllPartitions(G) join {{1},{1..d}}*}>);
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat, R :: PGGPol) -> PGGStatVal
   {The value of the statistic on the resolvent.}
-  error "not implemented: ResolventStat:", Type(S);
+  return ResolventStat(S, [R]);
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat, Rs :: [PGGPol]) -> PGGStatVal
+  {The value of the statistic on the sequence of resolvents.}
+  not_implemented("ResolventStat:", Type(S));
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_HasRoot, R :: PGGPol) -> PGGStatVal
@@ -367,6 +437,16 @@ end intrinsic;
 intrinsic ResolventStat(S :: PGGStat_FactorDegrees, R :: PGGPol) -> PGGStatVal
   {"}
   return MakeValue(S, {* d : d in FactorDegrees(R) *});
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_FactorDegreesSeq, R :: [PGGPol]) -> PGGStatVal
+  {"}
+  assert #R ge 1;
+  if #R eq 1 then
+    return MakeValue(S, {* d : d in FactorDegrees(R[1]) *});
+  else
+    return MakeValue(S, {* <Degree(fac), ResolventStat(S, [PolynomialRing(Extension(fac))| f : f in R[2..#R]])> : fac in Factorization(R[1]) *}, #R);
+  end if;
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_Degree, R :: PGGPol) -> PGGStatVal
@@ -417,11 +497,25 @@ end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_GaloisGroup, R :: PGGPol) -> PGGStatVal
   {"}
-  if assigned S`alg then
-    return MakeValue(S, PGG_GaloisGroup(R : Alg:=S`alg));
+  if Degree(R) gt S`degmax then
+    return MakeValue(S, sub<SymmetricGroup(Degree(R)) | []>);
+  elif assigned S`alg then
+    PGG_GlobalTimer_Push("galois group");
+    IndentPush();
+    G := PGG_GaloisGroup(R : Alg:=S`alg);
+    IndentPop();
+    PGG_GlobalTimer_Pop();
+    return MakeValue(S, G);
   else
     error "ResolventStat: Galois group algorithm not specified";
   end if;
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_SubfieldDegrees, R :: PGGPol) -> PGGStatVal
+  {"}
+  K := BaseRing(R);
+  L := Extension(R);
+  return MakeValue(S, <Degree(L,K), {*1, Degree(L,K)*}>); // TODO!!!
 end intrinsic;
 
 intrinsic 'eq'(S :: PGGStat, v1, v2) -> BoolElt
@@ -511,7 +605,7 @@ end intrinsic;
 
 intrinsic 'subset'(S :: PGGStat, v1, v2) -> BoolElt
   {True if v1 is a refinement of v2.}
-  not_implemented("subset: ", Type(S));
+  not_implemented("subset:", Type(S));
 end intrinsic;
 
 intrinsic 'subset'(S :: PGGStat_HasRoot, v1, v2) -> BoolElt
@@ -529,6 +623,50 @@ intrinsic 'subset'(S :: PGGStat_FactorDegrees, v1, v2) -> BoolElt
   return is_subpartition_of(v1`value, v2`value);
 end intrinsic;
 
+intrinsic 'subset'(S :: PGGStat_FactorDegreesSeq, v1, v2 : Partial:=false) -> BoolElt
+  {"}
+  // put an ordering on the unique values
+  uvs1 := SetToSequence(MultisetToSet(v1`value));
+  uvs2 := SetToSequence(MultisetToSet(v2`value));
+  // try to bin them
+  bs := all_binnings(
+    [Multiplicity(v1`value, x) : x in uvs1],
+    [Multiplicity(v2`value, x) : x in uvs2]:
+    limit := 1,
+    is_semivalid := v1`norbits eq 1
+    select func<i,b |
+      // check the degrees
+      &+mset_apply(b,func<j | uvs1[j]>) le uvs2[i]
+    >
+    else func<i,b |
+      // check the first degrees
+      (&+mset_apply(b,func<j | uvs1[j][1]>) le uvs2[i][1]) and
+      // check the inner statistics, after joining and multiplying by first degrees
+      'subset'(S,
+        '&join'(S, mset_apply(b, func<j | '*'(S, uvs1[j][2], uvs1[j][1])>)),
+        '*'(S, uvs2[i][2], uvs2[i][1])
+      : Partial)
+    >,
+    is_valid := Partial
+    select func<i,b | true>
+    else v1`norbits eq 1
+    select func<i,b |
+      // check the degrees
+      &+mset_apply(b,func<j | uvs1[j]>) eq uvs2[i]
+    >
+    else func<i,b |
+      // check the first degrees
+      (&+mset_apply(b,func<j | uvs1[j][1]>) eq uvs2[i][1]) and
+      // check the inner statistics
+      'subset'(S,
+        '&join'(S, mset_apply(b, func<j | '*'(S, uvs1[j][2], uvs1[j][1])>)),
+        '*'(S, uvs2[i][2], uvs2[i][1])
+      )
+    >
+  );
+  return #bs ne 0;
+end intrinsic;
+
 intrinsic 'subset'(S :: PGGStat_Degree, v1, v2) -> BoolElt
   {"}
   return v1`value eq v2`value;
@@ -544,18 +682,31 @@ intrinsic 'subset'(S :: PGGStat_Stab, v1, v2) -> BoolElt
   return 'subset'(S`stat, v1`value, v2`value);
 end intrinsic;
 
-intrinsic 'subset'(S :: PGGStat_Factors, v1, v2) -> BoolElt
+// intrinsic 'subset'(S :: PGGStat_Factors, v1, v2) -> BoolElt
+//   {"}
+//   w1s := SetToSequence(MultisetToSet(v1`value));
+//   w2s := SetToSequence(MultisetToSet(v2`value));
+//   bs := all_binnings(
+//     [Multiplicity(v1`value, w1) : w1 in w1s],
+//     [Multiplicity(v2`value, w2) : w2 in w2s]:
+//     limit:=1,
+//     is_semivalid:=func<i,b | PartialLe(ProductStat(S`stat, mset_apply(b, func<j | w1s[j]>)), w2s[i])>,
+//     is_valid:=func<i,b | ProductStat(S`stat, mset_apply(b,func<j | w1s[j]>)) subset w2s[i]>
+//   );
+//   return #bs gt 0;
+// end intrinsic;
+
+intrinsic 'subset'(S :: PGGStat_Factors2, v1, v2) -> BoolElt
   {"}
-  w1s := SetToSequence(MultisetToSet(v1`value));
-  w2s := SetToSequence(MultisetToSet(v2`value));
-  bs := all_binnings(
-    [Multiplicity(v1`value, w1) : w1 in w1s],
-    [Multiplicity(v2`value, w2) : w2 in w2s]:
-    limit:=1,
-    is_semivalid:=func<i,b | PartialLe(ProductStat(S`stat, mset_apply(b, func<j | w1s[j]>)), w2s[i])>,
-    is_valid:=func<i,b | ProductStat(S`stat, mset_apply(b,func<j | w1s[j]>)) subset w2s[i]>
-  );
-  return #bs gt 0;
+  // v`value[1][i] corresponds to factor i
+  // v`value[2][i][i] corresponds to the stabilizer of factor i
+  // v`value[2][i][j] for i ne j do not behave well in the ordering, so are ignored 
+  S2 := PGGStat_Stab_Make(S`stat2);
+  S3 := PGGStat_Factors_Make(S2);
+  S4 := PGGStat_Tup_Make(<S`stat1, S3>);
+  S5 := PGGStat_Factors_Make(:Stat:=S4);
+  m := func<v | MakeValue(S5, {* MakeValue(S4, <v`value[1][i], MakeValue(S3, {*MakeValue(S2,x) : x in v`value[2][i][i]*})>) : i in [1..n]*}) where n:=#v`value[1]>;
+  return m(v1) subset m(v2);
 end intrinsic;
 
 intrinsic 'subset'(S :: PGGStat_GaloisGroup, v1, v2) -> BoolElt
@@ -563,100 +714,120 @@ intrinsic 'subset'(S :: PGGStat_GaloisGroup, v1, v2) -> BoolElt
   return Degree(v1`value) eq Degree(v2`value) and IsConjugateSubgroup(SymmetricGroup(Degree(v1`value)), v2`value, v1`value);
 end intrinsic;
 
-intrinsic ProductStat(S :: PGGStat_Degree, vs :: {*PGGStatVal*}) -> PGGStatVal
-  {Statistict of the direct product of groups or product of polynomials.}
-  return MakeValue(S, &+ChangeUniverse(mset_apply(vs, func<v | v`value>), Integers()));
-end intrinsic;
-
-intrinsic ProductStat(S :: PGGStat_HasRoot, vs :: {*PGGStatVal*}) -> PGGStatVal
+intrinsic 'subset'(S :: PGGStat_SubfieldDegrees, v1, v2) -> BoolElt
   {"}
-  return MakeValue(S, exists{v : v in MultisetToSet(vs) | v`value});
+  return v1`value[1] eq v2`value[1] and v2`value[2] subset v1`value[2];
 end intrinsic;
 
-intrinsic ProductStat(S :: PGGStat_NumRoots, vs :: {*PGGStatVal*}) -> PGGStatVal
-  {"}
-  return MakeValue(S, &+ChangeUniverse(mset_apply(vs, func<v | v`value>), Integers()));
+intrinsic '&join'(S :: PGGStat_FactorDegreesSeq, vs :: SetMulti) -> PGGStatVal
+  {The values of this statistic are multisets; this joins them together.}
+  norbits := Rep(vs)`norbits;
+  return MakeValue(S, &join mset_apply(vs, func<v | v`value>), norbits);
 end intrinsic;
 
-intrinsic ProductStat(S :: PGGStat_Tup, vs :: {*PGGStatVal*}) -> PGGStatVal
-  {"}
-  return MakeValue(S, <ProductStat(S`stats[i], mset_apply(vs, func<v | v`value[i]>)) : i in [1..#S`stats]>);
+intrinsic '*'(S :: PGGStat_FactorDegreesSeq, v :: PGGStatVal, d :: RngIntElt) -> PGGStatVal
+  {Multiplies the degrees by d.}
+  if v`norbits eq 1 then
+    return MakeValue(S, mset_apply(v`value, func<x | x*d>));
+  else
+    return MakeValue(S, mset_apply(v`value, func<x | <x[1]*d, x[2]>>), v`norbits);
+  end if;
 end intrinsic;
 
-intrinsic ProductStat(S :: PGGStat_FactorDegrees, vs :: {*PGGStatVal*}) -> PGGStatVal
-  {"}
-  return MakeValue(S, &join mset_apply(vs, func<v | v`value>));
-end intrinsic;
+// intrinsic ProductStat(S :: PGGStat_Degree, vs :: {*PGGStatVal*}) -> PGGStatVal
+//   {Statistict of the direct product of groups or product of polynomials.}
+//   return MakeValue(S, &+ChangeUniverse(mset_apply(vs, func<v | v`value>), Integers()));
+// end intrinsic;
 
-intrinsic ProductStat(S :: PGGStat_Factors, vs :: {*PGGStatVal*}) -> PGGStatVal
-  {"}
-  return MakeValue(S, &join mset_apply(vs, func<v | v`value>));
-end intrinsic;
+// intrinsic ProductStat(S :: PGGStat_HasRoot, vs :: {*PGGStatVal*}) -> PGGStatVal
+//   {"}
+//   return MakeValue(S, exists{v : v in MultisetToSet(vs) | v`value});
+// end intrinsic;
 
-intrinsic ProductStat(S :: PGGStat_AutGroup, vs :: {*PGGStatVal*}) -> PGGStatVal
-  {"}
-  aut := DirectProduct([Rep(v`value) : v in vs]);
-  return MakeValue(S, ConjugacyClasses(S, Degree(aut)) ! aut);
-end intrinsic;
+// intrinsic ProductStat(S :: PGGStat_NumRoots, vs :: {*PGGStatVal*}) -> PGGStatVal
+//   {"}
+//   return MakeValue(S, &+ChangeUniverse(mset_apply(vs, func<v | v`value>), Integers()));
+// end intrinsic;
 
-intrinsic ProductStat(S :: PGGStat_Stab, vs :: {*PGGStatVal*}) -> PGGStatVal
-  {"}
-  return MakeValue(S, ProductStat(S`stat, mset_apply(vs, func<v | v`value>)));
-end intrinsic;
+// intrinsic ProductStat(S :: PGGStat_Tup, vs :: {*PGGStatVal*}) -> PGGStatVal
+//   {"}
+//   return MakeValue(S, <ProductStat(S`stats[i], mset_apply(vs, func<v | v`value[i]>)) : i in [1..#S`stats]>);
+// end intrinsic;
 
-intrinsic ProductStat(S :: PGGStat_GaloisGroup, vs :: {*PGGStatVal*}) -> PGGStatVal
-  {"}
-  return MakeValue(S, DirectProduct([v`value : v in vs]));
-end intrinsic;
+// intrinsic ProductStat(S :: PGGStat_FactorDegrees, vs :: {*PGGStatVal*}) -> PGGStatVal
+//   {"}
+//   return MakeValue(S, &join mset_apply(vs, func<v | v`value>));
+// end intrinsic;
 
-intrinsic PartialLe(v1 :: PGGStatVal, v2 :: PGGStatVal) -> BoolElt
-  {True if G1 is a subgroup the action of G2 on some of its orbits, and v1 and v2 are corresponding statistics.}
-  require v1`stat eq v2`stat: "must be values of the same statistic";
-  return PartialLe(v1`stat, v1, v2);
-end intrinsic;
+// intrinsic ProductStat(S :: PGGStat_Factors, vs :: {*PGGStatVal*}) -> PGGStatVal
+//   {"}
+//   return MakeValue(S, &join mset_apply(vs, func<v | v`value>));
+// end intrinsic;
 
-intrinsic PartialLe(S :: PGGStat, v1, v2) -> BoolElt
-  {"}
-  error "not implemented: PartialLe:", Type(S);
-end intrinsic;
+// intrinsic ProductStat(S :: PGGStat_AutGroup, vs :: {*PGGStatVal*}) -> PGGStatVal
+//   {"}
+//   aut := DirectProduct([Rep(v`value) : v in vs]);
+//   return MakeValue(S, ConjugacyClasses(S, Degree(aut)) ! aut);
+// end intrinsic;
 
-intrinsic PartialLe(S :: PGGStat_HasRoot, v1, v2) -> BoolElt
-  {"}
-  return true;
-end intrinsic;
+// intrinsic ProductStat(S :: PGGStat_Stab, vs :: {*PGGStatVal*}) -> PGGStatVal
+//   {"}
+//   return MakeValue(S, ProductStat(S`stat, mset_apply(vs, func<v | v`value>)));
+// end intrinsic;
 
-intrinsic PartialLe(S :: PGGStat_NumRoots, v1, v2) -> BoolElt
-  {"}
-  return true;
-end intrinsic;
+// intrinsic ProductStat(S :: PGGStat_GaloisGroup, vs :: {*PGGStatVal*}) -> PGGStatVal
+//   {"}
+//   return MakeValue(S, DirectProduct([v`value : v in vs]));
+// end intrinsic;
 
-intrinsic PartialLe(S :: PGGStat_Degree, v1, v2) -> BoolElt
-  {"}
-  return v1`value le v2`value;
-end intrinsic;
+// intrinsic PartialLe(v1 :: PGGStatVal, v2 :: PGGStatVal) -> BoolElt
+//   {True if G1 is a subgroup the action of G2 on some of its orbits, and v1 and v2 are corresponding statistics.}
+//   require v1`stat eq v2`stat: "must be values of the same statistic";
+//   return PartialLe(v1`stat, v1, v2);
+// end intrinsic;
 
-intrinsic PartialLe(S :: PGGStat_Tup, v1, v2) -> BoolElt
-  {"}
-  return forall{i : i in [1..#S`stats] | PartialLe(v1`value[i], v2`value[i])};
-end intrinsic;
+// intrinsic PartialLe(S :: PGGStat, v1, v2) -> BoolElt
+//   {"}
+//   error "not implemented: PartialLe:", Type(S);
+// end intrinsic;
 
-intrinsic PartialLe(S :: PGGStat_FactorDegrees, v1, v2) -> BoolElt
-  {"}
-  d1s := SetToSequence(MultisetToSet(v1`value));
-  d2s := SetToSequence(MultisetToSet(v2`value));
-  bs := all_binnings(
-    [Multiplicity(v1`value, d1) : d1 in d1s],
-    [Multiplicity(v2`value, d2) : d2 in d2s]:
-    limit:=1,
-    is_semivalid:=func<i,b | &+mset_apply(b,func<j | d1s[j]>) le d2s[i]>
-  );
-  return #bs gt 0;
-end intrinsic;
+// intrinsic PartialLe(S :: PGGStat_HasRoot, v1, v2) -> BoolElt
+//   {"}
+//   return true;
+// end intrinsic;
 
-intrinsic PartialLe(S :: PGGStat_Stab, v1, v2) -> BoolElt
-  {"}
-  return PartialLe(v1`value, v2`value);
-end intrinsic;
+// intrinsic PartialLe(S :: PGGStat_NumRoots, v1, v2) -> BoolElt
+//   {"}
+//   return true;
+// end intrinsic;
+
+// intrinsic PartialLe(S :: PGGStat_Degree, v1, v2) -> BoolElt
+//   {"}
+//   return v1`value le v2`value;
+// end intrinsic;
+
+// intrinsic PartialLe(S :: PGGStat_Tup, v1, v2) -> BoolElt
+//   {"}
+//   return forall{i : i in [1..#S`stats] | PartialLe(v1`value[i], v2`value[i])};
+// end intrinsic;
+
+// intrinsic PartialLe(S :: PGGStat_FactorDegrees, v1, v2) -> BoolElt
+//   {"}
+//   d1s := SetToSequence(MultisetToSet(v1`value));
+//   d2s := SetToSequence(MultisetToSet(v2`value));
+//   bs := all_binnings(
+//     [Multiplicity(v1`value, d1) : d1 in d1s],
+//     [Multiplicity(v2`value, d2) : d2 in d2s]:
+//     limit:=1,
+//     is_semivalid:=func<i,b | &+mset_apply(b,func<j | d1s[j]>) le d2s[i]>
+//   );
+//   return #bs gt 0;
+// end intrinsic;
+
+// intrinsic PartialLe(S :: PGGStat_Stab, v1, v2) -> BoolElt
+//   {"}
+//   return PartialLe(v1`value, v2`value);
+// end intrinsic;
 
 intrinsic PossibleIntermediateStatistics(S1 :: PGGStat, S2 :: PGGStat) -> []
   {A sequence of statistics to try deducing to from S1, and to S2 from.}
@@ -722,6 +893,16 @@ end intrinsic;
 intrinsic Implies(S1 :: PGGStat_FactorDegrees, S2 :: PGGStat_Degree) -> BoolElt, .
   {"}
   return true, func<v | MakeValue(S2, &+v`value)>;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat_SubfieldDegrees, S2 :: PGGStat_Degree) -> BoolElt, .
+  {"}
+  return true, func<v | MakeValue(S2, &+[Z| x[1] : x in v`value])>;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat_GaloisGroup, S2 :: PGGStat_Degree) -> BoolElt, .
+  {"}
+  return true, func<v | MakeValue(S2, Degree(v`value))>;
 end intrinsic;
 
 intrinsic Implies(S1 :: PGGStat_FactorDegrees, S2 :: PGGStat_Factors) -> BoolElt, .
@@ -797,7 +978,16 @@ intrinsic Implies(S1 :: PGGStat_Stab, S2 :: PGGStat_Stab) -> BoolElt, .
   if ok then
     return true, func<v | MakeValue(S2, m(v`value))>;
   end if;
-  return false;
+  return false, _;
+end intrinsic;
+
+intrinsic Implies(S1 :: PGGStat_Factors2, S2 :: PGGStat_Factors) -> BoolElt, .
+  {"}
+  ok, m := Implies(S1`stat1, S2`stat);
+  if ok then
+    return true, func<v | MakeValue(S2, {*m(x) : x in v`value[1]*})>;
+  end if;
+  return false, _;
 end intrinsic;
 
 // Is it true that if H<G then N_G(Stab_G(1))/Stab_G(1) < N_H(Stab_H(1))/Stab_H(1)?
@@ -812,8 +1002,13 @@ end intrinsic;
 //   {"}
 // end intrinsic;
 
+intrinsic _Hashable(S :: PGGStat, v) -> .
+  {A hashable value derived from v.}
+  not_implemented("_Hashable:", Type(S));
+end intrinsic;
+
 intrinsic _Hashable(S :: PGGStat_EqSimple, v) -> .
-  {Hash.}
+  {"}
   return v`value;
 end intrinsic;
 
@@ -831,6 +1026,11 @@ intrinsic _Hashable(S :: PGGStat_Factors2, v) -> .
     , {* <xs[i], {* y : y in yss[i] *}> : i in [1..n] *}
     , {* <xs[i], {* ys[i] : ys in yss *}> : i in [1..n] *}
     >;
+end intrinsic;
+
+intrinsic _Hashable(S :: PGGStat_GaloisGroup, v) -> .
+  {"}
+  return <Degree(v`value), #v`value, Hash(v`value)>;
 end intrinsic;
 
 intrinsic _Print(S :: PGGStat, v)
@@ -855,20 +1055,43 @@ function stabilizers(G, S, v)
   end if;
 end function;
 
+function stabilizers_seq(G, os, S, v)
+  Gv := GroupStat(S, G, os);
+  if v eq Gv then
+    return [G];
+  elif v subset Gv then
+    Hs := [x`subgroup : x in MaximalSubgroups(G)];
+    return #Hs eq 0 select [] else &cat[stabilizers_seq(H, os, S, v) : H in Hs];
+  else
+    return [];
+  end if;
+end function;
+
 intrinsic Stabilizers(G :: GrpPerm, v :: PGGStatVal) -> []
   {Minimal subgroups of G whose statistic is v. One per conjugacy class.}
   return _Stabilizers(G, v`stat, v);
 end intrinsic;
 
+intrinsic Stabilizers(G :: GrpPerm, os :: [GSetIndx[RngIntElt]], v :: PGGStatVal) -> []
+  {"}
+  assert #os eq v`norbits;
+  return _Stabilizers(G, os, v`stat, v);
+end intrinsic;
+
+intrinsic _Stabilizers(G :: GrpPerm, os :: [], S :: PGGStat, v) -> []
+  {"}
+  not_implemented("_Stabilizers:", Type(S));
+end intrinsic;
+
 intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat, v) -> []
   {"}
-  S2s := [<S2,m> : S2 in [PGGStat_HasRoot_Make(), PGGStat_FactorDegrees_Make()] | ok where ok,m:=Implies(S,S2)];
+  S2s := [* <S2,m> : S2 in [* PGGStat_HasRoot_Make(), PGGStat_FactorDegrees_Make() *] | ok where ok,m:=Implies(S,S2) *];
   vprint PGG_GaloisGroup: "WARNING: using generic stabilizers algorithm";
   if #S2s gt 0 then
     vprint PGG_GaloisGroup: "...after using specialist algorithms for:";
     IndentPush();
     for x in S2s do
-      print x[1];
+      vprint PGG_GaloisGroup: x[1];
     end for;
     IndentPop();
   end if;
@@ -1119,3 +1342,25 @@ intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat_FactorDegrees, v) -> []
   return Ss;
 end intrinsic;
 
+intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat_FactorDegreesSeq, v) -> []
+  {"}
+  return _Stabilizers(G, [GSet(G)], S, v);
+end intrinsic;
+
+intrinsic _Stabilizers(G :: GrpPerm, os :: [], S :: PGGStat_FactorDegreesSeq, v) -> []
+  {"}
+  // first coerce the statistic to FactorDegrees, and get stabilizers there
+  o1 := os[1];
+  q1 := OrbitAction(G, o1);
+  G1 := G @ q1;
+  S1 := PGGStat_FactorDegrees_Make();
+  v1 := MakeValue(S1, #os eq 1 select v`value else mset_apply(v`value, func<x | x[1]>));
+  Hs1 := [H @@ q1 : H in Stabilizers(G1, v1)];
+  // now use the generic algorithm
+  if (#os eq 1) or (#Hs1 eq 0) then
+    return Hs1;
+  else
+    vprint PGG_GaloisGroup: "WARNING: PGGStat_FactorDegreesSeq: using generic stabilizers algorithm";
+    return &cat[stabilizers_seq(H, os, S, v) : H in Hs1];
+  end if;
+end intrinsic;

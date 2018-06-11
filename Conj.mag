@@ -1,4 +1,4 @@
-import "Utils.mag": not_implemented;
+import "Utils.mag": not_implemented, sort_by, all_binnings;
 
 declare type PGGConj: PGGGrpPerm;
 declare attributes PGGConj: pol, base_field, parent_subgroup, parent_quotient, galgrp_is_known, galgrp_is_transitive, galgrp_overgroup;
@@ -244,6 +244,32 @@ intrinsic _GalGrpIsConsistent(conj :: PGGConj_Tower, G :: GrpPerm) -> BoolElt
   {"}
   return forall{c : c in conj`factors | GalGrpIsConsistent(c, c`parent_quotient(G meet c`parent_subgroup))};
 end intrinsic;
+
+// intrinsic GalGrpIsConsistentToSymmetricConjugacy(conj :: PGGConj, G :: GrpPerm) -> BoolElt
+//   {True if G is consistent with being a Galois group of conj, where G is only specified up to conjugacy in a symmetric group.}
+//   not_implemented("GalGrpIsConsistentToSymmetricConjugacy:", Type(conj));
+// end intrinsic;
+
+// intrinsic GalGrpIsConsistentToSymmetricConjugacy(conj :: PGGConj_Factors, G :: GrpPerm) -> BoolElt
+//   {"}
+//   os := sort_by(Orbits(G), func<o | -#o>);
+//   oszs := [#o : o in os];
+//   facszs := [Degree(fac) : fac in conj`factors];
+//   istrans := [GalGrpIsTransitive(fac) : fac in conj`factors];
+//   binss := all_binnings([1 : o in os], [1 : fac in conj`factors] : is_semivalid:=func<i,b | (istrans[i] select #b le 1 else true) and (&+[oszs[j] : j in b] le facszs[i])>);
+//   return exists{bins : bins in binss | forall{i : i in [1..#conj`factors] | GalGrpIsConsistentToSymmetricConjugacy(conj`factors[i], G0) where G0:=OrbitImage(G, &join[os[j] : j in bin, bin in bins[i]])}};
+// end intrinsic;
+
+// intrinsic GalGrpIsConsistentToSymmetricConjugacy(conj :: PGGConj_Tower, G :: GrpPerm) -> BoolElt
+//   {"}
+//   // TODO: check it has a 
+//   return GalGrpIsTransitive(conj) select IsTransitive(G) else true;
+// end intrinsic;
+
+// intrinsic GalGrpIsConsistentToSymmetricConjugacy(conj :: PGGConj_Symmetric, G :: GrpPerm) -> BoolElt
+//   {"}
+//   return GalGrpIsTransitive(conj) select IsTransitive(G) else true;
+// end intrinsic;
 
 intrinsic GalGrpIsConsistentWithSubgroup(conj :: PGGConj, G :: GrpPerm) -> BoolElt
   {True if the Galois group could be a subgroup of G.}

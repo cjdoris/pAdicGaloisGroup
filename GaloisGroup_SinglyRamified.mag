@@ -145,7 +145,7 @@ intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolGrp) 
   require IsIrreducible(f): "f must be irreducible";
   F := BaseRing(f);
   E := Extension(f);
-  R := RamificationFields(E, F);
+  R := RamificationTower(E, F);
   assert #R ge 1;
   require #R le 2: "not singly ramified";
   G := GaloisGroup(f);

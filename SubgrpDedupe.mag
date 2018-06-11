@@ -1,0 +1,105 @@
+import "Utils.mag": not_implemented;
+
+declare type PGGAlg_SubgrpDedupe: PGGAlg;
+
+declare type PGGAlg_SubgrpDedupe_None: PGGAlg_SubgrpDedupe;
+
+declare type PGGAlg_SubgrpDedupe_ClassFunc: PGGAlg_SubgrpDedupe;
+declare attributes PGGAlg_SubgrpDedupe_ClassFunc: class_func;
+
+declare type PGGAlg_SubgrpDedupe_Tree: PGGAlg_SubgrpDedupe;
+declare attributes PGGAlg_SubgrpDedupe_Tree: tranche, stat;
+
+intrinsic PGGAlg_SubgrpDedupe_None_Make() -> PGGAlg_SubgrpDedupe_None
+  {The "None" dedupe algorithm.}
+  return New(PGGAlg_SubgrpDedupe_None);
+end intrinsic;
+
+intrinsic PGGAlg_SubgrpDedupe_ClassFunc_Make( : Num:=false) -> PGGAlg_SubgrpDedupe_ClassFunc
+  {The "ClassFunc" dedupe algorithm.}
+  alg := New(PGGAlg_SubgrpDedupe_ClassFunc);
+  alg`class_func := Num cmpne false select Num else 1;
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_SubgrpDedupe_Tree_Make( : Tranche:=false, Statistic:=false) -> PGGAlg_SubgrpDedupe_Tree
+  {The "Tree" dedupe algorithm.}
+  alg := New(PGGAlg_SubgrpDedupe_Tree);
+  alg`tranche := Tranche;
+  alg`stat := Statistic;
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_SubgrpDedupe_Make(alg) -> PGGAlg_SubgrpDedupe
+  {Converts alg to a PGGAlg_SubgrpDedupe.}
+  error "not coercible to a PGGAlg_SubgrpDedupe:", Type(alg);
+end intrinsic;
+
+intrinsic PGGAlg_SubgrpDedupe_Make(alg :: PGGAlg_SubgrpDedupe) -> PGGAlg_SubgrpDedupe
+  {"}
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_SubgrpDedupe_Make(alg :: BoolElt) -> PGGAlg_SubgrpDedupe
+  {"}
+  return alg select PGGAlg_SubgrpDedupe_Tree_Make() else PGGAlg_SubgrpDedupe_None_Make();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_SubgrpDedupe_None)
+  {Print.}
+  printf "no";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_SubgrpDedupe_ClassFunc)
+  {"}
+  printf "class function %o", alg`class_func;
+  x := case<alg`class_func | 0: "pairwise", 1: "elt classes", 2: "name", 3: "t number", 4: "normal intersections", default: "">;
+  if #x ne 0 then
+    printf " (%o)", x;
+  end if;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_SubgrpDedupe_Tree)
+  {"}
+  printf "tree";
+end intrinsic;
+
+intrinsic Classes(alg :: PGGAlg_SubgrpDedupe, G :: PGGGrpPerm) -> _PGGSetSubgrpcls
+  {The set of conjugacy classes of subgroups of G.}
+  not_implemented("Classes:", Type(alg));
+end intrinsic;
+
+intrinsic Classes(alg :: PGGAlg_SubgrpDedupe_None, G :: PGGGrpPerm) -> PGGSetSubgrpcls
+  {"}
+  return PGG_Subgroups(Group(G) : RandomClass);
+end intrinsic;
+
+intrinsic Classes(alg :: PGGAlg_SubgrpDedupe_ClassFunc, G :: PGGGrpPerm) -> PGGSetSubgrpcls
+  {"}
+  return PGG_SubgroupClasses(Group(G) : ClassFunction:=alg`class_func);
+end intrinsic;
+
+intrinsic Classes(alg :: PGGAlg_SubgrpDedupe_Tree, G :: PGGGrpPerm) -> PGGSetSubgrpcls2
+  {"}
+  return PGG_SubgroupClasses(G : Tranche:=alg`tranche, Statistic:=alg`stat);
+end intrinsic;
+
+intrinsic 'eq'(alg1 :: PGGAlg_SubgrpDedupe, alg2 :: PGGAlg_SubgrpDedupe) -> BoolElt
+  {Equality.}
+  return false;
+end intrinsic;
+
+intrinsic 'eq'(alg1 :: PGGAlg_SubgrpDedupe_None, alg2 :: PGGAlg_SubgrpDedupe_None) -> BoolElt
+  {"}
+  return true;
+end intrinsic;
+
+intrinsic 'eq'(alg1 :: PGGAlg_SubgrpDedupe_ClassFunc, alg2 :: PGGAlg_SubgrpDedupe_ClassFunc) -> BoolElt
+  {"}
+  return alg1`class_func eq alg2`class_func;
+end intrinsic;
+
+intrinsic 'eq'(alg1 :: PGGAlg_SubgrpDedupe_Tree, alg2 :: PGGAlg_SubgrpDedupe_Tree) -> BoolElt
+  {"}
+  return alg1`tranche eq alg2`tranche and alg1`stat eq alg2`stat;
+end intrinsic;

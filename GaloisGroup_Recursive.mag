@@ -1,0 +1,23 @@
+declare type PGGAlg_GaloisGroup_Recursive: PGGAlg_GaloisGroup;
+declare attributes PGGAlg_GaloisGroup_Recursive: var, alg;
+
+intrinsic PGGAlg_GaloisGroup_Recursive_Make(var :: MonStgElt, alg) -> PGGAlg_GaloisGroup_Recursive
+  {Allows a Galois group algorithm to be defined recursively, by replacing `var` with the unparsed `alg`.}
+  rec := New(PGGAlg_GaloisGroup_Recursive);
+  rec`var := var;
+  rec`alg := alg;
+  return rec;
+end intrinsic;
+
+intrinsic Print(rec :: PGGAlg_GaloisGroup_Recursive)
+  {Print.}
+  printf "%o (defined recursively)", rec`var;
+end intrinsic;
+
+intrinsic RamificationGroup(rec :: PGGAlg_GaloisGroup_Recursive, f :: PGGPol, u :: FldRatElt) -> GrpPerm
+  {The uth ramification group.}
+  IndentPush();
+  G := PGG_RamificationGroup(f, u : Alg:=rec`alg);
+  IndentPop();
+  return G;
+end intrinsic;

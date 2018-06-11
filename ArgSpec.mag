@@ -1,11 +1,17 @@
-import "Utils.mag": startswith;
-
 declare type PGGArgSpec;
 declare attributes PGGArgSpec: is_valid;
+
+declare type PGGAttr_ArgSpecSubs: PGGAttr;
+declare attributes PGGAttr_ArgSpecSubs: subs;
 
 intrinsic PGG_Parsable(A :: PGGArgSpec, x) -> BoolElt, .
   {Tries to parse x according to A.}
   return A`is_valid(x);
+end intrinsic;
+
+intrinsic PGG_Parsable(A :: PGGArgSpec, x :: PGGAttr_ArgSpecSubs) -> BoolElt, .
+  {"}
+  return PGG_Parsable(A, x`subs);
 end intrinsic;
 
 intrinsic PGG_Parse(A :: PGGArgSpec, x) -> .
@@ -257,6 +263,59 @@ intrinsic PGG_ArgSpec_AttrForEach(name :: MonStgElt, arg, transform) -> PGGArgSp
   end function);
 end intrinsic;
 
+intrinsic PGG_ArgSpec_AttrScope(name :: MonStgElt, dfltvar :: MonStgElt, mkval :: UserProgram, inner :: PGGArgSpec) -> PGGArgSpec
+  {Parses `name[var,inner]` or `name[inner]` (with `var=dfltfar`), substrituting `var` for `mkval(var,inner)` in `inner`.}
+  return PGG_ArgSpec(function (x)
+    // coerce to a PGGAttr
+    ok, a := PGG_Attribute_IsCoercible(x);
+    if not ok then
+      return false, _;
+    end if;
+    // check the name
+    if Trim(Name(a)) ne name then
+      return false, _;
+    end if;
+    // check the arguments, either [var, inner] or [inner]
+    args := Arguments(a);
+    case #args:
+    when 1:
+      var := dfltvar;
+      inna := args[1];
+    when 2:
+      if #Arguments(args[1]) ne 0 then
+        return false, _;
+      end if;
+      var := Name(args[1]);
+      inna := args[2];
+    else
+      return false, _;
+    end case;
+    // whevever var is encountered, replace it with val
+    val := mkval(var, inna);
+    procedure subs(~x)
+      args := Arguments(x);
+      if Trim(Name(x)) eq var then
+        if #args eq 0 then
+          y := New(PGGAttr_ArgSpecSubs);
+          y`name := x`name;
+          y`arguments := x`arguments;
+          y`subs := val;
+          x := y;
+        else
+          error "not expecting arguments";
+        end if;
+      else
+        for i in [1..#args] do
+          subs(~args[i]);
+        end for;
+      end if;
+    end procedure;
+    subs(~inna);
+    // parse inner
+    return PGG_Parsable(inner, inna);
+  end function);
+end intrinsic;
+
 intrinsic PGG_ArgSpec_AttrInt() -> PGGArgSpec
   {The argspec matching the PGGAttr when it looks like an integer.}
   return PGG_ArgSpec(function (x)
@@ -297,6 +356,18 @@ intrinsic PGG_ArgSpec_Attr(name :: MonStgElt, args, transform) -> PGGArgSpec
     pargs := [* #arg ge 3 select <true, arg[3]> else <false> : arg in args *];
     pos := 1;
     for aa in Arguments(a) do
+      // try to parse keyword argument
+      for i in [1..#args] do
+        if #args[i] ge 2 then
+          if Trim(Name(aa)) eq args[i][2] and #Arguments(aa) eq 1 then
+            ok, parg := PGG_Parsable(args[i][1], Arguments(aa)[1]);
+            if ok then
+              pargs[i] := <true, parg>;
+              continue aa;
+            end if;
+          end if;
+        end if;
+      end for;
       // try to parse a positional argument
       for i in [pos..#args] do
         ok, parg := PGG_Parsable(args[i][1], aa);
@@ -304,21 +375,6 @@ intrinsic PGG_ArgSpec_Attr(name :: MonStgElt, args, transform) -> PGGArgSpec
           pargs[i] := <true, parg>;
           pos := i+1;
           continue aa;
-        end if;
-      end for;
-      // try to parse keyword argument
-      for i in [1..#args] do
-        if #args[i] ge 2 then
-          ok, rest := startswith(Name(aa), args[i][2] cat ":");
-          if ok then
-            ok, parg := PGG_Parsable(args[i][1], PGG_Attribute(rest, Arguments(aa)));
-            if ok then
-              pargs[i] := <true, parg>;
-              continue aa;
-            else
-              return false, _;
-            end if;
-          end if;
         end if;
       end for;
       // failed parsing

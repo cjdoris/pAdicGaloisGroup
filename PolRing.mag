@@ -449,14 +449,6 @@ intrinsic '*'(f :: PGGPolGrp, g :: PGGPolGrp) -> PGGPolGrp
   return &*[f,g];
 end intrinsic;
 
-intrinsic PGGPolGrp_Make(G :: GrpPerm) -> PGGPolGrp
-  {A polynomial with Galois group G.}
-  U := PGGFldGrp_Make(G);
-  f := &*[PolynomialRing(BaseField(U))| DefiningPolynomial(Subfield(U,Stabilizer(G,Rep(o)))) : o in Orbits(G)];
-  f`galois_group_quo := hom<G -> G | [G.i : i in [1..Ngens(G)]]>;
-  return f;
-end intrinsic;
-
 intrinsic DefiningPolynomial(E :: PGGFldGrp, F :: PGGFldGrp) -> PGGPolGrp
   {The defining polynomial of E over F.}
   f := New(PGGPolGrp);

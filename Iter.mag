@@ -7,6 +7,31 @@ declare attributes PGGIter_List: list, idx;
 declare type PGGIter_Filter: PGGIter;
 declare attributes PGGIter_Filter: iter, filter;
 
+declare type PGGIter_Truncate: PGGIter;
+declare attributes PGGIter_Truncate: iter, limit;
+
+declare type PGGIter_Enumerate: PGGIter;
+declare attributes PGGIter_Enumerate: iter, count;
+
+declare type PGGIter_Apply: PGGIter;
+declare attributes PGGIter_Apply: iter, map;
+
+declare type PGGIter_User: PGGIter;
+declare attributes PGGIter_User: state, has_next;
+
+intrinsic PGG_Iter(has_next :: UserProgram : State:=false) -> PGGIter
+  {Makes an iterator X with whose state attribute is State and `HasNext(X)` is `has_next(X)`.}
+  X := New(PGGIter_User);
+  X`state := State;
+  X`has_next := has_next;
+  return X;
+end intrinsic;
+
+intrinsic HasNext(X :: PGGIter_User) -> BoolElt, .
+  {True if X has a next item.}
+  return X`has_next(X);
+end intrinsic;
+
 intrinsic PGG_ToIter(xs :: []) -> PGGIter
   {Makes an iterator.}
   X := New(PGGIter_List);
@@ -61,6 +86,43 @@ intrinsic ToSequence(X :: PGGIter) -> []
   return [x : x in ToList(X)];
 end intrinsic;
 
+intrinsic Enumerate(X :: PGGIter) -> PGGIter
+  {The sequence <i,x_i> for x_i in X.}
+  Y := New(PGGIter_Enumerate);
+  Y`iter := X;
+  Y`count := 0;
+  return Y;
+end intrinsic;
+
+intrinsic HasNext(X :: PGGIter_Enumerate) -> BoolElt, .
+  {True if X has a next item.}
+  ok, x := HasNext(X`iter);
+  if ok then
+    X`count +:= 1;
+    return true, <X`count, x>;
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
+intrinsic Apply(X :: PGGIter, f) -> PGGIter
+  {The sequence f(x) for x in X.}
+  Y := New(PGGIter_Apply);
+  Y`iter := X;
+  Y`map := f;
+  return Y;
+end intrinsic;
+
+intrinsic HasNext(X :: PGGIter) -> BoolElt, .
+  {True if X has a next item.}
+  ok, x := HasNext(X`iter);
+  if ok then
+    return true, X`map(x);
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
 intrinsic Filter(X :: PGGIter, f) -> PGGIter
   {The x in X such that f(x) is true.}
   Y := New(PGGIter_Filter);
@@ -71,6 +133,7 @@ end intrinsic;
 
 intrinsic HasNext(X :: PGGIter_Filter) -> BoolElt, .
   {True if X has a next item.}
+  idx := 0;
   while true do
     ok, x := HasNext(X`iter);
     if ok then
@@ -107,3 +170,49 @@ intrinsic SortBy(X :: PGGIter, keyfunc :: UserProgram) -> PGGIter
   return PGG_ToIter([* xs[i^permut] : i in [1..#xs] *]);
 end intrinsic;
 
+intrinsic FilterHasNext(X :: PGGIter, f) -> BoolElt, ., RngIntElt
+  {True if there is `x` in X such that `f(x)` is true. If so, returns the first such `x` and its index.}
+  idx := 0;
+  while true do
+    idx +:= 1;
+    ok, x := HasNext(X);
+    if ok then
+      if f(x) then
+        return true, x, idx;
+      end if;
+    else
+      return false, _, _;
+    end if;
+  end while;
+end intrinsic;
+
+intrinsic Truncate(X :: PGGIter, n :: RngIntElt) -> PGGIter_Truncate
+  {Limits the length of X to n.}
+  require n ge 0: "n must be at least 0";
+  Y := New(PGGIter_Truncate);
+  Y`iter := X;
+  Y`limit := n;
+  return Y;
+end intrinsic;
+
+intrinsic Truncate(X :: PGGIter_List, n :: RngIntElt) -> PGGIter_List
+  {"}
+  xs := ToList(X);
+  if #xs gt n then
+    return PGG_ToIter(xs[1..n]);
+  else
+    return X;
+  end if;
+end intrinsic;
+
+intrinsic HasNext(X :: PGGIter) -> BoolElt, .
+  {True if X has a next item.}
+  if X`limit gt 0 then
+    ok, x := HasNext(X`iter);
+    if ok then
+      X`limit -:= 1;
+      return true, x;
+    end if;
+  end if;
+  return false, _;
+end intrinsic;

@@ -1,4 +1,4 @@
-import "Utils.mag": Z, pop_start, xdiv, not_implemented, sprint_with_parens, partitions_of_shape;
+import "Utils.mag": Z, pop_start, xdiv, not_implemented, sprint_with_parens, partitions_of_shape, sort_by, all_binnings;
 
 declare type PGGGrpPerm;
 declare attributes PGGGrpPerm: group, degree, orbits_of_subgroups;
@@ -570,4 +570,155 @@ intrinsic Compose(hs, G :: PGGGrpPerm_DirProd) -> GrpPermElt
   require #hs eq #G`factors: "expecting hs to correspond to factors";
   g := &*[Group(G)| Lift(hs[i], G, i) : i in [1..#G`factors]];
   return g;
+end intrinsic;
+
+intrinsic Embeddings(H :: GrpPerm, G :: PGGGrpPerm) -> []
+  {Subgroups of G conjugate to H in the symmetric group.}
+  d := Degree(G);
+  require Degree(H) eq d: "G and H must have the same degree";
+  if d le 1 then
+    return [H];
+  end if;
+  return _Embeddings(H, G);
+end intrinsic;
+
+intrinsic _Embeddings(H :: GrpPerm, G :: PGGGrpPerm) -> []
+  {"}
+  not_implemented("_Embeddings:", Type(G));  
+end intrinsic;
+
+function cumprod(xs)
+  return [i eq 1 select xs[i] else xs[i] * Self(i-1) : i in [1..#xs]];
+end function;
+
+function all_block_systems_of_shape(G, ds)
+  assert ds[1] eq 1;
+  assert ds[#ds] eq Degree(G);
+  assert forall{i : i in [2..#ds] | IsDivisibleBy(ds[i], ds[i-1])};
+  allBs := AllPartitions(G);
+  // first trivial system
+  ret := [[{1}]];
+  // intermediate systems
+  for i in [2..#ds-1] do
+    Bs := [B : B in allBs | #B eq ds[i]];
+    ret := &cat[[Append(part, B) : B in Bs | part[i-1] subset B] : part in ret];
+  end for;
+  // final system
+  ret := [Append(part, {1..Degree(G)}) : part in ret];
+  return ret;
+end function;
+
+function all_ramification_filtrations(G,p)
+  // first bit: inertia/tame groups
+  todo := [[G,I,T] : x in NormalSubgroups(G) | IsNormal(G,I) and IsNormal(G,T) and IsCyclic(G/I) and IsCyclic(I/T) where T:=SylowSubgroup(I,p) where I:=x`subgroup];
+  // wild bit
+  Rs := [];
+  while #todo ne 0 do
+    more := [];
+    for R in todo do
+      if #R[#R] eq 1 then
+        Append(~Rs, R);
+      else
+        Append(~more, R);
+      end if;
+    end for;
+    todo := [];
+    for R in more do
+      for x in NormalSubgroups(R[#R]) do
+        N := x`subgroup;
+        if Index(R[#R],N) ne 1 and IsNormal(G,N) and IsPowerOf(Index(R[#R],N),p) and IsElementaryAbelian(R[#R]/N) then
+          Append(~todo, Append(R, N));
+        end if;
+      end for;
+    end for;
+  end while;
+  return Rs;
+end function;
+
+intrinsic _Embeddings(H :: GrpPerm, G :: PGGGrpPerm_WrProd) -> []
+  {"}
+  d := Degree(G);
+  Sd := SymmetricGroup(d);
+  ds := [1] cat cumprod(Reverse([Degree(G0) : G0 in G`factors]));
+  systems := all_block_systems_of_shape(H, ds);
+  full_systems := [[{X : X in Orbit(H,B)} : B in system] : system in systems];
+  ret := [];
+  symG := PGGGrpPerm_WrProd_Make(<PGGGrpPerm_Symmetric_Make(Degree(G0)) : G0 in G`factors>);
+  assert Group(G) subset Group(symG);
+  Hgens := [H.i : i in [1..Ngens(H)]];
+  for full_system in full_systems do
+    // embed the group into symG, a wreath product of symmetric groups
+    p := Id(Sd);
+    last_P := [{1..d}];
+    for P in Reverse(full_system) do
+      // fix an ordering on P, refining the ordering of last_P
+      P2 := &cat[[B2 : B2 in P | B2 subset B] : B in last_P];
+      // make the corresponding permutation
+      P3 := [[x^p : x in B] : B in P2];
+      p *:= (Sd ! &cat P3)^-1;
+      last_P := P2;
+    end for;
+    H2 := H^p;
+    assert H2 subset Group(symG);
+    // now embed H2 into G
+    // for now, we only implement G being a wreath product of symmetric groups
+    if Group(symG) ne Group(G) then
+      not_implemented("_Embeddings:", Type(G));
+    end if;
+    H2 := H^p;
+    assert H2 subset Group(G);
+    if not exists{e : e in ret | IsConjugate(Group(G), e[1], H2)} then
+      Append(~ret, <H2, p>);
+    end if;
+  end for;
+  return ret;
+end intrinsic;
+
+intrinsic _Embeddings(H :: GrpPerm, G :: PGGGrpPerm_Symmetric) -> []
+  {"}
+  return [<H, Id(H)>];
+end intrinsic;
+
+intrinsic _Embeddings(H :: GrpPerm, G :: PGGGrpPerm_DirProd) -> []
+  {"}
+  d := Degree(G);
+  Sd := SymmetricGroup(d);
+  // assign orbits of H to orbits of G in all possible ways
+  os := sort_by(Orbits(H), func<o | -#o>);
+  oszs := [#o : o in os];
+  degs := [Degree(fac) : fac in G`factors];
+  istrans := ISA(Type(G), PGGConj) select [GalGrpIsTransitive(fac) : fac in G`factors] else [false : fac in G`factors];
+  binss := all_binnings([1:o in os], [1:fac in G`factors] : is_semivalid:=func<i,b | (istrans[i] select #b le 1 else true) and (&+[oszs[j] : j in b] le degs[i])>);
+  ps := [Sd| (Sd ! [x : x in os[j], j in b, b in bin, bin in bins])^-1 : bins in binss];
+  // dedupe
+  print Cputime(), "dedupe...";
+  _ps := [];
+  for p in ps do
+    if not exists{p2 : p2 in _ps | H^p eq H^p2} then
+      Append(~_ps, p);
+    end if;
+  end for;
+  ps := _ps;
+  symG := PGGGrpPerm_DirProd_Make(<PGGGrpPerm_Symmetric_Make(Degree(G0)) : G0 in G`factors>);
+  ret := [];
+  print Cputime(), "loop...";
+  for p0 in ps do
+    H2 := H^p0;
+    assert H2 subset Group(symG);
+    // project H to each factor
+    H2gens := [H2.i : i in [1..Ngens(H2)]];
+    projHs := [sub<Group(symG`factors[i]) | [Quotient(h, symG, i) : h in H2gens]> : i in [1..#G`factors]];
+    // find the embeddings of each factor
+    embss := <_Embeddings(projHs[i], G`factors[i]) : i in [1..#G`factors]>;
+    // take the cartesian product of them all
+    for embs in CartesianProduct(embss) do
+      p := p0 * &*[Lift(embs[i][2], symG, i) : i in [1..#G`factors]];
+      H2 := H^p;
+      assert H2 subset Group(G);
+      if not exists{e : e in ret | IsConjugate(Group(G), e[1], H2)} then
+        Append(~ret, <H2, p>);
+      end if;
+    end for;
+  end for;
+  return ret;
 end intrinsic;

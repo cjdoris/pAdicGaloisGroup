@@ -8,6 +8,8 @@ intrinsic PGG_SubgroupClasses(G :: GrpPerm : ClassFunction:=4) -> PGGSetSubgrpcl
   X := New(PGGSetSubgrpcls);
   X`overgroup := G;
   case ClassFunction:
+  when 0:
+    X`class_function := func<H | 0>;
   when 1:
     X`class_function := func<H | <#H, Hash(H), {*cf(x[3])^^x[2] : x in Classes(H)*}>>
       where cf := ClassMap(G);

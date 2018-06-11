@@ -62,33 +62,54 @@ intrinsic PGG_Attribute_IsCoercible(x :: MonStgElt) -> BoolElt, .
   {"}
   // process each character in turn
   stack := [PGG_Attribute()];
+  popstack := [1];
   i := 0;
   for i in [1..#x] do
     c := x[i];
     assert #stack ge 1;
-    case c:
-    when ",":
-      if #stack lt 2 then
-        return false, Sprintf("parse error: %o: illegal ','", i);
+    assert #popstack ge 1;
+    ordinary := true;
+    // pop
+    if c eq "," or c eq "]" then
+      ordinary := false;
+      npop := popstack[#popstack];
+      if #stack le npop then
+        return false, Sprintf("parse error: %o: illegal '%o'", i, c);
       end if;
-      Append(~stack[#stack-1]`arguments, stack[#stack]);
-      stack[#stack] := PGG_Attribute();
-    when "[":
+      for j in [1..npop] do
+        Append(~stack[#stack-1]`arguments, stack[#stack]);
+        stack := stack[1..#stack-1];
+      end for;
+      popstack := popstack[1..#popstack-1];
+    end if;
+    // push
+    if c eq "," or c eq "[" then
+      ordinary := false;
       Append(~stack, PGG_Attribute());
-    when "]":
-      if #stack lt 2 then
-        return false, Sprintf("parse error: %o: illegal ')'");
-      end if;
-      Append(~stack[#stack-1]`arguments, stack[#stack]);
-      stack := stack[1..#stack-1];
-    else
+      Append(~popstack, 1);
+    end if;
+    // serial push
+    if c eq ":" then
+      ordinary := false;
+      Append(~stack, PGG_Attribute());
+      popstack[#popstack] +:= 1;
+    end if;
+    // keep
+    if ordinary then
       stack[#stack]`name cat:= c;
-    end case;
+    end if;
   end for;
   assert #stack ge 1;
-  if #stack gt 1 then
-    return false, Sprintf("parse error: end of input: too few ')'");
+  assert #popstack ge 1;
+  if #popstack gt 1 then
+    return false, Sprintf("parse error: end of input: too few ']'");
   end if;
+  assert #stack eq popstack[1];
+  for j in [1..popstack[1]-1] do
+    Append(~stack[#stack-1]`arguments, stack[#stack]);
+    stack := stack[1..#stack-1];
+  end for;
+  assert #stack eq 1;
   // done
   return true, stack[1];
 end intrinsic;

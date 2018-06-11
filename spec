@@ -17,6 +17,7 @@
   GaloisGroup_Builtin.mag
   GaloisGroup_SinglyRamified.mag
   GaloisGroup_ARM.mag
+  GaloisGroup_Recursive.mag
   Tranche.mag
   ResGroups.mag
   ResChoice.mag
@@ -24,4 +25,5 @@
   ResPriority.mag
   Field.mag
   PolRing.mag
+  SubgrpDedupe.mag
 }

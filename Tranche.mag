@@ -1,21 +1,39 @@
-import "Utils.mag": not_implemented, sort_by, xdiv;
+import "Utils.mag": not_implemented, sort_by, xdiv, seq_shuffle;
 
 declare type PGGAlg_Tranche: PGGAlg;
 declare attributes PGGAlg_Tranche: verbosity;
 declare type PGGAlg_Tranche_All: PGGAlg_Tranche;
 declare type PGGAlg_Tranche_Index: PGGAlg_Tranche;
-declare attributes PGGAlg_Tranche_Index: filter, sort_key, static_filter, dynamic_filter;
+declare attributes PGGAlg_Tranche_Index: filter, sort_key, static_filter, dynamic_filter, take, dedupe, streaming;
 declare type PGGAlg_Tranche_OrbitIndex: PGGAlg_Tranche;
-declare attributes PGGAlg_Tranche_OrbitIndex: filter, sort_key, static_filter, dynamic_filter;
+declare attributes PGGAlg_Tranche_OrbitIndex: filter, sort_key, static_filter, dynamic_filter, take, dedupe;
+// abstract type for tranches which modify other tranches
+// subtypes implement Make, Print, Modify
+// don't need corresponding PGGAlgState
+declare type PGGAlg_Tranche_Modify: PGGAlg_Tranche;
+declare attributes PGGAlg_Tranche_Modify: inner;
+declare type PGGAlg_Tranche_Tuples: PGGAlg_Tranche_Modify;
+declare attributes PGGAlg_Tranche_Tuples: length, random_limit;
+declare type PGGAlg_Tranche_Shuffle: PGGAlg_Tranche_Modify;
+declare type PGGAlg_Tranche_Truncate: PGGAlg_Tranche_Modify;
+declare attributes PGGAlg_Tranche_Truncate: length;
 
 declare type PGGAlgState_Tranche: PGGAlgState;
 declare attributes PGGAlgState_Tranche: overgroup, special_tranches;
 declare type PGGAlgState_Tranche_All: PGGAlgState_Tranche;
 declare attributes PGGAlgState_Tranche_All: all_groups, tranche;
 declare type PGGAlgState_Tranche_Index: PGGAlgState_Tranche;
-declare attributes PGGAlgState_Tranche_Index: all_indices, indices, ii, all_groups, tranche;
+declare attributes PGGAlgState_Tranche_Index: all_indices, indices, ii, all_groups, tranche, subgroup_classes;
 declare type PGGAlgState_Tranche_OrbitIndex: PGGAlgState_Tranche;
-declare attributes PGGAlgState_Tranche_OrbitIndex: all_indices, indices, ii, si, all_groups, all_stabilizers, cur_stabilizers, tranche;
+declare attributes PGGAlgState_Tranche_OrbitIndex: all_indices, indices, ii, si, all_groups, all_stabilizers, cur_stabilizers, tranche, subgroup_classes;
+declare type PGGAlgState_Tranche_Modify: PGGAlgState_Tranche;
+declare attributes PGGAlgState_Tranche_Modify: inner_state, tranche;
+
+declare type PGGAlg_TrancheTake: PGGAlg;
+declare type PGGAlg_TrancheTake_All: PGGAlg_TrancheTake;
+declare type PGGAlg_TrancheTake_FrattiniBasis: PGGAlg_TrancheTake;
+declare type PGGAlg_TrancheTake_Random: PGGAlg_TrancheTake;
+declare attributes PGGAlg_TrancheTake_Random: limit, new_tries, random_tries;
 
 declare type PGGAlgState_TrancheItem;
 declare attributes PGGAlgState_TrancheItem: state, idx, tidx, subgroup;
@@ -51,23 +69,74 @@ intrinsic PGGAlg_Tranche_All_Make(:Verbosity:=1) -> PGGAlg_Tranche_All
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_Tranche_Index_Make(:Filter:=false, SortKey:=false, Verbosity:=1) -> PGGAlg_Tranche_Index
+intrinsic PGGAlg_Tranche_Index_Make(:Filter:=false, SortKey:=false, Verbosity:=1, Take:=false, Dedupe:=true, Streaming:=false) -> PGGAlg_Tranche_Index
   {The "Index" subgroups choice.}
   alg := New(PGGAlg_Tranche_Index);
   alg`verbosity := Verbosity;
   alg`filter := Filter;
   alg`static_filter, alg`dynamic_filter := split_filter(Filter, {"idx"});
   alg`sort_key := SortKey;
+  alg`take := Take cmpne false select Take else PGGAlg_TrancheTake_All_Make();
+  alg`dedupe := Dedupe cmpeq false select PGGAlg_SubgrpDedupe_None_Make() else Dedupe cmpeq true select PGGAlg_SubgrpDedupe_Tree_Make() else Dedupe;
+  alg`streaming := Streaming;
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_Tranche_OrbitIndex_Make(:Filter:=false, SortKey:=false, Verbosity:=1) -> PGGAlg_Tranche_OrbitIndex
+intrinsic PGGAlg_Tranche_OrbitIndex_Make(:Filter:=false, SortKey:=false, Verbosity:=1, Take:=false, Dedupe:=true) -> PGGAlg_Tranche_OrbitIndex
   {The "Index" subgroups choice.}
   alg := New(PGGAlg_Tranche_OrbitIndex);
   alg`verbosity := Verbosity;
   alg`filter := Filter;
   alg`static_filter, alg`dynamic_filter := split_filter(Filter, {"idx","oidx","ridx"});
   alg`sort_key := SortKey;
+  alg`take := Take cmpne false select Take else PGGAlg_TrancheTake_All_Make();
+  alg`dedupe := Dedupe cmpeq false select PGGAlg_SubgrpDedupe_None_Make() else Dedupe cmpeq true select PGGAlg_SubgrpDedupe_Tree_Make() else Dedupe;
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_Tranche_Tuples_Make(length :: RngIntElt, inner :: PGGAlg_Tranche : Random:=false) -> PGGAlg_Tranche_Tuples
+  {The "Tuples" subgroups choice.}
+  require length ge 1: "length must be at least 1";
+  alg := New(PGGAlg_Tranche_Tuples);
+  alg`inner := inner;
+  alg`length := length;
+  if Random cmpne false then
+    alg`random_limit := Random;
+  end if;
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_Tranche_Shuffle_Make(inner :: PGGAlg_Tranche) -> PGGAlg_Tranche_Shuffle
+  {The "Shuffle" subgroups choice.}
+  alg := New(PGGAlg_Tranche_Shuffle);
+  alg`inner := inner;
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_Tranche_Truncate_Make(length :: RngIntElt, inner :: PGGAlg_Tranche) -> PGGAlg_Tranche_Truncate
+  {The "Truncate" subgroups choice.}
+  alg := New(PGGAlg_Tranche_Truncate);
+  alg`inner := inner;
+  alg`length := length;
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_TrancheTake_All_Make() -> PGGAlg_TrancheTake_All
+  {Takes all subgroups.}
+  return New(PGGAlg_TrancheTake_All);
+end intrinsic;
+
+intrinsic PGGAlg_TrancheTake_FrattiniBasis_Make() -> PGGAlg_TrancheTake_FrattiniBasis
+  {Takes just the subgroups generated from a basis of the Frattini quotient.}
+  return New(PGGAlg_TrancheTake_FrattiniBasis);
+end intrinsic;
+
+intrinsic PGGAlg_TrancheTake_Random_Make(Limit :: RngIntElt : NewTries:=false, RandomTries:=false) -> PGGAlg_TrancheTake_Random
+  {Takes some randomly generated groups.}
+  alg := New(PGGAlg_TrancheTake_Random);
+  alg`limit := Limit;
+  alg`new_tries := NewTries cmpne false select NewTries else 10;
+  alg`random_tries := RandomTries cmpne false select RandomTries else 100;
   return alg;
 end intrinsic;
 
@@ -93,6 +162,20 @@ intrinsic Print(alg :: PGGAlg_Tranche_Index)
     Print(alg`sort_key);
     IndentPop();
   end if;
+  print "";
+  IndentPush();
+  printf "take = ";
+  Print(alg`take);
+  print "";
+  printf "dedupe = ";
+  Print(alg`dedupe);
+  IndentPop();
+  if alg`streaming then
+    print "";
+    IndentPush();
+    printf "streaming = true";
+    IndentPop();
+  end if;
 end intrinsic;
 
 intrinsic Print(alg :: PGGAlg_Tranche_OrbitIndex)
@@ -112,6 +195,58 @@ intrinsic Print(alg :: PGGAlg_Tranche_OrbitIndex)
     Print(alg`sort_key);
     IndentPop();
   end if;
+  print "";
+  IndentPush();
+  printf "take = ";
+  Print(alg`take);
+  print "";
+  printf "dedupe = ";
+  Print(alg`dedupe);
+  IndentPop();
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Tranche_Tuples)
+  {"}
+  printf "%o-tuples -> ", alg`length;
+  Print(alg`inner);
+  if assigned alg`random_limit then
+    print "";
+    IndentPush();
+    printf "take = random %o", alg`random_limit;
+    IndentPop();
+  end if;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Tranche_Shuffle)
+  {"}
+  printf "shuffle -> ";
+  Print(alg`inner);
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Tranche_Truncate)
+  {"}
+  printf "truncate %o -> ", alg`length;
+  Print(alg`inner);
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_TrancheTake_All)
+  {"}
+  printf "all";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_TrancheTake_FrattiniBasis)
+  {"}
+  printf "frattini basis";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_TrancheTake_Random)
+  {"}
+  print "random";
+  IndentPush();
+  print "limit =", alg`limit;
+  print "new tries =", alg`new_tries;
+  printf "random tries = %o", alg`random_tries;
+  IndentPop();
 end intrinsic;
 
 intrinsic Start(alg :: PGGAlg_Tranche_All, overgroup :: PGGGrpPerm) -> PGGAlgState_Tranche_All
@@ -137,6 +272,13 @@ intrinsic Start(alg :: PGGAlg_Tranche_OrbitIndex, overgroup :: PGGGrpPerm) -> PG
   s`all_groups := AssociativeArray();
   s`all_stabilizers := [];
   s`all_indices := [<idx,ridx> : ridx in Divisors(idx), idx in Divisors(#Group(overgroup))];
+  return Restart(alg, s);
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_Tranche_Modify, overgroup :: PGGGrpPerm) -> PGGAlgState_Tranche_Modify
+  {"}
+  s := New(PGGAlgState_Tranche_Modify);
+  s`overgroup := overgroup;
   return Restart(alg, s);
 end intrinsic;
 
@@ -166,6 +308,7 @@ intrinsic Restart(alg :: PGGAlg_Tranche_Index, s :: PGGAlgState_Tranche_Index) -
     s`indices := Sort(s`indices);
   end if;
   vprint PGG_GaloisGroup: "indices =", s`indices;
+  s`subgroup_classes := Classes(alg`dedupe, s`overgroup);
   Reset(s);
   return s;
 end intrinsic;
@@ -183,8 +326,32 @@ intrinsic Restart(alg :: PGGAlg_Tranche_OrbitIndex, s :: PGGAlgState_Tranche_Orb
     s`indices := Sort(s`indices);
   end if;
   vprint PGG_GaloisGroup: "orbit indices =", s`indices;
+  s`subgroup_classes := Classes(alg`dedupe, s`overgroup);
   Reset(s);
   return s;  
+end intrinsic;
+
+intrinsic Restart(alg :: PGGAlg_Tranche_Modify, s :: PGGAlgState_Tranche_Modify) -> PGGAlgState_Tranche_Modify
+  {"}
+  s`algorithm := alg;
+  s`inner_state := assigned s`inner_state select Restart(alg`inner, s`inner_state) else Start(alg`inner, s`overgroup);
+  Reset(s);
+  return s;
+end intrinsic;
+
+intrinsic Restart(alg :: PGGAlg_Tranche_Modify, s :: PGGAlgState_Tranche) -> PGGAlgState_Tranche_Modify
+  {"}
+  s2 := New(PGGAlgState_Tranche_Modify);
+  s2`overgroup := s`overgroup;
+  s2`algorithm := alg;
+  s2`inner_state := Restart(alg`inner, s);
+  Reset(s2);
+  return s2;
+end intrinsic;
+
+intrinsic Restart(alg :: PGGAlg_Tranche, s :: PGGAlgState_Tranche_Modify) -> PGGAlgState_Tranche
+  {"}
+  return Restart(alg, s`inner_state);
 end intrinsic;
 
 intrinsic Reset(s :: PGGAlgState_Tranche)
@@ -208,6 +375,11 @@ intrinsic TrancheIndex(s :: PGGAlgState_Tranche_OrbitIndex) -> .
   return <s`ii, s`si>;
 end intrinsic;
 
+intrinsic TrancheIndex(s :: PGGAlgState_Tranche_Modify) -> .
+  {"}
+  return TrancheIndex(s`inner_state);
+end intrinsic;
+
 intrinsic InitialState(s :: PGGAlgState_Tranche_All) -> .
   {Gets the initial state of the choice.}
   return false;
@@ -223,6 +395,11 @@ intrinsic InitialState(s :: PGGAlgState_Tranche_OrbitIndex) -> .
   return <0, 0, [], []>;
 end intrinsic;
 
+intrinsic InitialState(s :: PGGAlgState_Tranche_Modify) -> .
+  {"}
+  return <InitialState(s`inner_state), []>;
+end intrinsic;
+
 intrinsic CurrentState(s :: PGGAlgState_Tranche_All) -> .
   {Gets the current state of the choice.}
   return assigned s`tranche select s`tranche else false;
@@ -236,6 +413,11 @@ end intrinsic;
 intrinsic CurrentState(s :: PGGAlgState_Tranche_OrbitIndex) -> .
   {"}
   return <s`ii, s`si, s`tranche, s`cur_stabilizers>;
+end intrinsic;
+
+intrinsic CurrentState(s :: PGGAlgState_Tranche_Modify) -> .
+  {"}
+  return <CurrentState(s`inner_state), s`tranche>;
 end intrinsic;
 
 intrinsic SetState(s :: PGGAlgState_Tranche_All, x)
@@ -263,6 +445,12 @@ intrinsic SetState(s :: PGGAlgState_Tranche_OrbitIndex, x)
   s`cur_stabilizers := x[4];
 end intrinsic;
 
+intrinsic SetState(s :: PGGAlgState_Tranche_Modify, x)
+  {"}
+  SetState(s`inner_state, x[1]);
+  s`tranche := x[2];
+end intrinsic;
+
 intrinsic Tranche(s :: PGGAlgState_Tranche) -> []
   {Gets a tranche of potential subgroups}
   ok, t := HasTranche(s);
@@ -271,7 +459,7 @@ intrinsic Tranche(s :: PGGAlgState_Tranche) -> []
   return t;
 end intrinsic;
 
-intrinsic HasTranche(s :: PGGAlgState_Tranche_All) -> []
+intrinsic HasTranche(s :: PGGAlgState_Tranche_All) -> BoolElt, []
   {Gets a tranche of potential subgroups.}
   if not assigned s`tranche then
     if not assigned s`all_groups then
@@ -286,7 +474,7 @@ intrinsic HasTranche(s :: PGGAlgState_Tranche_All) -> []
   end if;
 end intrinsic;
 
-intrinsic HasTranche(s :: PGGAlgState_Tranche_Index) -> []
+intrinsic HasTranche(s :: PGGAlgState_Tranche_Index) -> BoolElt, []
   {"}
   while #s`tranche eq 0 do
     if s`ii ge #s`indices then
@@ -297,7 +485,7 @@ intrinsic HasTranche(s :: PGGAlgState_Tranche_Index) -> []
     if s`algorithm`dynamic_filter cmpeq false or Evaluate(s`algorithm`dynamic_filter, func<name | case<name | "idx":index, "has_special":#SpecialTranches(s) ne 0, "sidx0":#SpecialTranches(s) eq 0 select 0 else s`indices[SpecialTranches(s)[1][1]], default: not_implemented()>>) then
       vprint PGG_GaloisGroup, s`algorithm`verbosity: "index =", index;
       if not IsDefined(s`all_groups, s`ii) then
-        s`all_groups[s`ii] := [x`subgroup : x in Subgroups(Group(s`overgroup) : IndexEqual:=index)];
+        s`all_groups[s`ii] := SubgroupsOfIndex(s`algorithm`take, s`subgroup_classes, Group(s`overgroup), index);
       end if;
       s`tranche := MakeTranche(s, s`all_groups[s`ii]);
     end if;
@@ -305,7 +493,7 @@ intrinsic HasTranche(s :: PGGAlgState_Tranche_Index) -> []
   return true, [i : i in s`tranche];
 end intrinsic;
 
-intrinsic HasTranche(s :: PGGAlgState_Tranche_OrbitIndex) -> []
+intrinsic HasTranche(s :: PGGAlgState_Tranche_OrbitIndex) -> BoolElt, []
   {"}
   while #s`tranche eq 0 do
     while s`si ge #s`cur_stabilizers do
@@ -331,7 +519,7 @@ intrinsic HasTranche(s :: PGGAlgState_Tranche_OrbitIndex) -> []
     idx, ridx := Explode(s`indices[s`ii]);
     k := <idx, ridx, s`si>;
     if not IsDefined(s`all_groups, k) then
-      s`all_groups[k] := [x`subgroup : x in Subgroups(s`cur_stabilizers[s`si] : IndexEqual:=ridx)];
+      s`all_groups[k] := SubgroupsOfIndex(s`algorithm`take, s`subgroup_classes, s`cur_stabilizers[s`si], ridx);
       assert forall{U : U in s`all_groups[k] | Index(Group(s`overgroup), U) eq idx};
     end if;
     s`tranche := MakeTranche(s, s`all_groups[k]);
@@ -339,12 +527,121 @@ intrinsic HasTranche(s :: PGGAlgState_Tranche_OrbitIndex) -> []
   return true, [i : i in s`tranche];
 end intrinsic;
 
-intrinsic MakeTranche(s :: PGGAlgState_Tranche, groups :: [GrpPerm]) -> .
+intrinsic HasTranche(s :: PGGAlgState_Tranche_Modify) -> BoolElt, []
+  {"}
+  while #s`tranche eq 0 do
+    ok, t := HasTranche(s`inner_state);
+    if ok then
+      s`tranche := MakeTranche(s, Modify(s`algorithm, [x`subgroup : x in t]));
+      ForgetTranche(s`inner_state);
+    else
+      return false, _;
+    end if;
+  end while;
+  return true, [i : i in s`tranche];
+end intrinsic;
+
+intrinsic Modify(alg :: PGGAlg_Tranche_Modify, t :: []) -> []
+  {Givens a sequence of subgroups, returns the modified sequence of subgroups.}
+  not_implemented("Modify:", Type(alg));
+end intrinsic;
+
+intrinsic Modify(alg :: PGGAlg_Tranche_Tuples, t :: []) -> []
+  {"}
+  if assigned alg`random_limit then
+    all_idxs := CartesianPower([1..#t], alg`length);
+    if #all_idxs le alg`random_limit then
+      idxs := seq_shuffle([idx : idx in all_idxs]);
+    elif #all_idxs le 2*alg`random_limit then
+      idxs := seq_shuffle([idx : idx in all_idxs])[1..alg`random_limit];
+    else
+      idxs := {@ @};
+      while #idxs lt alg`random_limit do
+        Include(~idxs, Random(all_idxs));
+      end while;
+    end if;
+    return [[t[i] : i in idx] : idx in idxs];
+  else  
+    return [[x : x in xs] : xs in CartesianPower(t, alg`length)];
+  end if;
+end intrinsic;
+
+intrinsic Modify(alg :: PGGAlg_Tranche_Shuffle, t :: []) -> []
+  {"}
+  return seq_shuffle(t);
+end intrinsic;
+
+intrinsic Modify(alg :: PGGAlg_Tranche_Truncate, t :: []) -> []
+  {"}
+  return #t le alg`length select t else t[1..alg`length];
+end intrinsic;
+
+intrinsic SubgroupsOfIndex(alg :: PGGAlg_TrancheTake, Cs :: _PGGSetSubgrpcls, G :: GrpPerm, n :: RngIntElt) -> []
+  {Subgroups of G of index n.}
+  not_implemented("SubgroupsOfIndex:", Type(alg));
+end intrinsic;
+
+intrinsic SubgroupsOfIndex(alg :: PGGAlg_TrancheTake_All, Cs :: _PGGSetSubgrpcls, G :: GrpPerm, n :: RngIntElt) -> []
+  {"}
+  return [x`subgroup : x in Subgroups(G : IndexEqual:=n)];
+end intrinsic;
+
+intrinsic SubgroupsOfIndex(alg :: PGGAlg_TrancheTake_FrattiniBasis, Cs :: _PGGSetSubgrpcls, G :: GrpPerm, n :: RngIntElt) -> []
+  {"}
+  if n eq 1 then
+    return [G];
+  elif IsPrime(n) and IsPowerOf(#G, n) then
+    vprint PGG_GaloisGroup: "using frattini basis";
+    F := FrattiniSubgroup(G);
+    Q, q := quo<G | F>;
+    A, a := AbelianGroup(Q);
+    return [sub<A | [A.j : j in [1..m] | j ne i]> @@ a @@ q : i in [1..m]] where m:=Ngens(A);
+  else
+    error "FrattiniBasis invalid here";
+  end if;
+end intrinsic;
+
+intrinsic SubgroupsOfIndex(alg :: PGGAlg_TrancheTake_Random, Cs :: _PGGSetSubgrpcls, G :: GrpPerm, n :: RngIntElt) -> []
+  {"}
+  if n eq 1 then
+    return [G];
+  elif n eq #G then
+    return [sub<G | [G|]>];
+  elif not IsDivisibleBy(#G, n) then
+    return [];
+  end if;
+  CHs := {Cs|};
+  for i in [1..alg`limit] do
+    for j in [1..alg`new_tries] do
+      PGG_GlobalTimer_Push("random subgroup");
+      ok, H := PGG_has_random_subgroup_of_index(G, n : MaxTries:=alg`random_tries);
+      PGG_GlobalTimer_Pop();
+      if ok then
+        PGG_GlobalTimer_Push("dedupe");
+        CH := Cs ! H;
+        ok := CH notin CHs;
+        PGG_GlobalTimer_Pop();
+        if ok then
+          Include(~CHs, CH);
+          continue i;
+        else
+          continue j;
+        end if;
+      elif #CHs eq 0 then
+        break i;
+      end if;
+    end for;
+    break i;
+  end for;
+  return [Rep(CH) : CH in CHs];
+end intrinsic;
+
+intrinsic MakeTranche(s :: PGGAlgState_Tranche, groups :: []) -> []
   {Makes a new tranche.}
   return [TrancheItem(s, i, groups[i]) : i in [1..#groups]];
 end intrinsic;
 
-intrinsic TrancheItem(s :: PGGAlgState_Tranche, idx, subgroup :: GrpPerm) -> PGGAlgState_TrancheItem
+intrinsic TrancheItem(s :: PGGAlgState_Tranche, idx, subgroup) -> PGGAlgState_TrancheItem
   {An item in a tranche.}
   i := New(PGGAlgState_TrancheItem);
   i`state := s;
@@ -352,6 +649,26 @@ intrinsic TrancheItem(s :: PGGAlgState_Tranche, idx, subgroup :: GrpPerm) -> PGG
   i`subgroup := subgroup;
   i`tidx := TrancheIndex(s);
   return i;
+end intrinsic;
+
+intrinsic CosetAction(G :: GrpPerm, i :: PGGAlgState_TrancheItem) -> .
+  {The coset action of i on G.}
+  return PGG_CosetAction(G, i`subgroup);
+end intrinsic;
+
+intrinsic PGG_CosetAction(G :: GrpPerm, x) -> .
+  {"}
+  not_implemented("CosetAction:", Type(x));
+end intrinsic;
+
+intrinsic PGG_CosetAction(G :: GrpPerm, H :: GrpPerm) -> .
+  {"}
+  return CosetAction(G, H);
+end intrinsic;
+
+intrinsic PGG_CosetAction(G :: GrpPerm, Hs :: [GrpPerm]) -> .
+  {"}
+  return [CosetAction(G, H) : H in Hs];
 end intrinsic;
 
 intrinsic Id(i :: PGGAlgState_TrancheItem) -> .
@@ -370,19 +687,14 @@ intrinsic 'eq'(i :: PGGAlgState_TrancheItem, j :: PGGAlgState_TrancheItem) -> .
   return Id(i) eq Id(j);
 end intrinsic;
 
-intrinsic ForgetTrancheItem(s :: PGGAlgState_Tranche_All, i :: RngIntElt)
+intrinsic ForgetTrancheItem(s :: PGGAlgState_Tranche, i :: RngIntElt)
   {Don't consider this item again.}
   Undefine(~s`tranche, i);
 end intrinsic;
 
-intrinsic ForgetTrancheItem(s :: PGGAlgState_Tranche_Index, i :: RngIntElt)
+intrinsic ForgetTranche(s :: PGGAlgState_Tranche)
   {"}
-  Undefine(~s`tranche, i);
-end intrinsic;
-
-intrinsic ForgetTrancheItem(s :: PGGAlgState_Tranche_OrbitIndex, i :: RngIntElt)
-  {"}
-  Undefine(~s`tranche, i);
+  s`tranche := [];
 end intrinsic;
 
 intrinsic Group(i :: PGGAlgState_TrancheItem) -> GrpPerm
