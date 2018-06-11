@@ -163,6 +163,21 @@ intrinsic IsCoercible(R :: PGGRngPolGrp, X :: PGGPolGrp) -> BoolElt, .
   return false, _;
 end intrinsic;
 
+intrinsic PGG_Polynomial(f) -> PGGPol
+  {Converts f to a PGGPol.}
+  error "not coercible to a PGGPol:", Type(f);
+end intrinsic;
+
+intrinsic PGG_Polynomial(f :: PGGPol) -> PGGPol
+  {"}
+  return f;
+end intrinsic;
+
+intrinsic PGG_Polynomial(f :: RngUPolElt[FldPad]) -> PGGPol
+  {"}
+  return PolynomialRing(PGGFldStd_Make(BaseRing(f))) ! f;
+end intrinsic;
+
 intrinsic Actual(f :: PGGPolStd : FixPr:=false) -> RngUPolElt
   {The current actual value of f.}
   xf := f`actual;

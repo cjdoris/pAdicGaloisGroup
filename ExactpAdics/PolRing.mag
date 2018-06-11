@@ -46,6 +46,11 @@ intrinsic IsCoercible(R :: PGGRngPolExact, X :: []) -> BoolElt, .
   end if;
 end intrinsic;
 
+intrinsic PGG_Polynomial(f :: RngUPolElt_FldPadExact) -> PGGPol
+  {Converts f to a PGGPol.}
+  return PolynomialRing(PGGFldExact_Make(BaseRing(f))) ! f;
+end intrinsic;
+
 intrinsic 'eq'(R :: PGGRngPolExact, S :: PGGRngPolExact) -> BoolElt, .
   {Equality.}
   return Actual(R) eq Actual(S);

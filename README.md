@@ -12,7 +12,8 @@ Experimental code for computing [Galois groups](https://en.wikipedia.org/wiki/Ga
 ## Getting started
 * [Download from GitHub](https://github.com/cjdoris/pAdicGaloisGroup).
 * Attach the `spec` file (see the example below).
-* Optional/recommended: Download and attach the [ExactpAdics](https://cjdoris.github.io/ExactpAdics) package and call `PGG_UseExactpAdicsFactorization()` and `PGG_UseExactpAdicsRoots()`. This makes our package use superior "OM" algorithms for factorization and root finding, instead of the ones builtin to Magma. For polynomials of about degree 32 or more, this can be a significant improvement in both speed and p-adic precision. Note that this does **not** actually use the exact p-adic functionality from the ExactpAdics package (yet).
+* Optional/recommended: Download and attach the [ExactpAdics2](https://cjdoris.github.io/ExactpAdics2) (or [ExactpAdics](https://cjdoris.github.io/ExactpAdics)) package and call `PGG_UseExactpAdicsFactorization()` and `PGG_UseExactpAdicsRoots()`. This makes our package use superior "OM" algorithms for factorization and root finding, instead of the ones builtin to Magma. For polynomials of about degree 32 or more, this can be a significant improvement in both speed and p-adic precision. Note that this does **not** actually use the exact p-adic functionality from the ExactpAdics package (yet).
+* Optional/recommended: Download and attach the [ExactpAdics2](https://cjdoris.github.io/ExactpAdics2) (or [ExactpAdics](https://cjdoris.github.io/ExactpAdics)) package and pass a polynomial defined there (e.g. an element of `PolynomialRing(ExactpAdicField(2))`) to `PGG_GaloisGroup`. This causes our algorithm to use the exact p-adic functionality everywhere, providing proven results. It is usually quicker for large inputs.
 
 ## Example
 
@@ -50,6 +51,8 @@ The arguments have an order, but in general they have defaults and can be skippe
 
 Arguments can be given by their name instead of by their order, so `ARM[Eval:Global,All]` is interpreted the same as `ARM[All,Global]`.
 
+In fact `:` is syntactic sugar allowing us to write the last parameter outside of brackets. So `a[b,c]:d` is equivalent to `a[b,c,d]`, which is useful for writing highly nested parameters such as `Global:Factors:RamTower:Symmetric:SinglyRamified`.
+
 Here we notate the current options for the algorithms. The `Alg` parameter to `PGG_GaloisGroup` must be a `GALOISGROUP` algorithm.
 
 ### `GALOISGROUP`
@@ -64,8 +67,8 @@ How to compute a Galois group.
 
 How to deduce the Galois group using resolvents.
 
-- `All [Stat:STATISTIC, Choice:SUBGROUP_CHOICE]`: Enumerate all possible Galois groups, then eliminate possibilities until only one remains. `Stat` is the statistic used to distinguish between possible Galois groups. `Choice` determines how to choose which subgroups to form resolvents from.
-- `Maximal [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, DescendWhen, Descend, Useful, Reprocess:BOOL, Reset:BOOL, Blacklist:BOOL, Dedupe:BOOL]`: Work down the graph of possible Galois groups by maximal inclusion.
+- `All [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, Dedupe:SUBGROUP_DEDUPE]`: Enumerate all possible Galois groups, then eliminate possibilities until only one remains. `Stat` is the statistic used to distinguish between possible Galois groups. `Choice` determines how to choose which subgroups to form resolvents from. `Dedupe` determines how to dedupe any groups considered up to conjugacy.
+- `Maximal [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, DescendWhen, Descend, Useful, Reprocess:BOOL, Reset:BOOL, Blacklist:BOOL, Dedupe:SUBGROUP_DEDUPE]`: Work down the graph of possible Galois groups by maximal inclusion.
   - `Stat`: The statistic used to distinguish between possible Galois groups.
   - `Choice`: Determines how to choose which subgroups to form resolvents from.
   - `DescendWhen` When to descend through the graph. One of:
@@ -87,14 +90,14 @@ How to deduce the Galois group using resolvents.
     - `All`: Always useful.
   - `Reprocess`: When true (default), on a descent re-use all resolvents computed so far.
   - `Reset`: When true (default), on a descent reset the subgroup choice algorithm.
-  - `Dedupe`: When true (default), nodes in the graph are merged if they are conjugate.
-- `RootsMaximal [Dedupe:BOOL]`: Work down the graph of possible Galois groups by maximal inclusion, similar to the relative resolvent method, forming resolvents from the subgroups of the current candidate G and testing for roots to rule out the subgroup or change the candidate to that subgroup. Will compute resolvents of degree equal to the index of the Galois group, which is exponential in the degree of the input polynomial.
-  - `Dedupe`: Dedupe groups by conjugacy.
-- `Maximal2 [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, Reset:BOOL, Dedupe:BOOL]`: Like `RootsMaximal` but where the statistic `Roots` is parameterised. We maintain a "pool" of groups such that the Galois group is contained in at least one of them. On each iteration, we find a resolvent such that we can either eliminate all subgroups of some group in the pool, or we can replace a pool element by some of its maximal subgroups. This is very similar to `Maximal` except that instead of merely ruling out groups which cannot contain the Galois group, we identify groups which certainly do contain the Galois group, which is more powerful. `Choice` determines how to choose which subgroups to form resolvents from.
+  - `Dedupe`: How to dedupe any groups considered up to conjugacy.
+- `RootsMaximal [Dedupe:SUBGROUP_DEDUPE]`: Work down the graph of possible Galois groups by maximal inclusion, similar to the relative resolvent method, forming resolvents from the subgroups of the current candidate G and testing for roots to rule out the subgroup or change the candidate to that subgroup. Will compute resolvents of degree equal to the index of the Galois group, which is exponential in the degree of the input polynomial.
+  - `Dedupe`: How to dedupe any groups considered up to conjugacy.
+- `Maximal2 [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, Reset:BOOL, Dedupe:SUBGROUP_DEDUPE]`: Like `RootsMaximal` but where the statistic `Roots` is parameterised. We maintain a "pool" of groups such that the Galois group is contained in at least one of them. On each iteration, we find a resolvent such that we can either eliminate all subgroups of some group in the pool, or we can replace a pool element by some of its maximal subgroups. This is very similar to `Maximal` except that instead of merely ruling out groups which cannot contain the Galois group, we identify groups which certainly do contain the Galois group, which is more powerful. `Choice` determines how to choose which subgroups to form resolvents from.
   - `Stat`: The statistic used to distinguish between possible Galois groups.
   - `Choice`: Determines how to choose which subgroups to form resolvents from.
   - `Reset`: When true (default), reset the subgroup choice algorithm each time something gets added to the pool.
-  - `Dedupe`: When true (default), groups are deduped by conjugacy.
+  - `Dedupe`: How to dedupe any groups considered up to conjugacy.
 - `[GROUP_ALG, ...]`: Try each of the algorithms in turn: when the first one runs out of resolvents to try (e.g. because its subgroup choice algorithm is limited) then move on to the second, and so on. This will re-use as much information as possible from one run to the next, so for example `[All[NumRoots,...],All[FactorDegrees,...]]` will only enumerate all possible Galois groups once, and remember which ones were eliminated.
 - `ForEach [Vars, [Val1,Val2,...], GROUP_ALG]`: Like the previous, but with a more compact notation. For each of `Val1`, `Val2`, etc, its values are unpacked into variables with names coming from `Vars` and substituted into the `GROUP_ALG`. For example `ForEach[STAT,[NumRoots,FactorDegrees],All[STAT,...]]` is equivalent to the previous example. The `Vars` can be more complex, such as `ForEach[[X,xs],[[A,[a1,a2]],[B,[b]]],ForEach[x,xs,...]]` will have `(x,y)` successively `(A,a1)`, `(A,a2)`, `(B,b)`.
 
@@ -113,7 +116,7 @@ How to produce a global model, a global number field which completes to a given 
 - `RamTower [GLOBAL_MODEL]`: Get the ramification filtration of the extension defined by the polynomial, and produce a global model for each piece. Corresponds to a wreath product of groups.
 - `RootOfUnity [Minimize:BOOL, Complement:BOOL]`: Adjoin a root of unity to make an unramified extension. The local Galois group is cyclic and the global one is abelian and known. By default, we adjoin a `(q^d-1)`th root of unity; when `Minimize` is true, we minimize the degree of the extension by choosing a suitable divisor of this; when `Complement` is set we take a subfield of this so that the global degree is as small as possible. **Note:** The global model may be of higher degree than the local extension, which in a wreath product can make the overall group size exponentially larger.
 - `RootOfUniformizer`: Adjoin a root of a uniformizer to make a totally tamely ramified extension. The local and global Galois groups are known.
-- `Select [EXPRESSION, GLOBAL_MODEL] ... [GLOBAL_MODEL]`: Select between several global models. The global model next to the first expression evaluating to true is used, or else the final model is used. The expressions are in the following variables: `p`, `irr`, `deg`, `unram`, `tame`, `ram`, `wild`, `totram`, `totwild`.
+- `Select [EXPRESSION, GLOBAL_MODEL] ... [GLOBAL_MODEL]`: Select between several global models. The global model next to the first expression evaluating to true is used, or else the final model is used. The expressions are in the following variables: `p` (the prime), `irr` (true if irreducible), `deg` (degree), `unram` (true if defines an unramified extension), `tame` (true if defines a tamely ramified extension), `ram` (true if defines a ramified extension), `wild` (true if defines a wildly ramified extension), `totram` (true if defines a totally ramified extension), `totwild` (true if defines a totally wildly ramified extension).
 
 ### `STATISTIC`
 
@@ -122,11 +125,16 @@ A function which can be applied to polynomials and groups, with the property tha
 - `HasRoot`: True or false depending on whether the resolvent has a root (i.e. the group has a fixed point).
 - `NumRoots`: The number of roots of the resolvent (i.e. the number of fixed points in the group).
 - `FactorDegrees`: The multiset of degrees of irreducible factors (i.e. the sizes of the orbits). Equivalent to `Factors[Degree]` but more efficient because it doesn't need to compute the orbit images.
+- `FactorDegreesSeq`: A generalization of `FactorDegrees` to a tuple of resolvents (e.g. as returned by the `Tuples` tranche algorithm).
 - `Factors [STATISTIC]`: A multiset of statistics corresponding to the irreducible factors.
 - `Factors2 [Stat2:STATISTIC, Stat1:STATISTIC, Strict:BOOL]`: If there are `n` irreducible factors, this is the `n x n` array where the `(i,j)` entry is the multiset of statistics (by `Stat2`) of factors of the `i`th factor over the field defined by the `j`th factor. Each row and column in the array is also labelled with a statistic (by `Stat1`) for the corresponding factor. The array is defined up to a permutation on factors. When `Strict` is true, then two values are equal iff there is a permutation of the factors making the arrays and labels equal; when false, we just check if the multisets along rows and columns are the same, which is much faster (and in practice usually just as good).
 - `Degree`: The degree of the polynomial or group.
 - `AutGroup`: The automorphism group assuming the polynomial is irreducible (i.e. `N_G(S)/S` where `S=Stab_G(1)` up to `S_d`-conjugacy, where `d` is the order of the group, assuming the group is transitive).
 - `Tup [STATISTIC, ...]`: A tuple of statistics.
+- `Stab [STATISTIC]`: The statistic applied to a point stabilizer of a transitive group (equivalently, the polynomial over the field it defines).
+- `GaloisGroup [DegLe:INTEGER, Alg:GALOISGROUP]`: The Galois group, computed using `Alg`, if the degree is at most `DegLe`, and otherwise the trivial group.
+- `SubfieldDegrees`: The multiset of degrees of subfields of the field defined by the irreducible polynomial.
+- `Order`: The order of the Galois group. Cannot be used on polynomials, only groups.
 
 ### `SUBGROUP_CHOICE`
 
@@ -134,16 +142,19 @@ How to choose the subgroup.
 
 - `SUBGROUP_TRANCHE`: Consider each group in each tranche in turn and select the first useful one.
 - `[SUBGROUP_TRANCHE, SUBGROUP_PRIORITY]`: As above, but the tranches are reordered according to some priority.
+- `Prioritize[SUBGROUP_PRIORITY, SUBGROUP_TRANCHE]`: Equivalent to the previous, but can be used like `Prioritize[PRIORITY]:TRANCHE`.
 
 ### `SUBGROUP_TRANCHE`
 
 How to select sets of subgroups.
 
 - `All`: All subgroups.
-- `Index [If:EXPRESSION, Sort:EXPRESSION, Take:SUBGROUP_TAKE]`: All subgroups by index. Only uses indices where `If` evaluates true, and sorts by `Sort`, both expressions in `idx` (the index). `If` may additionally be in variables `has_special` (true if there exists a special tranche) and `sidx0` (the index of the first special tranche, or 0 if there is none): some tranches may be dynamically marked as special from outside the tranche, e.g. the `Maximal` `GROUP_ALG` with `DescendWhen:NoSubgroup` marks tranches containing useful groups as special, giving a means to dynamically control how many tranches to use based on what was previously useful. `Take` controls which subgroups are used, and is one of:
-  - `All` (default): All subgroups with the given index.
-  - `Random[Limit:INTEGER, Dedupe:BOOL, NewTries:INTEGER, RandomTries:INTEGER]`: A most `Limit` (required) randomly-generated subgroups with the given index. It tries `RandomTries` (default 10) times to randomly generate a group with the given index. If `Dedupe` (default true) is true, it tries this `NewTries` (default 100) times to find one which we haven't seen before.
-- `OrbitIndex [If:EXPRESSION, Sort:EXPRESSION, Take:SUBGROUP_TAKE]`: All subgroups by orbit-index and index. Orbit-index is the index of the stabilizer of the orbits of the group. Only uses indices where `If` evaluates true, and sorts by `Sort`, both expressions in `idx` (the index), `oidx` (orbit index) and `ridx` (remaining index, `idx/oidx`). `If` may additionally be in variables `has_special` and `sidx0`, with the same meanings as for `Index`. `Take` has the same meaning as for `Index`.
+- `Index [If:EXPRESSION, Sort:EXPRESSION, Take:SUBGROUP_TAKE, Dedupe:SUBGROUP_DEDUPE]`: All subgroups by index. Only uses indices where `If` evaluates true, and sorts by `Sort`, both expressions in `idx` (the index). `If` may additionally be in variables `has_special` (true if there exists a special tranche) and `sidx0` (the index of the first special tranche, or 0 if there is none): some tranches may be dynamically marked as special from outside the tranche, e.g. the `Maximal` `GROUP_ALG` with `DescendWhen:NoSubgroup` marks tranches containing useful groups as special, giving a means to dynamically control how many tranches to use based on what was previously useful. `Take` controls which subgroups are used, and `Dedupe` controls how to dedupe groups by conjugacy.
+- `OrbitIndex [If:EXPRESSION, Sort:EXPRESSION, Take:SUBGROUP_TAKE, Dedupe:SUBGROUP_DEDUPE]`: All subgroups by orbit-index and index. Orbit-index is the index of the stabilizer of the orbits of the group. Parameters are as for `Index`, except `If` and `Sort` have variables `idx` (index), `oidx` (orbit index) and `ridx` (remaining index, i.e index divided by orbit index).
+- `Shuffle [SUBGROUP_TRANCHE]`: The inner tranche, but in a random order.
+- `Truncate [Length:INTEGER, SUBGROUP_TRANCHE]`: The inner tranche, but truncated to at most `Length` items.
+- `Sample [SUBGROUP_TRANCHE]`: The inner tranche, but takes a random selection of up to `Length` items. (For `Index` or `OrbitIndex`, consider using the parameter `Take:Random` instead.)
+- `Tuples [Length:INTEGER, Random:INTEGER, SUBGROUP_TRANCHE]`: Generates tuples of length `Length` from the inner tranche. By default this generates all such tuples, but when `Random` is given, it generates up to this many tuples at random.
 
 ### `SUBGROUP_PRIORITY`
 
@@ -154,20 +165,44 @@ A priority to order a set of groups.
 - `Reverse [SUBGROUP_PRIORITY]`: The reverse of its parameter.
 - `EXPRESSION`: Sort by this expression in the variables `Index`, `OrbitIndex`, `Diversity`, `Information`.
 
+### `SUBGROUP_DEDUPE`
+
+Controls how to dedupe subgroups up to conjugacy in some larger group.
+
+- `BOOL`: When `False`, no deduping is performed. `True` is equivalent to the current favoured algorithm, currently `Tree`.
+- `Pairwise`: Performs pairwise comparisons using `IsConjugate`. Equivalent to `ClassFunction[0]`.
+- `ClassFunction [Num:INTEGER]`: Uses a conjugacy-class function to generate a hash for each group so that only groups with the same hash need to be considered. The `Num` selects which function to use, currently one of:
+  - 0: Everything hashes to the same value.
+  - 1: Counts the number of elements in each conjugacy class of the overgroup.
+  - 2: The `GroupName` of the group.
+  - 3: The `TransitiveGroupIdentification` of each orbit of the group.
+  - 4: The size of the intersection of the group with each normal subgroup of the overgroup up to some index (currently 2).
+- `Tree [Statistic:STATISTIC, Tranche:SUBGROUP_TRANCHE]`: Dynamically produces a decision tree to distinguish between groups, the hash being where in the tree the group lies. Each node of the decision tree compares groups by the statistic of their image under the coset action of a group from the tranche algorithm. The default statistic is `Tup[Order,FactorDegrees]` and the default tranche is `OrbitIndex[If:and[mle[idx,p^3],mle[ridx,p]]]` where `p` is the product of primes dividing the order of the overgroup.
+
+### `SUBGROUP_TAKE`
+
+Controls how some tranches generate their groups.
+
+- `All`: Generates all subgroups.
+- `Random[Limit:INTEGER, NewTries:INTEGER, RandomTries:INTEGER]`: At most `Limit` randomly-generated subgroups. It tries `RandomTries` times to randomly generate a group. It tries this `NewTries` times to find one we haven't seen before.
+
 ### `EXPRESSION`
 
 An expression with free variables.
 
 - `<free variable>`: A free variable. The possibilities depend on context.
 - `<integer>`: A constant.
+- `p`: The prime.
 - `eq|ne|le|lt|ge|gt [EXPRESSION, EXPRESSION]`: Equality and comparisons.
 - `mle|mlt|mge|mgt`: Multiplicative comparisons, e.g. `mle[x,y]` iff `x` divides `y` (note that everything divides 0, so it is the multiplicative infinity)
+- `val[p:EXPRESSION,x:EXPRESSION]`, `val[x:EXPRESSION]`: The `p`-adic valuation of `x`.
 - `and|or [EXPRESSION, ...]`: True if all or any of the parameters are true.
 - `not [EXPRESSION]`: True if its argument is false.
 - `- [EXPRESSION]`: Negation.
 - `- [EXPRESSION, EXPRESSION]`: Subtraction.
 - `+ [EXPRESSION, ...]`: Sum.
 - `* [EXPRESSION, ...]`: Product.
+- `^ [EXPRESSION, EXPRESSION]`: Power.
 
 ### `BOOL`
 
