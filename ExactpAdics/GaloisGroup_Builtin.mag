@@ -1,4 +1,4 @@
-intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: PGGPolExact) -> GrpPerm
+intrinsic TryGaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: PGGPolExact) -> BoolElt, GrpPerm
   {"}
   case ExactpAdics_Implementation():
   when 1:
@@ -20,7 +20,7 @@ intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: PGGPolExact) -> Gr
       end if;
     end function, PrecisionStrategy(f));
     if ok then
-      return G;
+      return true, G;
     else
       error "precision error";
     end if;
@@ -35,7 +35,7 @@ intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: PGGPolExact) -> Gr
         continue epoch;
       end try;
       if Degree(G) eq Degree(f) then
-        return G;
+        return true, G;
       end if;
     end for;
   else

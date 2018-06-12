@@ -514,6 +514,13 @@ intrinsic '-'(x :: PGGFldStdElt) -> PGGFldStdElt
   return Parent(x) ! (-Actual(x));
 end intrinsic;
 
+intrinsic '/'(x :: PGGFldStdElt, y :: PGGFldStdElt) -> PGGFldStdElt
+  {Divide.}
+  ok, F := ExistsCoveringStructure(Parent(x), Parent(y));
+  require ok: "different fields";
+  return F ! (Actual(F ! x) / Actual(F ! y));
+end intrinsic;
+
 intrinsic ExistsCoveringStructure(E :: PGGFldStd, F :: PGGFldStd) -> BoolElt, .
   {True if there is a structure containing both E and F.}
   ok, A := ExistsCoveringStructure(Actual(E), Actual(F));
@@ -928,3 +935,34 @@ intrinsic _Generator(E :: PGGFldStd) -> PGGFldStdElt
   return E ! (Actual(E).1);
 end intrinsic;
 
+intrinsic TameRParameter(E :: PGGFld, F :: PGGFld) -> RngIntElt, RngIntElt, RngIntElt
+  {Given tame extension `E/F`, returns r such that `E=K(zeta,(pi*zeta^r)^(1/e))`.}
+  not_implemented("TameRParameter:", Type(E));
+end intrinsic;
+
+intrinsic TameRParameter(E :: PGGFldWrap, F :: PGGFldWrap) -> RngIntElt
+  {"}
+  f := InertiaDegree(E, F);
+  e := RamificationDegree(E, F);
+  p := Prime(F);
+  require not IsDivisibleBy(e, p): "E/F must be tame";
+  q := p^AbsoluteInertiaDegree(F);
+  piF := UniformizingElement(F);
+  piE := UniformizingElement(E);
+  zr := piE^e / piF;
+  Fp := FiniteField(p);
+  FF := ResidueClassField(F);
+  assert q eq #FF;
+  FE, modq := ResidueClassField(E);
+  assert Degree(FE, FF) eq f;
+  zeta := FE.1;
+  assert Degree(MinimalPolynomial(zeta, Fp)) eq Degree(FE, Fp);
+  zetar := zr @ modq;
+  r := Log(zeta, zetar);
+  return r mod GCD(e, q^f-1);
+end intrinsic;
+
+intrinsic UniformizingElement(F :: PGGFldStd) -> PGGFldStdElt
+  {A uniformizing element.}
+  return F ! UniformizingElement(Actual(F));
+end intrinsic;

@@ -1,0 +1,87 @@
+import "Utils.mag": Z, xdiv;
+
+declare type PGGAlg_GaloisGroup_Tame: PGGAlg_GaloisGroup;
+
+intrinsic PGGAlg_GaloisGroup_Tame_Make() -> PGGAlg_GaloisGroup_Tame
+  {The "tame" Galois group algorithm.}
+  return New(PGGAlg_GaloisGroup_Tame);
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_GaloisGroup_Tame)
+  {Print.}
+  printf "tame";
+end intrinsic;
+
+intrinsic TryGaloisGroup(alg :: PGGAlg_GaloisGroup_Tame, f :: PGGPol) -> BoolElt, GrpPerm
+  {The Galois group of f.}
+  // get the FER parameters of each extension defined by a factor of f
+  K := BaseRing(f);
+  p := Prime(K);
+  q := p^AbsoluteInertiaDegree(K);
+  facs,certs := Factorization(f : Extensions);
+  Ls := [cert`Extension : cert in certs];
+  if exists{L : L in Ls | IsDivisibleBy(RamificationDegree(L, K), p)} then
+    return false, "factors of f must define tamely ramified extensions";
+  end if;
+  FERs := [car<Z,Z,Z>| <InertiaDegree(L,K), RamificationDegree(L,K), TameRParameter(L, K)> : L in Ls];
+  vprint PGG_GaloisGroup: "FERs =", FERs;
+  // get the FER parameters of the compositum
+  F := LCM([Z| FER[1] : FER in FERs]);
+  E := LCM([Z| FER[2] : FER in FERs]);
+  F0 := F;
+  F := 0;
+  repeat
+    F +:= F0;
+    R := CRT([FER[3] * xdiv(q^F-1, q^FER[1]-1) : FER in FERs], [GCD(FER[2], q^F-1) : FER in FERs]);
+  until R ge 0;
+  R := R mod GCD(E, q^F-1);
+  vprint PGG_GaloisGroup: "FER =", <F, E, R>;
+  // get the FER parameters of the normal closure
+  F0 := F;
+  R0 := R;
+  while ((RmodE * (qmodE - 1) ne 0) or (qmodE^F - 1 ne 0))
+  where RmodE:=ZE!R where qmodE:=ZE!q where ZE:=Integers(E)
+  do
+    F := F + F0;
+    R := (R0 * xdiv(q^F-1, q^F0-1)) mod GCD(E, q^F-1);
+  end while;
+  vprint PGG_GaloisGroup: "FER =", <F, E, R>;
+  C1 := xdiv(q^F-1, E);
+  C2 := xdiv(R*(q-1), E);
+  // make the Galois group
+  // it acts on zeta, a (q^F-1)th root of unity, and piL, an eth root of piK*zeta^R
+  // it has two generators:
+  // (a) zeta -> zeta    piL -> piL * zeta^C1
+  // (b) zeta -> zeta^q  piL -> piL * zeta^C2
+  // here are the actions of (a) and (b) on <i,j> representing pi^j * zeta^i
+  Zo := Integers(q^F-1);
+  aact := func<x | <C1*x[2] + x[1], x[2]>>;
+  bact := func<x | <C2*x[2] + q*x[1], x[2]>>;
+  // from this, we can deduce how it acts on the roots of f one factor at a time
+  aimg := [];
+  bimg := [];
+  offset := 0;
+  for FER in FERs do
+    // if zeta0 is a (q^F0-1)th root of unity, then zeta0 = zeta^C3
+    // if pi0 is a E0th root of piK*zeta0^R0, then pi0 = piL^(E/E0) * zeta^C4
+    F0, E0, R0 := Explode(FER);
+    C3 := xdiv(q^F-1, q^F0-1);
+    C4 := xdiv(C3*R0-R, E0);
+    // find the orbit of <zeta0, pi0>
+    xs := &cat[[j eq 0 select x0 else <aact(x) : x in Self(j)> : j in [0..E0-1]] : x0 in x0s]
+      where x0s := [i eq 0 select x0 else <bact(x) : x in Self(i)> : i in [0..F0-1]]
+      where x0 := <<Zo!C3, 0>, <Zo!C4, xdiv(E,E0)>>;
+    assert #xs eq F0*E0;
+    ixs := {@ x : x in xs @};
+    assert #ixs eq #xs;
+    // find the permutation
+    aimg cat:= [offset + Index(ixs, <aact(y) : y in x>) : x in ixs];
+    bimg cat:= [offset + Index(ixs, <bact(y) : y in x>) : x in ixs];
+    offset +:= #xs;
+    assert #aimg eq offset;
+    assert #bimg eq offset;
+  end for;
+  // compute the group
+  Sd := SymmetricGroup(Degree(f));
+  return true, sub<Sd | [Sd| aimg, bimg]>;
+end intrinsic;

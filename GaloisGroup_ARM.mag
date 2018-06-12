@@ -64,11 +64,8 @@ procedure getraminfo(~r, f);
   // end if;
 end procedure;
 
-intrinsic RamificationGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: PGGPol, u :: FldRatElt) -> GrpPerm
-  {The u-th ramification group of f.}
-  if u ge 0 then
-    not_implemented("RamificationGroup except GaloisGroup");
-  end if;
+intrinsic TryGaloisGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: PGGPol) -> BoolElt, GrpPerm
+  {The Galois group of f.}
   PGG_GlobalTimer_Push("start resolvent");
   rst := Start(Alg`resolvent_alg, f);
   emb := OvergroupEmbedding(rst);
@@ -97,7 +94,10 @@ intrinsic RamificationGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: PGGPol, u :: Fld
     vprint PGG_GaloisGroup: "main loop...";
     repeat
       PGG_GlobalTimer_Swap("subgroup");
-      U := Subgroup(gst);
+      ok, U := HasSubgroup(gst);
+      if not ok then
+        return false, "ran out of subgroups";
+      end if;
       if ISA(Type(U), SeqEnum) then
         I := [];
         R := [];
@@ -128,6 +128,6 @@ intrinsic RamificationGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: PGGPol, u :: Fld
   end if;
   vprint PGG_GaloisGroup: "success";
   PGG_GlobalTimer_Pop();
-  return TheGroup(gst);
+  return true, TheGroup(gst);
 end intrinsic;
 

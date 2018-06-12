@@ -247,6 +247,29 @@ intrinsic '&*'(xs :: [PGGFldExactElt]) -> PGGFldExactElt
   return Universe(xs) ! &*[Actual(Universe(xs))| Actual(x) : x in xs];
 end intrinsic;
 
+intrinsic '/'(x :: PGGFldExactElt, y :: PGGFldExactElt) -> PGGFldExactElt
+  {Divide.}
+  ok, F := ExistsCoveringStructure(Parent(x), Parent(y));
+  require ok: "different fields";
+  return F ! (Actual(F ! x) / Actual(F ! y));
+end intrinsic;
+
+intrinsic ExistsCoveringStructure(E :: PGGFldExact, F :: PGGFldExact) -> BoolElt, .
+  {True if there is a structure containing both E and F.}
+  ok, A := ExistsCoveringStructure(Actual(E), Actual(F));
+  if ok then
+    if A eq Actual(E) then
+      return true, E;
+    elif A eq Actual(F) then
+      return true, F;
+    else
+      assert false;
+    end if;
+  else
+    return false, _;
+  end if;
+end intrinsic;
+
 intrinsic DefiningPolynomial(E :: PGGFldExact, F :: PGGFldExact) -> PGGPolExact
   {The defining polynomial of E/F.}
   return PolynomialRing(F) ! DefiningPolynomial(Actual(E), Actual(F));
@@ -271,4 +294,9 @@ intrinsic AutomorphismGroup(E :: PGGFldExact, F :: PGGFldExact) -> GrpPerm
   {The automorphism group of `E/F`.}
   G, m := AutomorphismGroup(Actual(E), Actual(F));
   return G;
+end intrinsic;
+
+intrinsic UniformizingElement(F :: PGGFldExact) -> PGGFldExactElt
+  {A uniformizing element.}
+  return F ! UniformizingElement(Actual(F));
 end intrinsic;

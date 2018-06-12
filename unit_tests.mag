@@ -1,3 +1,15 @@
+// Usage:
+// magma -b [OPTION:=VALUE ...] unit_tests.mag
+// 
+// Options:
+// Debug ........... When true, launches the debugger whenever a test fails. (default: false)
+// Filter .......... Comma-separated list of tags to filter. Precede a tag with - to negate. (default: "")
+// Start ........... Starts at this numbered test. (default: 1)
+// Verbosity ....... Sets the verbosity of the Galois group algorithm. (default: 0)
+// Time ............ When true, prints timing information. (default: false)
+// Catch ........... When true, catches errors. (default: true)
+// Quit ............ When false, does not quit if a test failed. (default: true)
+
 SetQuitOnError(true);
 print "Hello.";
 initial_seed := [x,y] where x,y := GetSeed();
@@ -67,6 +79,7 @@ R<x> := PolynomialRing(Q);
 algs :=
   [ <"Builtin", {}, {}>
   , <"SinglyRamified", {}, {"sram","irred"}>
+  , <"Tame", {}, {"tame"}>
   , <"ARM[Global[Symmetric],RootsMaximal]", {},{}>
   , <"ARM[Global[Symmetric[Builtin]],RootsMaximal]", {},{}>
   , <"ARM[Global[Symmetric[SinglyRamified]],RootsMaximal]", {}, {"sram","irred"}>
@@ -91,6 +104,7 @@ algs :=
   , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:False,Complement:True]][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg6","deg8","deg10"},{}>
   , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:True,Complement:True]][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg6","deg8","deg10"},{}>
   , <"ARM[Global[Factors[RamTower[Select[unram,RootOfUnity[Minimize:True]][tame,RootOfUniformizer][Symmetric[SinglyRamified]]]]],All[FactorDegrees,Index]]",{"deg6","deg8","deg10"},{}>
+  , <"[Tame,SinglyRamified]:ARM[Global:Factors:RamTower:Select[unram,RootOfUnity[Minimize:True,Complement:True]][tame,RootOfUniformizer][Symmetric:SinglyRamified],Maximal2[FactorDegrees]:OrbitIndex[If:le[val[ridx],1]]]",{"deg6","deg8","deg10","deg16"},{}>
   ]
 ;
 
@@ -100,10 +114,10 @@ polys :=
       // degree 4
       , <x^4 + 2*x + 2,            100,             S(4), {}, {"sram","irred","2by"}>
       , <x^4 + 2,                  100,  Wr([C(2),C(2)]), {}, {"irred","2by"}>
-      , <x^4 - x + 1,              100,             C(4), {}, {"irred","unram","2by"}>
+      , <x^4 - x + 1,              100,             C(4), {}, {"irred","unram","tame","2by"}>
       // reducible
-      , <(x+1)*(x^2 + x + 1),      100, DP([S(1), S(2)]), {}, {"unram","sram","2by"}>
-      , <(x+1)*(x^3-x+1),          100, DP([S(1), C(3)]), {}, {"unram","sram","2by"}>
+      , <(x+1)*(x^2 + x + 1),      100, DP([S(1), S(2)]), {}, {"unram","tame","sram","2by"}>
+      , <(x+1)*(x^3-x+1),          100, DP([S(1), C(3)]), {}, {"unram","tame","sram","2by"}>
       , <(x+1)*(x^3-2),            100, DP([S(1), S(3)]), {}, {"tame","sram","2by"}>
       // degree 6
       , <x^6 + 2*x + 2,            800,          T(6, 8), {"deg6"}, {"irred"}>

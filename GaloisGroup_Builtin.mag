@@ -11,14 +11,14 @@ intrinsic Print(alg :: PGGAlg_GaloisGroup_Builtin)
   printf "builtin";
 end intrinsic;
 
-intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: PGGPolStd) -> GrpPerm
+intrinsic TryGaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: PGGPolStd) -> BoolElt, GrpPerm
   {The Galois group of f.}
-  return GaloisGroup(Actual(f : FixPr));
+  return true, GaloisGroup(Actual(f : FixPr));
 end intrinsic;
 
-intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: PGGPolGrp) -> GrpPerm
+intrinsic TryGaloisGroup(alg :: PGGAlg_GaloisGroup_Builtin, f :: PGGPolGrp) -> BoolElt, GrpPerm
   {"}
   G := GaloisGroup(f);
-  return G;
+  return true, G;
 end intrinsic;
 

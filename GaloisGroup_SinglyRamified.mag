@@ -16,13 +16,15 @@ end intrinsic;
 // some example polynomials to try this on:
 // Example 9.* from Greve, Pauli "On ramification polygons..."
 // Example 3.24 from Milstead "Computing Galois groups..." (thesis)
-intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolStd) -> GrpPerm
+intrinsic TryGaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolStd) -> BoolElt, GrpPerm
   {The Galois group of f.}
   xf := Actual(f : FixPr);
   // check f is irreducible and find the extension it defines
   d := Degree(xf);
   facs, certs := factorization(xf : Extensions);
-  error if #facs ne 1, "only implemented for irreducible f";
+  if #facs ne 1 then
+    return false, "f must be irreducible";
+  end if;
   K := BaseRing(xf);
   cert := certs[1];
   L := cert`Extension;
@@ -31,9 +33,9 @@ intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolStd) 
 
   // special case: unramified
   if cert`E eq 1 then
-    return CyclicGroup(GrpPerm, cert`F);
+    return true, CyclicGroup(GrpPerm, cert`F);
   elif cert`F ne 1 then
-    error "f must define a singly ramified extension";
+    return false, "f must define a singly ramified extension";
   end if;
 
   // special case: totally tamely ramified
@@ -46,12 +48,14 @@ intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolStd) 
     S := SymmetricGroup(d);
     gen1 := S![(i mod d)+1 : i in [1..d]];
     gen2 := S![(((i-1)*q) mod d) + 1 : i in [1..d]];
-    return sub<S | gen1, gen2>;
+    return true, sub<S | gen1, gen2>;
   end if;
 
   // check we are totally wildly ramified
   ok, m := IsPowerOf(d, p);
-  error if not ok, "f must define a singly ramified extension";
+  if not ok then
+    return false, "f must define a singly ramified extension";
+  end if;
   // compute the ramification polynomial and polygon
   phi := DefiningPolynomial(L);
   assert BaseRing(phi) eq K;
@@ -67,7 +71,9 @@ intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolStd) 
   assert vs[#vs][1] eq d-1;
   assert forall{v : v in vs | not IsWeaklyZero(Coefficient(r, v[1]))};
   assert forall{v : v in vs | IsPowerOf(v[1]+1, p)};
-  error if #vs ne 2, "f must define a singly ramified extension";
+  if #vs ne 2 then
+    return false, "f must define a singly ramified extension";
+  end if;
   // now compute the galois group
   // this is an implementation of Algorithm 3.23 of Milstead's thesis.
   // we try to keep the notation and step numbers of the description
@@ -137,17 +143,21 @@ intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolStd) 
   G := sub<AGLmp | [S, T] cat [AGLmp | [[i eq j select 1 else i eq m+1 and j eq a select 1 else 0 : j in [1..m+1]] : i in [1..m+1]] : a in [1..m]]>;
   // convert G to a permutation group
   Gperm := OrbitImage(G, {@ Vector([x : x in v]) : v in CartesianProduct([[x : x in GF(p)] : i in [1..m]] cat [[GF(p) ! 1]]) @});
-  return Gperm;
+  return true, Gperm;
 end intrinsic;
 
-intrinsic GaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolGrp) -> GrpPerm
+intrinsic TryGaloisGroup(alg :: PGGAlg_GaloisGroup_SinglyRamified, f :: PGGPolGrp) -> BoolElt, GrpPerm
   {The Galois group of f.}
-  require IsIrreducible(f): "f must be irreducible";
+  if not IsIrreducible(f) then
+    return false, "f must be irreducible";
+  end if;
   F := BaseRing(f);
   E := Extension(f);
   R := RamificationTower(E, F);
   assert #R ge 1;
-  require #R le 2: "not singly ramified";
+  if #R gt 2 then
+    return false, "f must define a singly ramified extension";
+  end if;
   G := GaloisGroup(f);
-  return G;
+  return true, G;
 end intrinsic;

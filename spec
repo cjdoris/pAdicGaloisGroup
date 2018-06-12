@@ -14,9 +14,11 @@
   GloMod.mag
   Stat.mag
   GaloisGroup.mag
+  GaloisGroup_Tame.mag
   GaloisGroup_Builtin.mag
   GaloisGroup_SinglyRamified.mag
   GaloisGroup_ARM.mag
+  GaloisGroup_Sequence.mag
   GaloisGroup_Recursive.mag
   Tranche.mag
   ResGroups.mag

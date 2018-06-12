@@ -14,10 +14,10 @@ intrinsic Print(rec :: PGGAlg_GaloisGroup_Recursive)
   printf "%o (defined recursively)", rec`var;
 end intrinsic;
 
-intrinsic RamificationGroup(rec :: PGGAlg_GaloisGroup_Recursive, f :: PGGPol, u :: FldRatElt) -> GrpPerm
+intrinsic TryGaloisGroup(rec :: PGGAlg_GaloisGroup_Recursive, f :: PGGPol) -> BoolElt, GrpPerm
   {The uth ramification group.}
   IndentPush();
-  G := PGG_RamificationGroup(f, u : Alg:=rec`alg);
+  ok, G := PGG_TryGaloisGroup(f : Alg:=rec`alg);
   IndentPop();
-  return G;
+  return ok, G;
 end intrinsic;

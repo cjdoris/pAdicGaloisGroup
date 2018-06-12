@@ -60,8 +60,10 @@ Here we notate the current options for the algorithms. The `Alg` parameter to `P
 How to compute a Galois group.
 
 - `ARM [Eval:RESEVAL_ALG, Groups:GROUP_ALG]`: The absolute resolvent method. Uses `Eval` to evaluate resolvents and `Groups` to deduce the Galois group.
+- `Tame`: For polynomials whose splitting field is tamely ramified (or unramified).
 - `SinglyRamified`: The algorithm due to Greve for singly ramified extensions.
-- `Builtin`: Magma's builtin `GaloisGroup` intrinsic.
+- `Builtin`: Magma's builtin `GaloisGroup` intrinsic. This is currently the "naive" algorithm which computes the splitting field and automorphisms explicitly, so is only suitable for small cases.
+- `[GALOISGROUP, ...]`: Tries each algorithm in turn. Useful to rule out special cases, e.g. `[Tame,SinglyRamified]:ARM[...]`.
 
 ### `GROUP_ALG`
 

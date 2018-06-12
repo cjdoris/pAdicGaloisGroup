@@ -1,0 +1,47 @@
+declare type PGGAlg_GaloisGroup_Sequence: PGGAlg_GaloisGroup;
+declare attributes PGGAlg_GaloisGroup_Sequence: algs;
+
+intrinsic PGGAlg_GaloisGroup_Sequence_Make(algs) -> PGGAlg_GaloisGroup_Sequence
+  {The algorithm which tries each algorithm in algs in turn.}
+  alg := New(PGGAlg_GaloisGroup_Sequence);
+  alg`algs := algs;
+  return alg;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_GaloisGroup_Sequence)
+  {Print.}
+  printf "sequence";
+  if #alg`algs eq 0 then
+    printf " (empty)";
+  else
+    for i in [1..#alg`algs] do
+      print "";
+      IndentPush();
+      printf "%o: ", i;
+      Print(alg`algs[i]);
+      IndentPop();
+    end for;
+  end if;
+end intrinsic;
+
+intrinsic TryGaloisGroup(alg :: PGGAlg_GaloisGroup_Sequence, f :: PGGPol) -> BoolElt, .
+  {The Galois group of f.}
+  errs := [Strings()| ];
+  for a in alg`algs do
+    vprint PGG_GaloisGroup: "trying algorithm:", a;
+    ok, G := TryGaloisGroup(a, f);
+    if ok then
+      return true, G;
+    else
+      Append(~errs, G);
+      vprint PGG_GaloisGroup: "failed:", G;
+    end if;
+  end for;
+  if #errs eq 0 then
+    return false, "nothing to try";
+  elif #errs eq 1 then
+    return false, errs[1];
+  else
+    return false, "no algorithm succeeded (" cat Join(errs, "; ") cat ")";
+  end if;
+end intrinsic;
