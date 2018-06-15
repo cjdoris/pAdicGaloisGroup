@@ -21,6 +21,7 @@
   GaloisGroup_Sequence.mag
   GaloisGroup_Recursive.mag
   Tranche.mag
+  Stream.mag
   ResGroups.mag
   ResChoice.mag
   ResEval.mag

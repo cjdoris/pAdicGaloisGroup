@@ -1,0 +1,115 @@
+import "Utils.mag": sort_by, not_implemented;
+
+declare type PGGAlg_Stream: PGGAlg;
+
+declare type PGGAlgState_Stream: PGGAlgState;
+declare attributes PGGAlgState_Stream: overgroup;
+
+declare type PGGAlg_Stream_Index: PGGAlg_Stream;
+declare attributes PGGAlg_Stream_Index: filter, sort_key, dedupe;
+
+declare type PGGAlgState_Stream_Index: PGGAlgState_Stream;
+declare attributes PGGAlgState_Stream_Index: all_indices, indices, ii, subgroup_classes, stream_done;
+
+intrinsic PGGAlg_Stream_Index_Make(:Filter:=false, SortKey:=false, Dedupe:=false) -> PGGAlg_Stream_Index
+  {The "Index" streams algorithm.}
+  alg := New(PGGAlg_Stream_Index);
+  alg`filter := Filter;
+  alg`sort_key := SortKey;
+  alg`dedupe := Dedupe cmpeq false select PGGAlg_SubgrpDedupe_None_Make() else Dedupe cmpeq true select PGGAlg_SubgrpDedupe_Tree_Make() else Dedupe;
+  return alg;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_Stream_Index)
+  {Print.}
+  printf "index";
+  if alg`filter cmpne false then
+    print "";
+    IndentPush();
+    printf "filter = ";
+    Print(alg`filter);
+    IndentPop();
+  end if;
+  if alg`sort_key cmpne false then
+    print "";
+    IndentPush();
+    printf "sort by = ";
+    Print(alg`sort_key);
+    IndentPop();
+  end if;
+  print "";
+  IndentPush();
+  printf "dedupe = ";
+  Print(alg`dedupe);
+  IndentPop();
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_Stream_Index, overgroup :: PGGGrpPerm) -> PGGAlgState_Stream_Index
+  {Starts the algorithm.}
+  s := New(PGGAlgState_Stream_Index);
+  s`overgroup := overgroup;
+  s`all_indices := Divisors(#Group(overgroup));
+  return Restart(alg, s);
+end intrinsic;
+
+intrinsic Restart(alg :: PGGAlg_Stream, s :: PGGAlgState_Stream) -> PGGAlgState_Stream
+  {Like ``Start(alg, s`overgroup)`` but tries to preserve information.}
+  vprint PGG_GaloisGroup: "*** starting Stream algorithm from scratch:", alg;
+  return Start(alg, s`overgroup);
+end intrinsic;
+
+intrinsic Restart(alg :: PGGAlg_Stream_Index, s :: PGGAlgState_Stream_Index) -> PGGAlgState_Stream_Index
+  {"}
+  s`algorithm := alg;
+  s`indices := s`all_indices;
+  if alg`filter cmpne false then
+    s`indices := [n : n in s`indices | Evaluate(alg`filter, func<name | case<name | "idx":n, default: not_implemented()>>)];
+  end if;
+  if alg`sort_key cmpne false then
+    s`indices := sort_by(s`indices, func<n | Evaluate(alg`sort_key, func<name | case<name | "idx":n, default: not_implemented()>>)>);
+  else
+    s`indices := Sort(s`indices);
+  end if;
+  vprint PGG_GaloisGroup: "indices =", s`indices;
+  s`subgroup_classes := Classes(alg`dedupe, s`overgroup);
+  Reset(s);
+  return s;
+end intrinsic;
+
+intrinsic Reset(s :: PGGAlgState_Stream_Index)
+  {Resets s to its initial state.}
+  s`ii := 0;
+  s`stream_done := false;
+end intrinsic;
+
+intrinsic HasNextGroup(s :: PGGAlgState_Stream_Index) -> BoolElt, .
+  {True if the current stream has an item.}
+  if s`ii ge 1 and s`ii le #s`indices and not s`stream_done then
+    idx := s`indices[s`ii];
+    if idx eq 1 then
+      s`stream_done := true;
+      return true, Group(s`overgroup);
+    else
+      ok, H := PGG_has_random_subgroup_of_index(Group(s`overgroup), idx : MaxTries:=100);
+      if ok then
+        return true, H;
+      else
+        s`stream_done := true;
+        return false, _;
+      end if;
+    end if;
+  end if;
+  return false, _;
+end intrinsic;
+
+intrinsic HasNextStream(s :: PGGAlgState_Stream_Index) -> BoolElt
+  {True if s has a next stream.}
+  if s`ii lt #s`indices then
+    s`ii +:= 1;
+    s`stream_done := false;
+    vprint PGG_GaloisGroup: "index =", s`indices[s`ii];
+    return true;
+  else
+    return false;
+  end if;
+end intrinsic;

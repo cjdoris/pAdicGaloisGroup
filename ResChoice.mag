@@ -1,6 +1,8 @@
 declare type PGGAlg_ResChoice: PGGAlg;
 declare type PGGAlg_ResChoice_Tranche: PGGAlg_ResChoice;
 declare attributes PGGAlg_ResChoice_Tranche: tranche_alg, priority;
+declare type PGGAlg_ResChoice_Stream: PGGAlg_ResChoice;
+declare attributes PGGAlg_ResChoice_Stream: stream_alg, limit;
 
 declare type PGGAlgState_ResChoice: PGGAlgState;
 declare attributes PGGAlgState_ResChoice: parent;
@@ -8,11 +10,22 @@ declare attributes PGGAlgState_ResChoice: parent;
 declare type PGGAlgState_ResChoice_Tranche: PGGAlgState_ResChoice;
 declare attributes PGGAlgState_ResChoice_Tranche: tranche_state, overgroup;
 
+declare type PGGAlgState_ResChoice_Stream: PGGAlgState_ResChoice;
+declare attributes PGGAlgState_ResChoice_Stream: stream_state, overgroup;
+
 intrinsic PGGAlg_ResChoice_Tranche_Make(:Tranche:=false, Priority:=false) -> PGGAlg_ResChoice_Tranche
   {The "Tranche" subgroups choice.}
   alg := New(PGGAlg_ResChoice_Tranche);
   alg`tranche_alg := Tranche cmpne false select Tranche else PGGAlg_Tranche_Index_Make();
   alg`priority := Priority cmpne false select Priority else PGGAlg_ResPriority_Null_Make();
+  return alg;
+end intrinsic;
+
+intrinsic PGGAlg_ResChoice_Stream_Make(Stream :: PGGAlg_Stream : Limit:=false) -> PGGAlg_ResChoice_Stream
+  {The "Stream" subgroups choice.}
+  alg := New(PGGAlg_ResChoice_Stream);
+  alg`stream_alg := Stream;
+  alg`limit := Limit;
   return alg;
 end intrinsic;
 
@@ -27,6 +40,16 @@ intrinsic Print(alg :: PGGAlg_ResChoice_Tranche)
   end if;
 end intrinsic;
 
+intrinsic Print(alg :: PGGAlg_ResChoice_Stream)
+  {"}
+  printf "stream";
+  if alg`limit cmpne false then
+    printf " %o", alg`limit;
+  end if;
+  printf " -> ";
+  Print(alg`stream_alg);
+end intrinsic;
+
 intrinsic Start(alg :: PGGAlg_ResChoice_Tranche, parent :: PGGAlgState_ResGroups) -> PGGAlgState_ResChoice_Tranche
   {Starts alg.}
   s := New(PGGAlgState_ResChoice_Tranche);
@@ -37,9 +60,24 @@ intrinsic Start(alg :: PGGAlg_ResChoice_Tranche, parent :: PGGAlgState_ResGroups
   return s;
 end intrinsic;
 
+intrinsic Start(alg :: PGGAlg_ResChoice_Stream, parent :: PGGAlgState_ResGroups) -> PGGAlg_ResChoice_Stream
+  {"}
+  s := New(PGGAlgState_ResChoice_Stream);
+  s`algorithm := alg;
+  s`parent := parent;
+  s`overgroup := Group(parent`resolvent_overgroup);
+  s`stream_state := Start(alg`stream_alg, parent`resolvent_overgroup);
+  return s;
+end intrinsic;
+
 intrinsic Reset(s :: PGGAlgState_ResChoice_Tranche)
   {Starts the choice from the beginning again.}
   Reset(s`tranche_state);
+end intrinsic;
+
+intrinsic Reset(s :: PGGAlgState_ResChoice_Stream)
+  {"}
+  Reset(s`stream_state);
 end intrinsic;
 
 intrinsic Restart(alg :: PGGAlg_ResChoice, s :: PGGAlgState_ResChoice) -> PGGAlgState_ResChoice
@@ -52,6 +90,13 @@ intrinsic Restart(alg :: PGGAlg_ResChoice_Tranche, s :: PGGAlgState_ResChoice_Tr
   {"}
   s`algorithm := alg;
   s`tranche_state := Restart(alg`tranche_alg, s`tranche_state);
+  return s;
+end intrinsic;
+
+intrinsic Restart(alg :: PGGAlg_ResChoice_Stream, s :: PGGAlgState_ResChoice_Stream) -> PGGAlgState_ResChoice_Stream
+  {"}
+  s`algorithm := alg;
+  s`stream_state := Restart(alg`stream_alg, s`stream_state);
   return s;
 end intrinsic;
 
@@ -76,6 +121,39 @@ intrinsic HasSubgroup(s :: PGGAlgState_ResChoice_Tranche : NoForget:=false) -> B
         Forget(i);
       end if;
       return true, Group(i);
+    end if;
+  end while;
+end intrinsic;
+
+intrinsic HasSubgroup(s :: PGGAlgState_ResChoice_Stream) -> BoolElt, GrpPerm
+  {"}
+  maxtries := s`algorithm`limit cmpeq false select Infinity() else s`algorithm`limit;
+  ntries := 0;
+  while true do
+    if ntries lt maxtries then
+      // get a group
+      PGG_GlobalTimer_Push("next group");
+      ok, group := HasNextGroup(s`stream_state);
+      PGG_GlobalTimer_Pop();
+    else
+      ok := false;      
+    end if;
+    if ok then
+      ntries +:= 1;
+      // if useful, we are done
+      PGG_GlobalTimer_Push("useful");
+      ok := IsUseful(s`parent, group);
+      PGG_GlobalTimer_Pop();
+      if ok then
+        vprint PGG_GaloisGroup: "using item #", ntries;
+        return true, group;
+      end if;
+    else
+      ntries := 0;
+      // move on to the next stream
+      if not HasNextStream(s`stream_state) then
+        return false, _;
+      end if;
     end if;
   end while;
 end intrinsic;

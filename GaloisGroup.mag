@@ -235,6 +235,19 @@ function parse_algorithm(alg : prime:=false, degree:=false)
       *], func<args | PGGAlg_TrancheTake_Random_Make(args[1] : NewTries:=args[2], RandomTries:=args[3])>)
     ]);
 
+    SUBGROUP_STREAM := PGG_ArgSpec_Union([
+      PGG_ArgSpec_ISA(PGGAlg_Stream),
+      PGG_ArgSpec_Literal(false),
+      PGG_ArgSpec_Attr(
+        "Index",
+        [ <EXPRESSION(["idx"]),"If",false>
+        , <EXPRESSION(["idx"]),"Sort",false>
+        , <get("SUBGROUP_DEDUPE"),"Dedupe",false>
+        ],
+        func<args | PGGAlg_Stream_Index_Make(:Filter:=args[1], SortKey:=args[2], Dedupe:=args[3])>
+      )
+    ]);
+
     SUBGROUP_TRANCHE := set("SUBGROUP_TRANCHE", PGG_ArgSpec_Union([
       PGG_ArgSpec_ISA(PGGAlg_Tranche),
       PGG_ArgSpec_Literal(false),
@@ -310,14 +323,19 @@ function parse_algorithm(alg : prime:=false, degree:=false)
         func<t | PGGAlg_ResChoice_Tranche_Make(:Tranche:=t)>
       ),
       PGG_ArgSpec_Attr(
-        "",
-        [ <SUBGROUP_TRANCHE,"Tranche",false>, <SUBGROUP_PRIORITY,"Priority",false> ],
-        func<args | PGGAlg_ResChoice_Tranche_Make(:Tranche:=args[1], Priority:=args[2])>
-      ),
-      PGG_ArgSpec_Attr(
         "Prioritize",
         [ <SUBGROUP_PRIORITY,"Priority",false>, <SUBGROUP_TRANCHE,"Tranche",false> ],
         func<args | PGGAlg_ResChoice_Tranche_Make(:Tranche:=args[2], Priority:=args[1])>
+      ),
+      PGG_ArgSpec_Attr(
+        "Stream",
+        [* <INTEGER,"Limit",false>, <SUBGROUP_STREAM,"Stream"> *],
+        func<args | PGGAlg_ResChoice_Stream_Make(args[2] : Limit:=args[1])>
+      ),
+      PGG_ArgSpec_Attr(
+        "",
+        [ <SUBGROUP_TRANCHE,"Tranche",false>, <SUBGROUP_PRIORITY,"Priority",false> ],
+        func<args | PGGAlg_ResChoice_Tranche_Make(:Tranche:=args[1], Priority:=args[2])>
       )
     ]);
 

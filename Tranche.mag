@@ -4,7 +4,7 @@ declare type PGGAlg_Tranche: PGGAlg;
 declare attributes PGGAlg_Tranche: verbosity;
 declare type PGGAlg_Tranche_All: PGGAlg_Tranche;
 declare type PGGAlg_Tranche_Index: PGGAlg_Tranche;
-declare attributes PGGAlg_Tranche_Index: filter, sort_key, static_filter, dynamic_filter, take, dedupe, streaming;
+declare attributes PGGAlg_Tranche_Index: filter, sort_key, static_filter, dynamic_filter, take, dedupe;
 declare type PGGAlg_Tranche_OrbitIndex: PGGAlg_Tranche;
 declare attributes PGGAlg_Tranche_OrbitIndex: filter, sort_key, static_filter, dynamic_filter, take, dedupe;
 // abstract type for tranches which modify other tranches
@@ -69,7 +69,7 @@ intrinsic PGGAlg_Tranche_All_Make(:Verbosity:=1) -> PGGAlg_Tranche_All
   return alg;
 end intrinsic;
 
-intrinsic PGGAlg_Tranche_Index_Make(:Filter:=false, SortKey:=false, Verbosity:=1, Take:=false, Dedupe:=true, Streaming:=false) -> PGGAlg_Tranche_Index
+intrinsic PGGAlg_Tranche_Index_Make(:Filter:=false, SortKey:=false, Verbosity:=1, Take:=false, Dedupe:=true) -> PGGAlg_Tranche_Index
   {The "Index" subgroups choice.}
   alg := New(PGGAlg_Tranche_Index);
   alg`verbosity := Verbosity;
@@ -78,7 +78,6 @@ intrinsic PGGAlg_Tranche_Index_Make(:Filter:=false, SortKey:=false, Verbosity:=1
   alg`sort_key := SortKey;
   alg`take := Take cmpne false select Take else PGGAlg_TrancheTake_All_Make();
   alg`dedupe := Dedupe cmpeq false select PGGAlg_SubgrpDedupe_None_Make() else Dedupe cmpeq true select PGGAlg_SubgrpDedupe_Tree_Make() else Dedupe;
-  alg`streaming := Streaming;
   return alg;
 end intrinsic;
 
@@ -170,12 +169,6 @@ intrinsic Print(alg :: PGGAlg_Tranche_Index)
   printf "dedupe = ";
   Print(alg`dedupe);
   IndentPop();
-  if alg`streaming then
-    print "";
-    IndentPush();
-    printf "streaming = true";
-    IndentPop();
-  end if;
 end intrinsic;
 
 intrinsic Print(alg :: PGGAlg_Tranche_OrbitIndex)

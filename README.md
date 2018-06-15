@@ -145,10 +145,11 @@ How to choose the subgroup.
 - `SUBGROUP_TRANCHE`: Consider each group in each tranche in turn and select the first useful one.
 - `[SUBGROUP_TRANCHE, SUBGROUP_PRIORITY]`: As above, but the tranches are reordered according to some priority.
 - `Prioritize[SUBGROUP_PRIORITY, SUBGROUP_TRANCHE]`: Equivalent to the previous, but can be used like `Prioritize[PRIORITY]:TRANCHE`.
+- `Stream[Limit:INTEGER, SUBGROUP_STREAM]`: Consider up to `Limit` groups from each stream in turn and select the first useful one.
 
 ### `SUBGROUP_TRANCHE`
 
-How to select sets of subgroups.
+How to select sets ("tranches") of subgroups.
 
 - `All`: All subgroups.
 - `Index [If:EXPRESSION, Sort:EXPRESSION, Take:SUBGROUP_TAKE, Dedupe:SUBGROUP_DEDUPE]`: All subgroups by index. Only uses indices where `If` evaluates true, and sorts by `Sort`, both expressions in `idx` (the index). `If` may additionally be in variables `has_special` (true if there exists a special tranche) and `sidx0` (the index of the first special tranche, or 0 if there is none): some tranches may be dynamically marked as special from outside the tranche, e.g. the `Maximal` `GROUP_ALG` with `DescendWhen:NoSubgroup` marks tranches containing useful groups as special, giving a means to dynamically control how many tranches to use based on what was previously useful. `Take` controls which subgroups are used, and `Dedupe` controls how to dedupe groups by conjugacy.
@@ -157,6 +158,12 @@ How to select sets of subgroups.
 - `Truncate [Length:INTEGER, SUBGROUP_TRANCHE]`: The inner tranche, but truncated to at most `Length` items.
 - `Sample [SUBGROUP_TRANCHE]`: The inner tranche, but takes a random selection of up to `Length` items. (For `Index` or `OrbitIndex`, consider using the parameter `Take:Random` instead.)
 - `Tuples [Length:INTEGER, Random:INTEGER, SUBGROUP_TRANCHE]`: Generates tuples of length `Length` from the inner tranche. By default this generates all such tuples, but when `Random` is given, it generates up to this many tuples at random.
+
+### `SUBGROUP_STREAM`
+
+How to select possibly infinite streams of subgroups. Unlike tranches, the subgroups are not cached and so this is typically used for randomly generated subgroups.
+
+- `Index [If:EXPRESSION, Sort:EXPRESSION, Dedupe:SUBGROUP_DEDUPE]`: Random subgroups of a given index. `If` and `Sort` are expressions in `idx` used to filter and sort the indices used (as with `Index` tranche algorithm). `Dedupe` controls how to dedupe groups by conjugacy (currently ignored, no deduping).
 
 ### `SUBGROUP_PRIORITY`
 

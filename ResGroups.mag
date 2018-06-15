@@ -1106,24 +1106,54 @@ function layer_has_consistent_subgroup(s, i, G)
   return false;
 end function;
 
-intrinsic IsUseful(s :: PGGAlgState_ResGroups_All, i :: PGGAlgState_TrancheItem) -> BoolElt
+intrinsic UsefulHook(s :: PGGAlgState_ResGroups, i :: PGGAlgState_TrancheItem)
+  {This is called when i is useful. Overload this.}
+  return;
+end intrinsic;
+
+intrinsic UsefulHook(s :: PGGAlgState_ResGroups_Maximal, i :: PGGAlgState_TrancheItem)
+  {"}
+  if s`useful_is_special then
+    MarkSpecialTranche(i);
+  end if;
+end intrinsic;
+
+intrinsic IsUseful(s :: PGGAlgState_ResGroups, i :: PGGAlgState_TrancheItem) -> BoolElt
   {True if i represents a useful group.}
-  Gs := s`possible_groups;
-  h := CosetAction(Group(s`resolvent_overgroup), i);
-  statalg := s`algorithm`statistic;
-  stat1 := GroupStat(statalg, Gs[1] @ s`overgroup_embedding, h);
-  is_useful := exists{G : G in Gs[2..#Gs] | GroupStat(statalg, G @ s`overgroup_embedding, h) ne stat1};
-  if not is_useful then
+  ok := IsUseful(s, i`subgroup);
+  if ok then
+    UsefulHook(s, i);
+  else
     Forget(i);
   end if;
-  return is_useful;
+  return ok;
 end intrinsic;
 
 intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal, i :: PGGAlgState_TrancheItem) -> BoolElt
   {"}
+  ok := IsUseful(s, i`subgroup);
+  if not ok then
+    Forget(i);
+  elif s`useful_is_special then
+    MarkSpecialTranche(i);
+  end if;
+end intrinsic;
+
+intrinsic IsUseful(s :: PGGAlgState_ResGroups_All, G) -> BoolElt
+  {True if G is useful.}
+  Gs := s`possible_groups;
+  h := CosetAction(Group(s`resolvent_overgroup), G);
+  statalg := s`algorithm`statistic;
+  stat1 := GroupStat(statalg, Gs[1] @ s`overgroup_embedding, h);
+  is_useful := exists{G : G in Gs[2..#Gs] | GroupStat(statalg, G @ s`overgroup_embedding, h) ne stat1};
+  return is_useful;
+end intrinsic;
+
+intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal, G) -> BoolElt
+  {"}
   case s`algorithm`useful:
   when "Sufficient":
-    h := CosetAction(Group(s`resolvent_overgroup), i);
+    h := CosetAction(Group(s`resolvent_overgroup), G);
     nstats := [<n, GroupStat(n, h)> : n in s`pool | n`maybe_equal];
     if exists{nstat : nstat in nstats[2..#nstats] | nstat[2] ne nstats[1][2]} then
       is_useful := true;
@@ -1137,7 +1167,7 @@ intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal, i :: PGGAlgState_TrancheI
       // is_useful := exists{nstat : nstat in nstats, mstat in mstats | (nstat ne mstat) and (mstat subset nstat)};
     end if;
   when "Necessary":
-    h := CosetAction(Group(s`resolvent_overgroup), i);
+    h := CosetAction(Group(s`resolvent_overgroup), G);
     nstats := [GroupStat(n, h) : n in s`pool | n`maybe_equal];
     if exists{nstat : nstat in nstats[2..#nstats] | nstat ne nstats[1]} then
       is_useful := true;
@@ -1146,36 +1176,28 @@ intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal, i :: PGGAlgState_TrancheI
       is_useful := exists{nstat : nstat in nstats, mstat in mstats | not (nstat subset mstat)};
     end if;
   when "Generous":
-    h := CosetAction(Group(s`resolvent_overgroup), i);
+    h := CosetAction(Group(s`resolvent_overgroup), G);
     nstats := [GroupStat(n, h) : n in {n : n in s`pool | n`maybe_equal} join &join[PossibleChildren(n) : n in s`pool]];
     assert #nstats ge 2;
     is_useful := exists{nstat : nstat in nstats[2..#nstats] | nstat ne nstats[1]};
   when "All":
-    is_useful := Index(Group(s`resolvent_overgroup), i`subgroup) gt 1;
+    is_useful := Index(Group(s`resolvent_overgroup), G) gt 1;
   else
     assert false;
   end case;
-  if not is_useful then
-    Forget(i);
-  elif s`useful_is_special then
-    MarkSpecialTranche(i);
-  end if;
   return is_useful;
 end intrinsic;
 
-intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal2, i :: PGGAlgState_TrancheItem) -> BoolElt
+intrinsic IsUseful(s :: PGGAlgState_ResGroups_Maximal2, G) -> BoolElt
   {"}
   assert #s`pool ne 0;
   assert forall{n : n in s`pool | n`maybe_equal and n`maybe_subgroup};
   assert forall{m : m in &join[PossibleChildren(n) : n in s`pool] | m`maybe_subgroup};
   assert (not pool_has_one_class(s)) or exists{n : n in s`pool | #PossibleChildren(n) gt 0};
-  h := CosetAction(Group(s`resolvent_overgroup), i);
+  h := CosetAction(Group(s`resolvent_overgroup), G);
   nstats := [<n, GroupStat(n, h)> : n in s`pool];
   is_useful := exists{nstat : nstat in nstats[2..#nstats] | nstat[2] ne nstats[1][2]}
     or exists{nstat : m in PossibleChildren(nstat[1]), nstat in nstats | GroupStat(m, h) ne nstat[2]};
-  if not is_useful then
-    Forget(i);
-  end if;
   return is_useful;
 end intrinsic;
 
