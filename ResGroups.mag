@@ -606,10 +606,10 @@ end intrinsic;
 
 intrinsic IsDone(s :: PGGAlgState_ResGroups_All) -> BoolElt, GrpPerm
   {True if we have deduced the Galois group.}
-  if #s`possible_groups eq 1 then
+  assert #s`possible_groups ge 1;
+  if forall{G : G in s`possible_groups[2..#s`possible_groups] | IsConjugate(Group(s`galois_conjugacy), s`possible_groups[1], G)} then
     return true, s`possible_groups[1];
   else
-    assert #s`possible_groups gt 1;
     return false, _;
   end if;
 end intrinsic;
