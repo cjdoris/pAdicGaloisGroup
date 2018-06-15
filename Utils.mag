@@ -671,7 +671,7 @@ end function;
 
 function _all_partition_groupings(P, Q)
   ptodo := [<Q, [{**} : q in Q]>];
-  for p in MultisetToSet(P) do
+  for p in Reverse(Sort(SetToSequence(MultisetToSet(P)))) do
     n := Multiplicity(P, p);
     ptodo_new := [];
     for x in ptodo do
