@@ -122,14 +122,14 @@ end intrinsic;
 intrinsic PGGAlg_ResEval_Global_Model_Factors_Make(:Next:=false) -> PGGAlg_ResEval_Global_Model_Factors
   {The "Factors" conjugacy algorithm.}
   a := New(PGGAlg_ResEval_Global_Model_Factors);
-  a`next := Next cmpne false select Next else PGGAlg_ResEval_Global_Model_Symmetric_Make();
+  a`next := Next cmpne false select Next else PGGAlg_ResEval_Global_Model_RamTower_Make();
   return a;
 end intrinsic;
 
 intrinsic PGGAlg_ResEval_Global_Model_RamTower_Make(:Next:=false) -> PGGAlg_ResEval_Global_Model_RamTower
   {The "RamTower" conjugacy algorithm.}
   a := New(PGGAlg_ResEval_Global_Model_RamTower);
-  a`next := Next cmpne false select Next else PGGAlg_ResEval_Global_Model_Symmetric_Make();
+  a`next := Next cmpne false select Next else PGGAlg_ResEval_Global_Model_Symmetric_Make(:GaloisGroupAlg:=PGGAlg_GaloisGroup_SinglyRamified_Make());
   return a;
 end intrinsic;
 
