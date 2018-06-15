@@ -1277,45 +1277,79 @@ intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat_FactorDegrees, v) -> []
     return [G];
   end if;
   // embed G into a direct product of transitive groups
+  PGG_GlobalTimer_Push("direct product embedding");
   Ds, gD := PGG_DirectProductEmbedding(G);
   gDinv := gD^-1;
   // find the ways in which sub-partitions of V correspond to the factors
+  PGG_GlobalTimer_Swap("matching");
+  vprint PGG_GaloisGroup: "matching", V, "to", [Degree(D):D in Ds];
   Vss := PGG_all_partition_groupings(V, [Degree(D) : D in Ds]);
+  vprint PGG_GaloisGroup: "#Vss =", #Vss;
   Sss := [];
   // for each direct factor, find all its stabilizers for each relevant partition
+  PGG_GlobalTimer_Swap("solve each factor");
   for i in [1..#Ds] do
     D := Ds[i];
+    PGG_GlobalTimer_Push("wreath product embedding");
     Gs, g := PGG_WreathProductEmbedding(D);
+    vprint PGG_GaloisGroup: "#Gs =", #Gs;
+    vprint PGG_GaloisGroup: "#W =", #WreathProduct(Gs);
+    vprint PGG_GaloisGroup: "#D =", #D;
+    PGG_GlobalTimer_Pop();
     ginv := g^-1;
     Sss[i] := AssociativeArray();
     for VD in {Vs[i] : Vs in Vss} do
-      P0s := [{{x^ginv : x in B} : B in P} : P in partitions_of_wr_of_shape(Gs, VD)];
-      assert forall{P0 : P0 in P0s | {*#o : o in P0*} eq VD};
-      W := WreathProduct(Gs)^ginv;
-      assert D subset W;
-      S0s := [Stabilizer(W, SetToSequence(P0)) : P0 in P0s];
-      assert forall{i : i in [1..#P0s] | P0s[i] eq {{x : x in o} : o in Orbits(S0s[i])}};
-      Ss := [];
-      for S0 in S0s do
-        for w in DoubleCosetRepresentatives(W, Normalizer(W,S0), D) do
-          S := (S0^w) meet D;
-          VS := {* #o : o in Orbits(S) *};
-          if VS eq VD then
-            for S2 in Ss do
-              if IsConjugate(D, S2, S) then
-                continue w;
-              end if;
-            end for;
-            Append(~Ss, S);
-          else
-            assert is_subpartition_of(VS, VD);
-          end if;
-        end for;
-      end for;
+      if (#D)^3 lt #WreathProduct(Gs) then
+        PGG_GlobalTimer_Push("partitions of small group");
+        Ss := [Stabilizer(D, SetToSequence(P)) : P in partitions_of_shape(D, VD)];
+        PGG_GlobalTimer_Pop();
+      else
+        PGG_GlobalTimer_Push("partitions of wr");
+        P0s := [{{x^ginv : x in B} : B in P} : P in partitions_of_wr_of_shape(Gs, VD)];
+        PGG_GlobalTimer_Pop();
+        assert forall{P0 : P0 in P0s | {*#o : o in P0*} eq VD};
+        W := WreathProduct(Gs)^ginv;
+        assert D subset W;
+        S0s := [Stabilizer(W, SetToSequence(P0)) : P0 in P0s];
+        assert forall{i : i in [1..#P0s] | P0s[i] eq {{x : x in o} : o in Orbits(S0s[i])}};
+        Ss := [];
+        PGG_GlobalTimer_Push("images");
+        for S0 in S0s do
+          PGG_GlobalTimer_Push("double coset representatives");
+          ws := DoubleCosetRepresentatives(W, Normalizer(W,S0), D);
+          vprint PGG_GaloisGroup: "#ws =", #ws;
+          PGG_GlobalTimer_Pop();
+          for w in ws do
+            PGG_GlobalTimer_Push("meet");
+            S := (S0^w) meet D;
+            PGG_GlobalTimer_Swap("orbits");
+            VS := {* #o : o in Orbits(S) *};
+            PGG_GlobalTimer_Pop();
+            if VS eq VD then
+              PGG_GlobalTimer_Push("dedupe conjugates");
+              for S2 in Ss do
+                if IsConjugate(D, S2, S) then
+                  PGG_GlobalTimer_Pop();
+                  continue w;
+                end if;
+              end for;
+              PGG_GlobalTimer_Pop();
+              Append(~Ss, S);
+            else
+              ; // the following assert can be expensive
+              // PGG_GlobalTimer_Push("assert is subpartition");
+              // assert is_subpartition_of(VS, VD);
+              // PGG_GlobalTimer_Pop();
+            end if;
+          end for;
+        end for;      
+        PGG_GlobalTimer_Pop();
+      end if;
       Sss[i][VD] := Ss;
     end for;
   end for;
   // take combinations to find the overall factors
+  PGG_GlobalTimer_Swap("combinations");
   Ss := [];
   W := DirectProduct(Ds)^gDinv;
   assert G subset W;
@@ -1327,11 +1361,14 @@ intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat_FactorDegrees, v) -> []
         S := (S0^w) meet G;
         VS := {* #o : o in Orbits(S) *};
         if VS eq V then
+          PGG_GlobalTimer_Push("dedupe conjugates");
           for S2 in Ss do
             if IsConjugate(G, S2, S) then
+              PGG_GlobalTimer_Pop();
               continue w;
             end if;
           end for;
+          PGG_GlobalTimer_Pop();
           Append(~Ss, S);
         else
           assert is_subpartition_of(VS, V);
@@ -1339,6 +1376,7 @@ intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat_FactorDegrees, v) -> []
       end for;
     end for;
   end for;
+  PGG_GlobalTimer_Pop();
   return Ss;
 end intrinsic;
 
