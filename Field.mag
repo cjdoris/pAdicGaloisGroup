@@ -940,7 +940,7 @@ intrinsic TameRParameter(E :: PGGFld, F :: PGGFld) -> RngIntElt, RngIntElt, RngI
   not_implemented("TameRParameter:", Type(E));
 end intrinsic;
 
-intrinsic TameRParameter(E :: PGGFldWrap, F :: PGGFldWrap) -> RngIntElt
+intrinsic TameRParameter(E :: PGGFldWrap, F :: PGGFldWrap : Alg:="Roots") -> RngIntElt
   {"}
   f := InertiaDegree(E, F);
   e := RamificationDegree(E, F);
@@ -950,15 +950,32 @@ intrinsic TameRParameter(E :: PGGFldWrap, F :: PGGFldWrap) -> RngIntElt
   piF := UniformizingElement(F);
   piE := UniformizingElement(E);
   zr := piE^e / piF;
-  Fp := FiniteField(p);
   FF := ResidueClassField(F);
   assert q eq #FF;
   FE, modq := ResidueClassField(E);
   assert Degree(FE, FF) eq f;
-  zeta := FE.1;
-  assert Degree(MinimalPolynomial(zeta, Fp)) eq Degree(FE, Fp);
   zetar := zr @ modq;
-  r := Log(zeta, zetar);
+  case Alg:
+  when "Log":
+    // This method selects a primitive root of unity `zeta` and then finds `r = log_zeta(zetar)`, but this logarithm gets slow as the residue field gets large
+    zeta := FE.1;
+    assert IsPrimitive(zeta);
+    r := Log(zeta, zetar);
+  when "Roots":
+    // This method tries successive values of `r` until some `r`th root of `zetar` is primitive (this takes advantage of the fact that we don't care about the choice of the primitive root `zeta`)
+    // TODO: Are there `r` that we can skip over?
+    // TODO: Do we really need to check all roots? Does one suffice?
+    r := 1;
+    while true do
+      if exists{zeta : zeta in AllRoots(zetar, r) | IsPrimitive(zeta)} then
+        break;
+      else
+        r +:= 1;
+      end if;
+    end while;
+  else
+    not_implemented("TameRParameter: Alg:", Alg);
+  end case;
   return r mod GCD(e, q^f-1);
 end intrinsic;
 
