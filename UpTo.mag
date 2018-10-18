@@ -1,0 +1,94 @@
+import "Utils.mag": not_implemented;
+
+declare type PGGAlg_GaloisGroup_ARM_UpTo: PGGAlg;
+declare type PGGAlg_GaloisGroup_ARM_UpTo_HomConj: PGGAlg_GaloisGroup_ARM_UpTo;
+declare type PGGAlg_GaloisGroup_ARM_UpTo_Full: PGGAlg_GaloisGroup_ARM_UpTo_HomConj;
+declare type PGGAlg_GaloisGroup_ARM_UpTo_ResolventEmbedding: PGGAlg_GaloisGroup_ARM_UpTo_HomConj;
+declare attributes PGGAlg_GaloisGroup_ARM_UpTo_ResolventEmbedding: check_injective;
+declare type PGGAlg_GaloisGroup_ARM_UpTo_Symmetric: PGGAlg_GaloisGroup_ARM_UpTo_HomConj;
+
+declare type PGGAlgState_GaloisGroup_ARM_UpTo: PGGAlgState;
+declare type PGGAlgState_GaloisGroup_ARM_UpTo_HomConj: PGGAlgState_GaloisGroup_ARM_UpTo;
+declare attributes PGGAlgState_GaloisGroup_ARM_UpTo_HomConj: hom, group;
+declare type PGGAlgState_GaloisGroup_ARM_UpTo_Symmetric: PGGAlgState_GaloisGroup_ARM_UpTo_HomConj;
+declare type PGGAlgState_GaloisGroup_ARM_UpTo_Full: PGGAlgState_GaloisGroup_ARM_UpTo_HomConj;
+declare type PGGAlgState_GaloisGroup_ARM_UpTo_ResolventEmbedding: PGGAlgState_GaloisGroup_ARM_UpTo_HomConj;
+
+intrinsic PGGAlg_GaloisGroup_ARM_UpTo_Symmetric_Make() -> PGGAlg_GaloisGroup_ARM_UpTo_Symmetric
+  {Used to signify that groups are determined up to the symmetric group only.}
+  return New(PGGAlg_GaloisGroup_ARM_UpTo_Symmetric);
+end intrinsic;
+
+intrinsic PGGAlg_GaloisGroup_ARM_UpTo_Full_Make() -> PGGAlg_GaloisGroup_ARM_UpTo_Full
+  {Used to signify that the Galois group is determined up to W-conjugacy.}
+  return New(PGGAlg_GaloisGroup_ARM_UpTo_Full);
+end intrinsic;
+
+intrinsic PGGAlg_GaloisGroup_ARM_UpTo_ResolventEmbedding_Make(:CheckInjective:=false) -> PGGAlg_GaloisGroup_ARM_UpTo_ResolventEmbedding
+  {Used to signify that the Galois group is determined up to Wtil-conjugacy under e:W->Wtil.}
+  alg := New(PGGAlg_GaloisGroup_ARM_UpTo_ResolventEmbedding);
+  alg`check_injective := CheckInjective;
+  return alg;
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_GaloisGroup_ARM_UpTo_Full)
+  {Print.}
+  printf "full";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_GaloisGroup_ARM_UpTo_Symmetric)
+  {"}
+  printf "symmetric";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_GaloisGroup_ARM_UpTo_ResolventEmbedding)
+  {"}
+  printf "overgroup embedding";
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_GaloisGroup_ARM_UpTo, emb :: PGGHomGrpPerm) -> PGGAlgState_GaloisGroup_ARM_UpTo
+  {Starts the algorithm.}
+  not_implemented("Start:", Type(alg));
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_GaloisGroup_ARM_UpTo_Full, emb :: PGGHomGrpPerm) -> PGGAlgState_GaloisGroup_ARM_UpTo_Full
+  {"}
+  s := New(PGGAlgState_GaloisGroup_ARM_UpTo_Full);
+  s`algorithm := alg;
+  s`hom := func<G | G>;
+  s`group := Group(Domain(emb));
+  return s;
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_GaloisGroup_ARM_UpTo_Symmetric, emb :: PGGHomGrpPerm) -> PGGAlgState_GaloisGroup_ARM_UpTo_Symmetric
+  {"}
+  s := New(PGGAlgState_GaloisGroup_ARM_UpTo_Symmetric);
+  s`algorithm := alg;
+  s`hom := func<G | G>;
+  s`group := SymmetricGroup(Degree(Domain(emb)));
+  return s;
+end intrinsic;
+
+intrinsic Start(alg :: PGGAlg_GaloisGroup_ARM_UpTo_ResolventEmbedding, emb :: PGGHomGrpPerm) -> PGGAlgState_GaloisGroup_ARM_UpTo_ResolventEmbedding
+  {"}
+  s := New(PGGAlgState_GaloisGroup_ARM_UpTo_ResolventEmbedding);
+  if alg`check_injective then
+    error if not IsInjective(emb), "overgroup embedding is not injective";
+  end if;
+  s`algorithm := alg;
+  s`hom := Hom(emb);
+  s`group := Codomain(s`hom);
+  return s;
+end intrinsic;
+
+intrinsic IsEquivalent(s :: PGGAlgState_GaloisGroup_ARM_UpTo, G1 :: GrpPerm, G2 :: GrpPerm) -> BoolElt
+  {True if G1 and G2 are equivalent.}
+  not_implemented("IsEquivalent:", Type(s));
+end intrinsic;
+
+intrinsic IsEquivalent(s :: PGGAlgState_GaloisGroup_ARM_UpTo_HomConj, G1 :: GrpPerm, G2 :: GrpPerm) -> BoolElt
+  {"}
+  ok := IsConjugate(s`group, s`hom(G1), s`hom(G2));
+  return ok;
+end intrinsic;
+

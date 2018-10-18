@@ -164,6 +164,11 @@ function parse_algorithm(alg : prime:=false, degree:=false)
         "RootOfUniformizer",
         [],
         func<args | PGGAlg_ResEval_Global_Model_RootOfUniformizer_Make()>
+      ),
+      PGG_ArgSpec_Attr(
+        "PthRoots",
+        [],
+        func<args | PGGAlg_ResEval_Global_Model_PthRoots_Make()>
       )
     ]));
 
@@ -425,6 +430,13 @@ function parse_algorithm(alg : prime:=false, degree:=false)
       )
     ]);
 
+    ARMUPTO := PGG_ArgSpec_Union([
+      PGG_ArgSpec_ISA(PGGAlg_GaloisGroup_ARM_UpTo),
+      PGG_ArgSpec_Attr("Full", [], func<args | PGGAlg_GaloisGroup_ARM_UpTo_Full_Make()>),
+      PGG_ArgSpec_Attr("Symmetric", [], func<args | PGGAlg_GaloisGroup_ARM_UpTo_Symmetric_Make()>),
+      PGG_ArgSpec_Attr("OvergroupEmbedding", [<BOOL,"CheckInjective",false>], func<args | PGGAlg_GaloisGroup_ARM_UpTo_ResolventEmbedding_Make(:CheckInjective:=args[1])>)
+    ]);
+
     GALOISGROUP := set("GALOISGROUP", PGG_ArgSpec_Union([
       PGG_ArgSpec_ISA(PGGAlg_GaloisGroup),
       PGG_ArgSpec_Literal(false),
@@ -432,9 +444,10 @@ function parse_algorithm(alg : prime:=false, degree:=false)
         "ARM",
         [ <RESEVAL,"Eval",false>
         , <RESGROUPS,"Groups",false>
+        , <ARMUPTO,"UpTo",false>
         , <BOOL,"UseEasyResolvents",false>
         ],
-        func<args | PGGAlg_GaloisGroup_ARM_Make(:ResolventAlg:=args[1], GroupsAlg:=args[2], UseEasyResolvents:=args[3])>
+        func<args | PGGAlg_GaloisGroup_ARM_Make(:ResolventAlg:=args[1], GroupsAlg:=args[2], UpTo:=args[3], UseEasyResolvents:=args[4])>
       ),
       PGG_ArgSpec_Attr(
         "Builtin",

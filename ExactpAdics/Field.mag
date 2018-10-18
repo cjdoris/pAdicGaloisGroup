@@ -170,6 +170,11 @@ intrinsic AbsoluteRamificationDegree(E :: PGGFldExact) -> RngIntElt
   return AbsoluteRamificationDegree(Actual(E));
 end intrinsic;
 
+intrinsic Valuation(x :: PGGFldExactElt) -> RngIntElt
+  {The valuation of x.}
+  return IntegerValue(Valuation(Actual(x)));
+end intrinsic;
+
 intrinsic ValuationEq(x :: PGGFldExactElt, n :: RngIntElt) -> BoolElt
   {True if the valuation of x is n.}
   return ValuationEq(Actual(x), n);
@@ -252,6 +257,13 @@ intrinsic '/'(x :: PGGFldExactElt, y :: PGGFldExactElt) -> PGGFldExactElt
   ok, F := ExistsCoveringStructure(Parent(x), Parent(y));
   require ok: "different fields";
   return F ! (Actual(F ! x) / Actual(F ! y));
+end intrinsic;
+
+intrinsic '-'(x :: PGGFldExactElt, y :: PGGFldExactElt) -> PGGFldExactElt
+  {Minus.}
+  ok, F := ExistsCoveringStructure(Parent(x), Parent(y));
+  require ok: "different fields";
+  return F ! (Actual(F ! x) - Actual(F ! y));
 end intrinsic;
 
 intrinsic ExistsCoveringStructure(E :: PGGFldExact, F :: PGGFldExact) -> BoolElt, .

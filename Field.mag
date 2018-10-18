@@ -521,6 +521,13 @@ intrinsic '/'(x :: PGGFldStdElt, y :: PGGFldStdElt) -> PGGFldStdElt
   return F ! (Actual(F ! x) / Actual(F ! y));
 end intrinsic;
 
+intrinsic '-'(x :: PGGFldStdElt, y :: PGGFldStdElt) -> PGGFldStdElt
+  {Minus.}
+  ok, F := ExistsCoveringStructure(Parent(x), Parent(y));
+  require ok: "different fields";
+  return F ! (Actual(F!x) - Actual(F!y));
+end intrinsic;
+
 intrinsic ExistsCoveringStructure(E :: PGGFldStd, F :: PGGFldStd) -> BoolElt, .
   {True if there is a structure containing both E and F.}
   ok, A := ExistsCoveringStructure(Actual(E), Actual(F));
@@ -946,6 +953,10 @@ intrinsic TameRParameter(E :: PGGFldWrap, F :: PGGFldWrap : Alg:="Roots") -> Rng
   e := RamificationDegree(E, F);
   p := Prime(F);
   require not IsDivisibleBy(e, p): "E/F must be tame";
+  if e eq 1 then
+    return 0;
+  end if;
+  assert e gt 1;
   q := p^AbsoluteInertiaDegree(F);
   piF := UniformizingElement(F);
   piE := UniformizingElement(E);
@@ -955,6 +966,9 @@ intrinsic TameRParameter(E :: PGGFldWrap, F :: PGGFldWrap : Alg:="Roots") -> Rng
   FE, modq := ResidueClassField(E);
   assert Degree(FE, FF) eq f;
   zetar := zr @ modq;
+  if zetar eq 1 then
+    return 0;
+  end if;
   case Alg:
   when "Log":
     // This method selects a primitive root of unity `zeta` and then finds `r = log_zeta(zetar)`, but this logarithm gets slow as the residue field gets large

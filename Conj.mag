@@ -1,5 +1,7 @@
 import "Utils.mag": not_implemented, sort_by, all_binnings;
 
+IS_TRANSITIVE := IsTransitive;
+
 declare type PGGConj: PGGGrpPerm;
 declare attributes PGGConj: pol, base_field, parent_subgroup, parent_quotient, galgrp_is_known, galgrp_is_transitive, galgrp_overgroup;
 
@@ -17,6 +19,12 @@ declare attributes PGGConj_Unramified: top_field;
 
 declare type PGGConj_TotRam: PGGConj, PGGGrpPerm_RawSubgroup;
 declare attributes PGGConj_TotRam: top_field;
+
+declare type PGGConj_ElemAbel: PGGConj, PGGGrpPerm_ElemAbel;
+declare attributes PGGConj_ElemAbel: top_field;
+
+declare type PGGConj_Raw: PGGConj, PGGGrpPerm_Raw;
+declare attributes PGGConj_Raw: top_field;
 
 intrinsic PGGConj_Symmetric_Make(f :: PGGPol : GaloisGroupAlg:=false, TopField:=false, IsTransitive:=false, KnownGroup:=false) -> PGGConj_Symmetric
   {Makes a conjugacy.}
@@ -79,6 +87,41 @@ intrinsic PGGConj_TotRam_Make(f :: PGGPol : TopField:=false) -> PGGConj_TotRam
   c`top_field := L;
   c`galgrp_is_known := [* true, Group(c) *];
   c`galgrp_is_transitive := true;
+  return c;
+end intrinsic;
+
+intrinsic PGGConj_ElemAbel_Make(f :: PGGPol : TopField:=false) -> PGGConj_ElemAbel
+  {"}
+  require TopField cmpne false: "TopField must be known";
+  c := New(PGGConj_ElemAbel);
+  Init(~c, Degree(f));
+  c`pol := f;
+  c`base_field := BaseRing(f);
+  c`galgrp_is_known := [* true, Group(c) *];
+  c`galgrp_is_transitive := c`dim le 1;
+  c`top_field := TopField;
+  return c;
+end intrinsic;
+
+intrinsic PGGConj_Raw_Make(f :: PGGPol, G :: GrpPerm : TopField:=false, IsTransitive:=false, KnownGroup:=false) -> PGGConj_Raw
+  {"}
+  c := New(PGGConj_Raw);
+  Init(~c, G);
+  c`pol := f;
+  c`base_field := BaseRing(f);
+  if TopField cmpne false then
+    c`top_field := TopField;
+    IsTransitive or:= true;
+  end if;
+  if KnownGroup cmpne false then
+    assert KnownGroup subset Group(c);
+    c`galgrp_is_known := [* true, KnownGroup *];
+    IsTransitive or:= IS_TRANSITIVE(KnownGroup);
+  else
+    c`galgrp_is_known := [* false *];
+    IsTransitive or:= Degree(G) le 1;
+  end if;
+  c`galgrp_is_transitive := IsTransitive;
   return c;
 end intrinsic;
 

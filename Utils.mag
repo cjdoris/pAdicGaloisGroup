@@ -903,3 +903,78 @@ intrinsic PGG_has_random_subgroup_of_index(G :: Grp, n :: RngIntElt : MaxTries:=
   end if;
   return PGG_has_random_subgroup(G, func<H | Index(G,H) eq n>, func<H | IsDivisibleBy(Index(G,H), n)> : MaxTries:=MaxTries);
 end intrinsic;
+
+intrinsic PGG_linear_divisions(length :: RngIntElt, lengths :: {* RngIntElt *} : Bound:=false) -> []
+  {Given an interval of given length, find all possible divisions of it from among the given lengths. A division is a sequence of integers (sorted largest first) summing to the given length, whose elements are a subset of lengths. If Bound is given, the divisions must be lexicographically no more than it (i.e. the first element to disagree must be smaller).}
+  require length ge 0: "length must be at least 0";
+  require forall{len : len in MultisetToSet(lengths) | len gt 0}: "lengths must be at least 0";
+  if &+lengths lt length then
+    return [];
+  elif length eq 0 then
+    return [[]];
+  end if;
+  // parse the Bound
+  if Bound cmpeq false then
+    Bound := [length];
+  else
+    require forall{b : b in Bound | b gt 0}: "Bound must have positive entries";
+    require &+Bound eq length: "Bound must sum to length";
+    require forall{i : i in [2..#Bound] | Bound[i] le Bound[i-1]}: "Bound must be decreasing";
+  end if;
+  // loop over the first len
+  ret := [];
+  for len in Reverse(Sort(SetToSequence(MultisetToSet(lengths)))) do
+    if len le length and len le Bound[1] then
+      for lens in PGG_linear_divisions(length - len, lengths diff {* len *} : Bound := len eq Bound[1] select Bound[2..#Bound] else [Min(len,length-len-i) : i in [0..length-len-1 by len]]) do
+        Append(~ret, [len] cat lens);
+      end for;
+    end if;
+  end for;
+  return ret;
+end intrinsic;
+
+intrinsic PGG_rectangle_divisions(width :: RngIntElt, height :: RngIntElt, areas :: {* RngIntElt *} : Bound:=false) -> []
+  {Given a rectangle of given width and height, returns all possible integer divisions of the rectangle with the given areas. A division is a series of vertical cuts, through the whole rectangle, followed by a series of horizontal cuts within each resulting rectangle. It is returned in the form `[<w1,[h11,h12,...]>,<w2,[h21,...]>,...]` where the `wi` sum to width, and for each `i` the `hij` sum to height, and areas is the multiset of `wi*hij`.}
+  require width ge 0: "width must be at least 0";
+  require height ge 0: "height must be at least 0";
+  require forall{a : a in MultisetToSet(areas) | a gt 0}: "each area must be positive";
+  if &+areas lt width * height then
+    return [];
+  elif width eq 0 or height eq 0 then
+    return [[]];
+  end if;
+  // parse the Bound
+  if Bound cmpne false then
+    max_w, max_hs := Explode(Bound);
+  else
+    max_w := width;
+    max_hs := [height];
+  end if;
+  // make a w->hs lookup table
+  poss_hss := AssociativeArray();
+  for a in MultisetToSet(areas) do
+    m := Multiplicity(areas, a);
+    for h in Divisors(a) do
+      w := xdiv(a, h);
+      if h le height and w le width and w le max_w then
+        if not IsDefined(poss_hss, w) then
+          poss_hss[w] := {* h^^m *};
+        else
+          poss_hss[w] join:= {* h^^m *};
+        end if;
+      end if;
+    end for;
+  end for;
+  // loop over possible w
+  ret := [];
+  for w in Reverse(Sort(SetToSequence(Keys(poss_hss)))) do
+    poss_hs := poss_hss[w];
+    // now find possible hs
+    for hs in PGG_linear_divisions(height, poss_hs : Bound:=max_hs) do
+      for rdiv in PGG_rectangle_divisions(width-w, height, areas diff {* w*h : h in hs*} : Bound:=<w, w eq max_w select max_hs else [height]>) do
+        Append(~ret, [<w, hs>] cat rdiv);
+      end for;
+    end for;
+  end for;
+  return ret;
+end intrinsic;

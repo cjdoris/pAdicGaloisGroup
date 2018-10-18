@@ -83,7 +83,7 @@ intrinsic Reset(s :: PGGAlgState_Stream_Index)
 end intrinsic;
 
 intrinsic HasNextGroup(s :: PGGAlgState_Stream_Index) -> BoolElt, .
-  {True if the current stream has an item.}
+  {True if the current stream has a next item. If so, also returns the item.}
   if s`ii ge 1 and s`ii le #s`indices and not s`stream_done then
     idx := s`indices[s`ii];
     if idx eq 1 then
@@ -103,7 +103,7 @@ intrinsic HasNextGroup(s :: PGGAlgState_Stream_Index) -> BoolElt, .
 end intrinsic;
 
 intrinsic HasNextStream(s :: PGGAlgState_Stream_Index) -> BoolElt
-  {True if s has a next stream.}
+  {True if s has a next stream. If so, moves on to it.}
   if s`ii lt #s`indices then
     s`ii +:= 1;
     s`stream_done := false;

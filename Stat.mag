@@ -1209,13 +1209,17 @@ function is_partition_stabilizer_of_shape(G, S, V)
   return ({*#o : o in Orbits(S)*} eq V) and is_partition_stabilizer(G, S);
 end function;
 
-function partitions_of_shape(G, V)
+function partitions_of_shape(G, V : simple:=false)
   os := Orbits(G);
   sh := {*#o:o in os*};
   if sh eq V then
     return [{{x:x in o} : o in os}];
   elif is_subpartition_of(V, sh) then
-    return [P : P in partitions_of_shape(x`subgroup, V), x in MaximalSubgroups(G)];
+    if simple then
+      return SetToSequence({{{x:x in o}:o in os} : x in Subgroups(G) | {*#o:o in os*} eq V where os:=Orbits(x`subgroup)});
+    else
+      return [P : P in partitions_of_shape(x`subgroup, V), x in MaximalSubgroups(G)];
+    end if;
   else
     return [];
   end if;
@@ -1301,7 +1305,7 @@ intrinsic _Stabilizers(G :: GrpPerm, S :: PGGStat_FactorDegrees, v) -> []
     for VD in {Vs[i] : Vs in Vss} do
       if (#D)^3 lt #WreathProduct(Gs) then
         PGG_GlobalTimer_Push("partitions of small group");
-        Ss := [Stabilizer(D, SetToSequence(P)) : P in partitions_of_shape(D, VD)];
+        Ss := [Stabilizer(D, SetToSequence(P)) : P in partitions_of_shape(D, VD : simple)];
         PGG_GlobalTimer_Pop();
       else
         PGG_GlobalTimer_Push("partitions of wr");

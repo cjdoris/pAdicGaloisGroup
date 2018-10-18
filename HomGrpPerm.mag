@@ -1,7 +1,7 @@
 import "Utils.mag": not_implemented, Z, sprint_with_parens;
 
 declare type PGGHomGrpPerm;
-declare attributes PGGHomGrpPerm: domain, codomain, hom, shape, image;
+declare attributes PGGHomGrpPerm: domain, codomain, hom, shape, image, kernel, is_injective;
 
 declare type PGGHomGrpPerm_Id: PGGHomGrpPerm;
 
@@ -36,6 +36,22 @@ intrinsic Image(h :: PGGHomGrpPerm) -> PGGGrpPerm
     h`image := PGGGrpPerm_RawSubgroup_Make(Codomain(h), Group(Domain(h)) @ h);
   end if;
   return h`image;
+end intrinsic;
+
+intrinsic Kernel(h :: PGGHomGrpPerm) -> PGGGrpPerm
+  {The kernel of h.}
+  if not assigned h`kernel then
+    h`kernel := PGGGrpPerm_RawSubgroup_Make(Domain(h), Kernel(Hom(h)));
+  end if;
+  return h`kernel;
+end intrinsic;
+
+intrinsic IsInjective(h :: PGGHomGrpPerm) -> BoolElt
+  {True if h is injective.}
+  if not assigned h`is_injective then
+    h`is_injective := #Kernel(h) eq 1;
+  end if;
+  return h`is_injective;
 end intrinsic;
 
 intrinsic PGGHomGrpPerm_Id_Make(G :: PGGGrpPerm, H :: PGGGrpPerm) -> PGGHomGrpPerm

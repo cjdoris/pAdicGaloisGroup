@@ -1,8 +1,8 @@
-import "Utils.mag": dedupe_conjugage_subgroups, has_root, multiplicities_to_information, dedupe_conjugage_subgroups_simple, Z;
+import "Utils.mag": dedupe_conjugage_subgroups, has_root, multiplicities_to_information, dedupe_conjugage_subgroups_simple, Z, not_implemented;
 
 declare type PGGAlg_ResGroups: PGGAlg;
 declare type PGGAlgState_ResGroups: PGGAlgState;
-declare attributes PGGAlgState_ResGroups: overgroup_embedding;
+declare attributes PGGAlgState_ResGroups: overgroup_embedding, upto;
 
 declare type PGGAlg_ResGroups_All: PGGAlg_ResGroups;
 declare attributes PGGAlg_ResGroups_All: subgroup_choice, statistic, is_subgroup_of, dedupe;
@@ -171,11 +171,12 @@ intrinsic Print(alg :: PGGAlg_ResGroups_Maximal2)
   IndentPop();
 end intrinsic;
 
-intrinsic Start(alg :: PGGAlg_ResGroups_All, emb :: PGGHomGrpPerm) -> PGGAlgState_ResGroups_All
+intrinsic Start(alg :: PGGAlg_ResGroups_All, emb :: PGGHomGrpPerm, upto :: PGGAlg_GaloisGroup_ARM_UpTo) -> PGGAlgState_ResGroups_All
   {Starts the algorithm and returns its state.}
   s := New(PGGAlgState_ResGroups_All);
   s`algorithm := alg;
   s`overgroup_embedding := emb;
+  s`upto := Start(upto, emb);
   s`galois_conjugacy := Domain(emb);
   s`resolvent_overgroup := Codomain(emb);
   // get a list of possible groups
@@ -208,11 +209,12 @@ intrinsic Start(alg :: PGGAlg_ResGroups_All, emb :: PGGHomGrpPerm) -> PGGAlgStat
   return s;
 end intrinsic;
 
-intrinsic Start(alg :: PGGAlg_ResGroups_RootsMaximal, emb :: PGGHomGrpPerm) -> PGGAlgState_ResGroups_RootsMaximal
+intrinsic Start(alg :: PGGAlg_ResGroups_RootsMaximal, emb :: PGGHomGrpPerm, upto :: PGGAlg_GaloisGroup_ARM_UpTo) -> PGGAlgState_ResGroups_RootsMaximal
   {"}
   s := New(PGGAlgState_ResGroups_RootsMaximal);
   s`algorithm := alg;
   s`overgroup_embedding := emb;
+  s`upto := Start(upto, emb);
   s`galois_conjugacy := Domain(emb);
   s`resolvent_overgroup := Codomain(emb);
   s`conjugacy_classes := Classes(alg`dedupe, s`galois_conjugacy);
@@ -220,28 +222,31 @@ intrinsic Start(alg :: PGGAlg_ResGroups_RootsMaximal, emb :: PGGHomGrpPerm) -> P
   return s;
 end intrinsic;
 
-intrinsic Start(alg :: PGGAlg_ResGroups_Sequence, emb :: PGGHomGrpPerm) -> PGGAlgState_ResGroups_Sequence
+intrinsic Start(alg :: PGGAlg_ResGroups_Sequence, emb :: PGGHomGrpPerm, upto :: PGGAlg_GaloisGroup_ARM_UpTo) -> PGGAlgState_ResGroups_Sequence
   {"}
   s := New(PGGAlgState_ResGroups_Sequence);
   s`algorithm := alg;
   s`overgroup_embedding := emb;
+  s`upto := Start(upto, emb);
   s`idx := 0;
   return s;
 end intrinsic;
 
-intrinsic Start(alg :: PGGAlg_ResGroups_Null, emb :: PGGHomGrpPerm) -> PGGAlgState_ResGroups_Null
+intrinsic Start(alg :: PGGAlg_ResGroups_Null, emb :: PGGHomGrpPerm, upto :: PGGAlg_GaloisGroup_ARM_UpTo) -> PGGAlgState_ResGroups_Null
   {"}
   s := New(PGGAlgState_ResGroups_Null);
   s`algorithm := alg;
   s`overgroup_embedding := emb;
+  s`upto := Start(upto, emb);
   return s;
 end intrinsic;
 
-intrinsic Start(alg :: PGGAlg_ResGroups_Maximal, emb :: PGGHomGrpPerm) -> PGGAlgState_ResGroups_Maximal
+intrinsic Start(alg :: PGGAlg_ResGroups_Maximal, emb :: PGGHomGrpPerm, upto :: PGGAlg_GaloisGroup_ARM_UpTo) -> PGGAlgState_ResGroups_Maximal
   {"}
   s := New(PGGAlgState_ResGroups_Maximal);
   s`algorithm := alg;
   s`overgroup_embedding := emb;
+  s`upto := Start(upto, emb);
   s`galois_conjugacy := Domain(emb);
   s`resolvent_overgroup := Codomain(emb);
   s`choice_state := Start(alg`subgroup_choice, s);
@@ -253,11 +258,12 @@ intrinsic Start(alg :: PGGAlg_ResGroups_Maximal, emb :: PGGHomGrpPerm) -> PGGAlg
   return s;
 end intrinsic;
 
-intrinsic Start(alg :: PGGAlg_ResGroups_Maximal2, emb :: PGGHomGrpPerm) -> PGGAlgState_ResGroups_Maximal2
+intrinsic Start(alg :: PGGAlg_ResGroups_Maximal2, emb :: PGGHomGrpPerm, upto :: PGGAlg_GaloisGroup_ARM_UpTo) -> PGGAlgState_ResGroups_Maximal2
   {"}
   s := New(PGGAlgState_ResGroups_Maximal2);
   s`algorithm := alg;
   s`overgroup_embedding := emb;
+  s`upto := Start(upto, emb);
   s`galois_conjugacy := Domain(emb);
   s`resolvent_overgroup := Codomain(emb);
   s`choice_state := Start(alg`subgroup_choice, s);
@@ -270,7 +276,7 @@ end intrinsic;
 intrinsic RestartFromScratch(alg :: PGGAlg_ResGroups, s :: PGGAlgState_ResGroups) -> PGGAlgState_ResGroups
   {Same as ``Start(alg, s`overgroup_embedding)`` but with a warning that it's happening.}
   vprint PGG_GaloisGroup: "*** starting ResGroups algorithm from scratch:", alg;
-  return Start(alg, s`overgroup_embedding);
+  return Start(alg, s`overgroup_embedding, s`upto`algorithm);
 end intrinsic;
 
 intrinsic AllowRestartFromScratch(a :: PGGAlg_ResGroups, b :: PGGAlg_ResGroups) -> BoolElt
@@ -290,7 +296,7 @@ end intrinsic;
 
 intrinsic Restart(alg :: PGGAlg_ResGroups_Null, s :: PGGAlgState_ResGroups) -> PGGAlgState_ResGroups_Null
   {"}
-  s2 := Start(alg, s`overgroup_embedding);
+  s2 := Start(alg, s`overgroup_embedding, s`upto`algorithm);
   s2`previous := s;
   return s2;
 end intrinsic;
@@ -594,7 +600,7 @@ intrinsic NextState(s :: PGGAlgState_ResGroups_Sequence) -> PGGAlgState_ResGroup
     s`cur_state := Restart(alg, s`prev_state);
   else
     vprint PGG_GaloisGroup: "initial groups algorithm =", alg;
-    s`cur_state := Start(alg, s`overgroup_embedding);
+    s`cur_state := Start(alg, s`overgroup_embedding, s`upto`algorithm);
   end if;
   return s`cur_state;
 end intrinsic;
@@ -607,7 +613,7 @@ end intrinsic;
 intrinsic IsDone(s :: PGGAlgState_ResGroups_All) -> BoolElt, GrpPerm
   {True if we have deduced the Galois group.}
   assert #s`possible_groups ge 1;
-  if forall{G : G in s`possible_groups[2..#s`possible_groups] | IsConjugate(Group(s`galois_conjugacy), s`possible_groups[1], G)} then
+  if forall{G : G in s`possible_groups[2..#s`possible_groups] | IsEquivalent(s`upto, s`possible_groups[1], G)} then
     return true, s`possible_groups[1];
   else
     return false, _;
@@ -638,7 +644,7 @@ function pool_has_one_class(s)
     return false;
   else
     pool_seq := SetToSequence(s`pool);
-    s`pool := {pool_seq[i] : i in [1..#pool_seq] | i eq 1 or not (n eq n0 or IsConjugate(Group(s`galois_conjugacy), Rep(n`class), Rep(n0`class)) where n:=pool_seq[i] where n0:=pool_seq[i-1])};
+    s`pool := {pool_seq[i] : i in [1..#pool_seq] | i eq 1 or not (n eq n0 or IsEquivalent(s`upto, Rep(n`class), Rep(n0`class)) where n:=pool_seq[i] where n0:=pool_seq[i-1])};
     return #s`pool eq 1;
   end if;
 end function;
@@ -790,13 +796,13 @@ end intrinsic;
 
 intrinsic Stabilizers(G :: GrpPerm, h :: Map, v :: PGGStatVal) -> []
   {The preimages under h of the stabilizers of v in G@h}
-  return [S@@h : S in Stabilizers(G@h, v)];
+  return [G meet (S@@h) : S in Stabilizers(G@h, v)];
 end intrinsic;
 
 intrinsic Stabilizers(G :: GrpPerm, h :: [Map], v :: PGGStatVal) -> []
   {"}
   G2, os, h2 := PGG_Image(G, h);
-  return [S@@h2 : S in Stabilizers(G2, os, v)];
+  return [G meet (S@@h2) : S in Stabilizers(G2, os, v)];
 end intrinsic;
 
 intrinsic ProcessResolvent(s :: PGGAlgState_ResGroups_Maximal2, resolvent, subgroup)

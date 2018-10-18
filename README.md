@@ -59,7 +59,7 @@ Here we notate the current options for the algorithms. The `Alg` parameter to `P
 
 How to compute a Galois group.
 
-- `ARM [Eval:RESEVAL_ALG, Groups:GROUP_ALG]`: The absolute resolvent method. Uses `Eval` to evaluate resolvents and `Groups` to deduce the Galois group.
+- `ARM [Eval:RESEVAL_ALG, Groups:GROUP_ALG, UpTo:UPTO]`: The absolute resolvent method. Uses `Eval` to evaluate resolvents and `Groups` to deduce the Galois group up to `UpTo`.
 - `Tame`: For polynomials whose splitting field is tamely ramified (or unramified).
 - `SinglyRamified`: The algorithm due to Greve for singly ramified extensions.
 - `Builtin`: Magma's builtin `GaloisGroup` intrinsic. This is currently the "naive" algorithm which computes the splitting field and automorphisms explicitly, so is only suitable for small cases.
@@ -194,6 +194,16 @@ Controls how some tranches generate their groups.
 
 - `All`: Generates all subgroups.
 - `Random[Limit:INTEGER, NewTries:INTEGER, RandomTries:INTEGER]`: At most `Limit` randomly-generated subgroups. It tries `RandomTries` times to randomly generate a group. It tries this `NewTries` times to find one we haven't seen before.
+
+### `UPTO`
+
+Specifies an equivalence relation on possible Galois groups such that it suffices to determine the class of the actual Galois group.
+
+In the context of the absolute resolvent method, we take `OvergroupEmbedding[CheckInjective:True]` as the default.
+
+- `OvergroupEmbedding [CheckInjective:BOOL]`: In the absolute resolvent method, with overgroup embedding `e : W -> Wtil`, groups `G1` and `G2` are equivalent if `e(G1)` and `e(G2)` are `Wtil`-conjugate. This is the best we can do, since we then compose this with a coset action `q : Wtil -> A`, which is a class function. If `CheckInjective` is true, then `e` must be injective and therefore this is a finer equivalence than `Symmetric`.
+- `Symmetric`: Groups `G1` and `G2` of degree `d` are equivalent if they are `S_d`-conjugate.
+- `Full`: In ARM with embedding `e : W -> Wtil`, subgroups `G1` and `G2` of `W` are equivalent if they are `W`-conjugate.
 
 ### `EXPRESSION`
 

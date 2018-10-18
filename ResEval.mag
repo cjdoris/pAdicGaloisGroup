@@ -27,6 +27,8 @@ declare attributes PGGAlg_ResEval_Global_Model_RootOfUnity: minimize, complement
 
 declare type PGGAlg_ResEval_Global_Model_RootOfUniformizer: PGGAlg_ResEval_Global_Model;
 
+declare type PGGAlg_ResEval_Global_Model_PthRoots: PGGAlg_ResEval_Global_Model;
+
 declare type PGGAlg_ResEval_Global_Model_Cheat: PGGAlg_ResEval_Global_Model;
 declare attributes PGGAlg_ResEval_Global_Model_Cheat: next;
 
@@ -159,6 +161,12 @@ intrinsic PGGAlg_ResEval_Global_Model_RootOfUniformizer_Make() -> PGGAlg_ResEval
   return a;
 end intrinsic;
 
+intrinsic PGGAlg_ResEval_Global_Model_PthRoots_Make() -> PGGAlg_ResEval_Global_Model_PthRoots
+  {The "PthRoots" global model algorithm.}
+  a := New(PGGAlg_ResEval_Global_Model_PthRoots);
+  return a;
+end intrinsic;
+
 intrinsic PGGAlg_ResEval_Global_Model_Cheat_Make(:Next:=false) -> PGGAlg_ResEval_Global_Model_Cheat
   {The "Cheat" global model algorithm.}
   a := New(PGGAlg_ResEval_Global_Model_Cheat);
@@ -214,6 +222,11 @@ end intrinsic;
 intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_RootOfUniformizer)
   {"}
   printf "root of uniformizer";
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_PthRoots)
+  {"}
+  printf "pth roots";
 end intrinsic;
 
 intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_Cheat)

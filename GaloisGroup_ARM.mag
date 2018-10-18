@@ -1,14 +1,15 @@
 import "Utils.mag": not_implemented, Z;
 
 declare type PGGAlg_GaloisGroup_ARM: PGGAlg_GaloisGroup;
-declare attributes PGGAlg_GaloisGroup_ARM: groups_alg, resolvent_alg, use_easy_resolvents;
+declare attributes PGGAlg_GaloisGroup_ARM: groups_alg, resolvent_alg, use_easy_resolvents, upto;
 
-intrinsic PGGAlg_GaloisGroup_ARM_Make( : GroupsAlg:=false, ResolventAlg:=false, UseEasyResolvents:=false) -> PGGAlg_GaloisGroup_ARM
+intrinsic PGGAlg_GaloisGroup_ARM_Make( : GroupsAlg:=false, ResolventAlg:=false, UseEasyResolvents:=false, UpTo:=false) -> PGGAlg_GaloisGroup_ARM
   {The resolvent method algorithm for computing Galois groups.}
   alg := New(PGGAlg_GaloisGroup_ARM);
   alg`groups_alg := GroupsAlg cmpne false select GroupsAlg else PGGAlg_ResGroups_All_Make();
   alg`resolvent_alg := ResolventAlg cmpne false select ResolventAlg else PGGAlg_ResEval_Global_Make();
   alg`use_easy_resolvents := UseEasyResolvents;
+  alg`upto := UpTo cmpne false select UpTo else PGGAlg_GaloisGroup_ARM_UpTo_ResolventEmbedding_Make(:CheckInjective);
   return alg;
 end intrinsic;
 
@@ -18,6 +19,7 @@ intrinsic Print(alg :: PGGAlg_GaloisGroup_ARM)
   IndentPush();
   print "groups =", alg`groups_alg;
   print "resolvents =", alg`resolvent_alg;
+  print "up to =", alg`upto;
   printf "use easy resolvents = %o", alg`use_easy_resolvents;
   IndentPop();
 end intrinsic;
@@ -74,7 +76,7 @@ intrinsic TryGaloisGroup(Alg :: PGGAlg_GaloisGroup_ARM, f :: PGGPol) -> BoolElt,
   vprint PGG_GaloisGroup: "overgroup embedding =", emb;
   W := Group(Codomain(emb));
   PGG_GlobalTimer_Swap("start groups");
-  gst := Start(Alg`groups_alg, emb);
+  gst := Start(Alg`groups_alg, emb, Alg`upto);
   // if Alg`use_easy_resolvents then
   //   vprint PGG_GaloisGroup: "easy resolvents...";
   //   PGG_GlobalTimer_Swap("easy resolvents");

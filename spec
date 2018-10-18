@@ -29,4 +29,5 @@
   Field.mag
   PolRing.mag
   SubgrpDedupe.mag
+  UpTo.mag
 }

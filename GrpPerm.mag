@@ -18,6 +18,9 @@ declare type PGGGrpPerm_Cyclic: PGGGrpPerm;
 declare type PGGGrpPerm_RawSubgroup: PGGGrpPerm_Raw;
 declare attributes PGGGrpPerm_RawSubgroup: overgroup;
 
+declare type PGGGrpPerm_ElemAbel: PGGGrpPerm;
+declare attributes PGGGrpPerm_ElemAbel: prime, dim;
+
 intrinsic Init(~G :: PGGGrpPerm_Raw, rawG :: GrpPerm)
   {Initializes G.}
   G`group := rawG;
@@ -45,6 +48,16 @@ intrinsic Init(~G :: PGGGrpPerm_Cyclic, degree :: RngIntElt)
   {"}
   require degree ge 1: "degree must be positive";
   G`degree := degree;
+end intrinsic;
+
+intrinsic Init(~G :: PGGGrpPerm_ElemAbel, degree :: RngIntElt)
+  {"}
+  require degree ge 1: "degree must be positive";
+  ok, p, n := IsPrimePower(degree);
+  require ok: "degree must be a prime power";
+  G`degree := degree;
+  G`prime := p;
+  G`dim := n;
 end intrinsic;
 
 intrinsic Init(~H :: PGGGrpPerm_RawSubgroup, G :: PGGGrpPerm, rawH :: GrpPerm)
@@ -89,6 +102,13 @@ intrinsic PGGGrpPerm_Cyclic_Make(degree :: RngIntElt) -> PGGGrpPerm_Cyclic
   return G;
 end intrinsic;
 
+intrinsic PGGGrpPerm_ElemAbel_Make(degree :: RngIntElt) -> PGGGrpPerm_ElemAbel
+  {"}
+  G := New(PGGGrpPerm_ElemAbel);
+  Init(~G, degree);
+  return G;
+end intrinsic;
+
 intrinsic PGGGrpPerm_RawSubgroup_Make(G :: PGGGrpPerm, rawH :: GrpPerm) -> PGGGrpPerm_RawSubgroup
   {"}
   H := New(PGGGrpPerm_RawSubgroup);
@@ -124,6 +144,16 @@ intrinsic _Group(G :: PGGGrpPerm_Cyclic) -> GrpPerm
   return CyclicGroup(G`degree);
 end intrinsic;
 
+intrinsic _Group(G :: PGGGrpPerm_ElemAbel) -> GrpPerm
+  {"}
+  if G`dim eq 0 then
+    return SymmetricGroup(1);
+  else
+    ret := DirectProduct([CyclicGroup(G`prime) : i in [1..G`dim]]);
+    return ret;
+  end if;
+end intrinsic;
+
 intrinsic Group(G :: PGGGrpPerm_WrProd, idxs :: [RngIntElt]) -> GrpPerm
   {The group formed from the given factors.}
   // NOTE: we choose do define the wreath product in the reverse direction to Magma (i.e. C_2 wr C_3 is defined right-to-left)
@@ -138,6 +168,11 @@ end intrinsic;
 intrinsic Degree(G :: PGGGrpPerm) -> RngIntElt
   {The degree of the group.}
   return Degree(Group(G));
+end intrinsic;
+
+intrinsic '#'(G :: PGGGrpPerm) -> RngIntElt
+  {The size of the group.}
+  return #Group(G);
 end intrinsic;
 
 intrinsic OrbitsOfSubgroups(G :: PGGGrpPerm, n :: RngIntElt) -> []
@@ -160,10 +195,46 @@ intrinsic OrbitsOfSubgroups(G :: PGGGrpPerm, n :: RngIntElt) -> []
   return G`orbits_of_subgroups[n];
 end intrinsic;
 
+function orbits_of_subgroups_simple(G, n)
+  return [os : x in Subgroups(G : IndexEqual:=n) | S eq H where S:=Stabilizer(G,os) where os:=[{x:x in o}:o in Orbits(H)] where H:=x`subgroup];
+end function;
+
+procedure orbits_of_subgroups_check(G, n, oss : Level:=1)
+  // LEVEL 1
+  // checks that the orbits returned have the correct index
+  // does not guarantee we find everything
+  // pretty quick
+  if Level ge 1 then
+    for os in oss do
+      H := Stabilizer(G, os);
+      assert SequenceToSet(os) eq {{x : x in o} : o in Orbits(H)};
+      assert Index(G, H) eq n;
+    end for;
+    // LEVEL 2
+    // compares the answer to orbits_of_subgroups_simple
+    // guarantees we find everything
+    // very slow for large groups!
+    if Level ge 2 then
+      oss2 := orbits_of_subgroups_simple(G, n);
+      for os2 in oss2 do
+        assert exists{os : os in oss | IsConjugate(G, Seqset(os), Seqset(os2))};
+      end for;
+      for os in oss do
+        assert exists{os2 : os2 in oss2 | IsConjugate(G, Seqset(os), Seqset(os2))};
+      end for;
+      // LEVEL 3
+      // guarantees we find precisely one partition per conjugacy class
+      if Level ge 3 then
+        assert #oss eq #oss2;
+      end if;
+    end if;
+  end if;
+end procedure;
+
 intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm, n :: RngIntElt) -> []
   {"}
   // default behaviour is to compute all subgroups of index n, and filter down to those whose orbits have the right index
-  return [os : x in Subgroups(Group(G) : IndexEqual:=n) | S eq H where S:=Stabilizer(Group(G),os) where os:=[{x:x in o} : o in Orbits(H)] where H:=x`subgroup];
+  return orbits_of_subgroups_simple(Group(G), n);
 end intrinsic;
 
 intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_Cyclic, n :: RngIntElt) -> []
@@ -172,10 +243,12 @@ intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_Cyclic, n :: RngIntElt) -> []
   ok, m := IsDivisibleBy(d, n);
   if ok then
     C := Group(G);
-    return [[{x:x in o} : o in Orbits(sub<C|C.1^n>)]];
+    oss := [[{x:x in o} : o in Orbits(sub<C|C.1^n>)]];
   else
-    return [];
+    oss := [];
   end if;
+  orbits_of_subgroups_check(Group(G), n, oss);
+  return oss;
 end intrinsic;
 
 intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_Symmetric, n :: RngIntElt) -> []
@@ -218,12 +291,15 @@ intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_Symmetric, n :: RngIntElt) -> []
       end if;
     end for;
   end while;
+  orbits_of_subgroups_check(Group(G), n, ret);
   return ret;
 end intrinsic;
 
 intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_WrProd, n :: RngIntElt) -> []
   {"}
-  return _OrbitsOfSubgroups(G, n, 1);
+  oss := _OrbitsOfSubgroups(G, n, 1);
+  orbits_of_subgroups_check(Group(G), n, oss);
+  return oss;
 end intrinsic;
 
 // given a sequence ns of integers and an integer m, finds all the sequences of integers cs so that sum_i cs_i * ns_i = m
@@ -304,7 +380,10 @@ intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_WrProd, n :: RngIntElt, m :: RngInt
       ans := _OrbitsOfSubgroups(G, n, m+1);
     else
       ans := [];
+      d0 := Degree(G`factors[m]);
       d := &*[Z| Degree(G`factors[i]) : i in [m+1..#G`factors]];
+      W := WreathProduct([Group(G`factors[i]) : i in [#G`factors..m by -1]]);
+      assert Degree(W) eq d*d0;
       for n1 in Divisors(n) do
         n2 := xdiv(n, n1);
         for os in OrbitsOfSubgroups(G`factors[m], n1) do
@@ -319,6 +398,11 @@ intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_WrProd, n :: RngIntElt, m :: RngInt
             end for;
             Append(~cs, [i]);
           end for;
+          // the group corresponding to freely permuting orbits within each class
+          S := WreathProduct(sub<SymmetricGroup(d)|1>, S0)
+            where S0 := DirectProduct([WreathProduct(sub<SymmetricGroup(#os[c[1]])|1>, SymmetricGroup(#c)) : c in cs])^g
+            where g := SymmetricGroup(d0) ! [j : j in os[i], i in c, c in cs];
+          print "S =", S;
           // find factorizations n2 = prod_[X] n_[X]^|X| over classes [X] of orbits X
           for cn2s in factorizations_of_shape(n2, [#os[c[1]] : c in cs]) do
             // factorize n_[X] = prod_X n_X (so n2 = prod_X n_X^|X|)
@@ -354,7 +438,16 @@ intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_WrProd, n :: RngIntElt, m :: RngInt
                   end for;
                 end for;
                 os2 := [{y+(x-1)*d : x in os[i], y in os2} : os2 in oss2[i], i in [1..#os]];
-                Append(~ans, os2);
+                H0 := Stabilizer(W, os2);
+                assert Index(W, H0) eq n;
+                oss3 := [];
+                for g in DoubleCosetRepresentatives(S, Normalizer(S, H0), S meet W) do
+                  os3 := os2^g;
+                  if not exists{os : os in oss3 | IsConjugate(W, os, os3)} then
+                    Append(~oss3, os3);
+                  end if;
+                end for;
+                ans cat:= oss3;
                 // not_implemented("OrbitsOfSubgroups: wreath products");
               end for;
             end for;
@@ -397,7 +490,9 @@ end intrinsic;
 
 intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_DirProd, n :: RngIntElt) -> []
   {"}
-  return _OrbitsOfSubgroups(G, n, 1);
+  oss := _OrbitsOfSubgroups(G, n, 1);
+  orbits_of_subgroups_check(Group(G), n, oss);
+  return oss;
 end intrinsic;
 
 intrinsic Print(G :: PGGGrpPerm_Raw)
@@ -440,6 +535,11 @@ intrinsic Print(G :: PGGGrpPerm_WrProd)
   else
     printf "%o", Join(Reverse([sprint_with_parens(H) : H in G`factors]), " wr ");
   end if;
+end intrinsic;
+
+intrinsic Print(G :: PGGGrpPerm_ElemAbel)
+  {"}
+  printf "C_%o^%o", G`prime, G`dim;
 end intrinsic;
 
 intrinsic WreathProduct(Gs :: [PGGGrpPerm]) -> PGGGrpPerm_WrProd
