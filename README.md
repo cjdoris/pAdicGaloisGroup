@@ -2,6 +2,8 @@
 
 Experimental code for computing [Galois groups](https://en.wikipedia.org/wiki/Galois_group) over [p-adic fields](https://en.wikipedia.org/wiki/P-adic_number). Written in [Magma](http://magma.maths.usyd.edu.au/magma).
 
+We have also compiled some [tables of Galois groups](tables).
+
 ## Contents
 - [Getting started](#getting-started)
 - [Example](#example)
