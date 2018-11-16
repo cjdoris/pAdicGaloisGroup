@@ -4,6 +4,8 @@ This directory contains CSV files describing the Galois groups of polynomials ov
 
 Unless otherwise specified in the notes column, the files contain precisely one defining polynomial for every field of the given degree.
 
+Up to degree 12, the polynomials are the same as in [the LFDB](https://math.la.asu.edu/~jj/localfields/), which contains more information.
+
 The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGaloisGroup/tree/master/tables/).
 
 <table>
@@ -13,6 +15,48 @@ The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGa
     <th>File</th>
     <th>Count</th>
     <th>Notes</th>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>2</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d2.csv"><code>p2_d2.csv</code></a></td>
+    <td>7</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>4</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d4.csv"><code>p2_d4.csv</code></a></td>
+    <td>59</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>6</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d6.csv"><code>p2_d6.csv</code></a></td>
+    <td>47</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>8</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d8.csv"><code>p2_d8.csv</code></a></td>
+    <td>1823</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>10</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d10.csv"><code>p2_d10.csv</code></a></td>
+    <td>158</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>12</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d12.csv"><code>p2_d12.csv</code></a></td>
+    <td>5493</td>
+    <td></td>
   </tr>
   <tr>
     <td>2</td>
@@ -48,5 +92,47 @@ The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGa
     <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d22_tr.csv"><code>p2_d22_tr.csv</code></a></td>
     <td>8,190</td>
     <td>All totally ramified fields.</td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>3</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p3_d3.csv"><code>p3_d3.csv</code></a></td>
+    <td>10</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>6</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p3_d6.csv"><code>p3_d6.csv</code></a></td>
+    <td>75</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>9</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p3_d9.csv"><code>p3_d9.csv</code></a></td>
+    <td>795</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>3</td>
+    <td>12</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p3_d12.csv"><code>p3_d12.csv</code></a></td>
+    <td>785</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>5</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p5_d5.csv"><code>p5_d5.csv</code></a></td>
+    <td>26</td>
+    <td></td>
+  </tr>
+  <tr>
+    <td>5</td>
+    <td>10</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p5_d10.csv"><code>p5_d10.csv</code></a></td>
+    <td>258</td>
+    <td></td>
   </tr>
 </table>
