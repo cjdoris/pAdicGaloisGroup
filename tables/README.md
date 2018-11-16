@@ -11,9 +11,14 @@ Occasionally we could not find the Galois group of all polynomials in a file. In
 The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGaloisGroup/tree/master/tables/).
 
 <table>
+  <style type="text/css">
+    td:nth-child(1) { text-align: right; }
+    td:nth-child(2) { text-align: right; }
+    td:nth-child(4) { text-align: right; }
+  </style>
   <tr>
-    <th>p</th>
-    <th>d</th>
+    <th style="font-style: italic;">p</th>
+    <th style="font-style: italic;">d</th>
     <th>File</th>
     <th>Count</th>
     <th>Notes</th>
