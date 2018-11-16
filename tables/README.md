@@ -6,6 +6,8 @@ Unless otherwise specified in the notes column, the files contain precisely one 
 
 Up to degree 12, the polynomials are the same as in [the Local Fields Database (LFDB)](https://math.la.asu.edu/~jj/localfields/), which contains more information. The Galois groups were computed independently. These tables are marked "LFDB" in the notes column.
 
+Occasionally we could not find the Galois group of all polynomials in a file. In such cases the T-number is recorded as 0 and the number of such ommissions is recorded in the notes column.
+
 The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGaloisGroup/tree/master/tables/).
 
 <table>
@@ -112,7 +114,7 @@ The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGa
     <td>32</td>
     <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d32_e8a.csv"><code>p2_d32_e8a.csv</code></a></td>
     <td>120</td>
-    <td>All fields with ramification degree 8, singly ramified and elementary abelian over its maximal unramified subfield. Possibly several polynomials per field.</td>
+    <td>All fields with ramification degree 8, singly ramified and elementary abelian over its maximal unramified subfield. Possibly several polynomials per field. 3 ommissions.</td>
   </tr>
   <tr>
     <td>3</td>
