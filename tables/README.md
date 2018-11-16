@@ -43,7 +43,7 @@ The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGa
     <td>2</td>
     <td>8</td>
     <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d8.csv"><code>p2_d8.csv</code></a></td>
-    <td>1823</td>
+    <td>1,823</td>
     <td>LFDB.</td>
   </tr>
   <tr>
@@ -57,7 +57,7 @@ The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGa
     <td>2</td>
     <td>12</td>
     <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d12.csv"><code>p2_d12.csv</code></a></td>
-    <td>5493</td>
+    <td>5,493</td>
     <td>LFDB.</td>
   </tr>
   <tr>
