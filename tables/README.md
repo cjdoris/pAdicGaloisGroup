@@ -2,7 +2,7 @@
 
 This directory contains CSV files describing the Galois groups of polynomials over a *p*-adic field. Each file has a fixed degree *d*, the first *d*+1 columns give the coefficients of the polynomial, and the final number gives the T-number of its Galois group.
 
-The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGaloisGroup/tables/).
+The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGaloisGroup/tree/master/tables/).
 
 <table>
   <tr>
