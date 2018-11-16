@@ -74,6 +74,13 @@ The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGa
   </tr>
   <tr>
     <td>2</td>
+    <td>16</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d16_e4a.csv"><code>p2_d16_e4a.csv</code></a></td>
+    <td>140</td>
+    <td>All fields with ramification degree 4, singly ramified and elementary abelian over its maximal unramified subfield. Possibly several polynomials per field.</td>
+  </tr>
+  <tr>
+    <td>2</td>
     <td>18</td>
     <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d18_tr.csv"><code>p2_d18_tr.csv</code></a></td>
     <td>2,046</td>
@@ -84,7 +91,7 @@ The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGa
     <td>20</td>
     <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d20_tr.csv"><code>p2_d20_tr.csv</code></a></td>
     <td>511,318</td>
-    <td>All totally ramified fields, possibly several polynomials per field.</td>
+    <td>All totally ramified fields. Possibly several polynomials per field.</td>
   </tr>
   <tr>
     <td>2</td>
@@ -92,6 +99,20 @@ The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGa
     <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d22_tr.csv"><code>p2_d22_tr.csv</code></a></td>
     <td>8,190</td>
     <td>All totally ramified fields.</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>24</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d24_e8a.csv"><code>p2_d24_e8a.csv</code></a></td>
+    <td>8</td>
+    <td>All fields with ramification degree 8, singly ramified and elementary abelian over its maximal unramified subfield. Possibly several polynomials per field.</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>32</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d32_e8a.csv"><code>p2_d32_e8a.csv</code></a></td>
+    <td>120</td>
+    <td>All fields with ramification degree 8, singly ramified and elementary abelian over its maximal unramified subfield. Possibly several polynomials per field.</td>
   </tr>
   <tr>
     <td>3</td>
