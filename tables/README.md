@@ -16,6 +16,20 @@ The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGa
   </tr>
   <tr>
     <td>2</td>
+    <td>14</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d14_e2.csv"><code>p2_d14_e2.csv</code></a></td>
+    <td>78</td>
+    <td>All fields with ramification degree 2.</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>14</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d14_e14.csv"><code>p2_d14_e14.csv</code></a></td>
+    <td>510</td>
+    <td>All fields with ramification degree 14.</td>
+  </tr>
+  <tr>
+    <td>2</td>
     <td>18</td>
     <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d18_tr.csv"><code>p2_d18_tr.csv</code></a></td>
     <td>2,046</td>
