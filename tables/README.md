@@ -1,8 +1,34 @@
 # Tables of Galois groups
 
-This directory contains CSV files describing the Galois groups of polynomials over a p-adic field. Each file has a fixed degree d, the first d+1 columns give the coefficients of the polynomial, and the final number gives the T-number of its Galois group.
+This directory contains CSV files describing the Galois groups of polynomials over a *p*-adic field. Each file has a fixed degree *d*, the first *d*+1 columns give the coefficients of the polynomial, and the final number gives the T-number of its Galois group.
 
-| **p** | **d** | **File** | **Count** | **Notes** |
-| 2 | 18 | `[groups-fields_p2_d18_tr.csv]` | 2046 | All totally ramified fields. |
-| 2 | 20 | `[groups-fields_p2_d20_tr.csv]` | 511318 | All totally ramified fields, with duplicates. |
-| 2 | 22 | `[groups-fields_p2_d22_tr.csv]` | 8190 | All totally ramified fields. |
+<table>
+  <tr>
+    <th>p</th>
+    <th>d</th>
+    <th>File</th>
+    <th>Count</th>
+    <th>Notes</th>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>18</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/groups-fields_p2_d18_tr.csv"><code>groups-fields_p2_d18_tr.csv</code></a></td>
+    <td>2046</td>
+    <td>All totally ramified fields.</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>20</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/groups-fields_p2_d20_tr.csv"><code>groups-fields_p2_d20_tr.csv</code></a></td>
+    <td>511318</td>
+    <td>All totally ramified fields, with duplicates.</td>
+  </tr>
+  <tr>
+    <td>2</td>
+    <td>22</td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/groups-fields_p2_d22_tr.csv"><code>groups-fields_p2_d22_tr.csv</code></a></td>
+    <td>8190</td>
+    <td>All totally ramified fields.</td>
+  </tr>
+</table>
