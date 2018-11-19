@@ -41,6 +41,26 @@ Time: 0.370
 S4
 ```
 
+## Main intrinsics
+
+```
+GaloisGroup(f :: PGGPol)
+PGG_GaloisGroup(f :: RngUPolElt)
+PGG_GaloisGroup(f :: RngUPolElt_FldPadExact)
+  -> GrpPerm
+```
+
+The Galois group of `f` which must be a univariate polynomial defined over a p-adic field.
+
+The group is a permutation group on the roots of `f`, and therefore has the same degree as `f`. The group is defined up to conjugacy in the corresponding symmetric group. If using the absolute resolvent method with global models, it may be defined up to conjugacy in a smaller group depending on the global model used.
+
+If using the `ExactpAdics` package, the polynomial can be over an exact p-adic field.
+
+**Parameters.**
+- `Alg`: The algorithm to use ([see here](#algorithm-parameter)).
+- `Time`: When true, prints out detailed timings of each part of the algorithm.
+
+
 ## Verbosity
 
 Call `SetVerbose("PGG_GaloisGroup", 1);` to print out information as the algorithm proceeds, including some timings.
