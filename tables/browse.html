@@ -12,11 +12,11 @@
 <meta property="og:locale" content="en_US" />
 <meta name="description" content="Experimental code for computing Galois groups over p-adic fields." />
 <meta property="og:description" content="Experimental code for computing Galois groups over p-adic fields." />
-<link rel="canonical" href="https://cjdoris.github.io/pAdicGaloisGroup/tables/browser/" />
-<meta property="og:url" content="https://cjdoris.github.io/pAdicGaloisGroup/tables/browser/" />
+<link rel="canonical" href="https://cjdoris.github.io/pAdicGaloisGroup/tables/browse" />
+<meta property="og:url" content="https://cjdoris.github.io/pAdicGaloisGroup/tables/browse" />
 <meta property="og:site_name" content="pAdicGaloisGroup" />
 <script type="application/ld+json">
-{"@type":"WebPage","headline":"Galois groups browser","url":"https://cjdoris.github.io/pAdicGaloisGroup/tables/browser/","description":"Experimental code for computing Galois groups over p-adic fields.","@context":"http://schema.org"}</script>
+{"@type":"WebPage","headline":"Galois groups browser","url":"https://cjdoris.github.io/pAdicGaloisGroup/tables/browse","description":"Experimental code for computing Galois groups over p-adic fields.","@context":"http://schema.org"}</script>
 <!-- End Jekyll SEO tag -->
 
     <link rel="stylesheet" href="/pAdicGaloisGroup/assets/css/style.css">
@@ -147,6 +147,7 @@
         url: csvfile,
         dataType: 'text',
         success: function (data) { $('#loading').remove(); CSVtoTable($('table'), data, degree); },
+        error: function (xhr,st,err) { $('#loading').empty().text('Error loading CSV file! (check URL parameters)').css('color','red'); },
       });
     })
   </script>

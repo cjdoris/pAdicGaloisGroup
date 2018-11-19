@@ -26,140 +26,140 @@ The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGa
   <tr>
     <td>2</td>
     <td>2</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d2.csv"><code>p2_d2.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d2.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=2">Browse</a></td>
     <td>7</td>
     <td>LFDB.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>4</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d4.csv"><code>p2_d4.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d4.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=4">Browse</a></td>
     <td>59</td>
     <td>LFDB.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>6</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d6.csv"><code>p2_d6.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d6.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=6">Browse</a></td>
     <td>47</td>
     <td>LFDB.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>8</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d8.csv"><code>p2_d8.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d8.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=8">Browse</a></td>
     <td>1,823</td>
     <td>LFDB.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>10</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d10.csv"><code>p2_d10.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d10.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=10">Browse</a></td>
     <td>158</td>
     <td>LFDB.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>12</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d12.csv"><code>p2_d12.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d12.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=12">Browse</a></td>
     <td>5,493</td>
     <td>LFDB.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>14</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d14_e2.csv"><code>p2_d14_e2.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d14_e2.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=14&suffix=e2">Browse</a></td>
     <td>78</td>
     <td>All fields with ramification degree 2.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>14</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d14_e14.csv"><code>p2_d14_e14.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d14_e14.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=14&suffix=e14">Browse</a></td>
     <td>510</td>
     <td>All fields with ramification degree 14.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>16</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d16_e4a.csv"><code>p2_d16_e4a.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d16_e4a.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=16&suffix=e4a&dupes=yes">Browse</a></td>
     <td>140</td>
     <td>All fields with ramification degree 4, singly ramified and elementary abelian over its maximal unramified subfield. Possibly several polynomials per field.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>18</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d18_tr.csv"><code>p2_d18_tr.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d18_tr.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=18&suffix=tr">Browse</a></td>
     <td>2,046</td>
     <td>All totally ramified fields.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>20</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d20_tr.csv"><code>p2_d20_tr.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d20_tr.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=20&suffix=tr&dupes=yes">Browse</a></td>
     <td>511,318</td>
     <td>All totally ramified fields. Possibly several polynomials per field.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>22</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d22_tr.csv"><code>p2_d22_tr.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d22_tr.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=22&suffix=tr">Browse</a></td>
     <td>8,190</td>
     <td>All totally ramified fields.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>24</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d24_e8a.csv"><code>p2_d24_e8a.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d24_e8a.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=24&suffix=e8a&dupes=yes">Browse</a></td>
     <td>8</td>
     <td>All fields with ramification degree 8, singly ramified and elementary abelian over its maximal unramified subfield. Possibly several polynomials per field.</td>
   </tr>
   <tr>
     <td>2</td>
     <td>32</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d32_e8a.csv"><code>p2_d32_e8a.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p2_d32_e8a.csv"><code>Download</code></a>, <a href="browse?prime=2&degree=32&suffix=e8a&dupes=yes">Browse</a></td>
     <td>120</td>
     <td>All fields with ramification degree 8, singly ramified and elementary abelian over its maximal unramified subfield. Possibly several polynomials per field. 3 ommissions.</td>
   </tr>
   <tr>
     <td>3</td>
     <td>3</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p3_d3.csv"><code>p3_d3.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p3_d3.csv"><code>Download</code></a>, <a href="browse?prime=3&degree=3">Browse</a></td>
     <td>10</td>
     <td>LFDB.</td>
   </tr>
   <tr>
     <td>3</td>
     <td>6</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p3_d6.csv"><code>p3_d6.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p3_d6.csv"><code>Download</code></a>, <a href="browse?prime=3&degree=6">Browse</a></td>
     <td>75</td>
     <td>LFDB.</td>
   </tr>
   <tr>
     <td>3</td>
     <td>9</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p3_d9.csv"><code>p3_d9.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p3_d9.csv"><code>Download</code></a>, <a href="browse?prime=3&degree=9">Browse</a></td>
     <td>795</td>
     <td>LFDB.</td>
   </tr>
   <tr>
     <td>3</td>
     <td>12</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p3_d12.csv"><code>p3_d12.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p3_d12.csv"><code>Download</code></a>, <a href="browse?prime=3&degree=12">Browse</a></td>
     <td>785</td>
     <td>LFDB.</td>
   </tr>
   <tr>
     <td>5</td>
     <td>5</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p5_d5.csv"><code>p5_d5.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p5_d5.csv"><code>Download</code></a>, <a href="browse?prime=5&degree=5">Browse</a></td>
     <td>26</td>
     <td>LFDB.</td>
   </tr>
   <tr>
     <td>5</td>
     <td>10</td>
-    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p5_d10.csv"><code>p5_d10.csv</code></a></td>
+    <td><a href="https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p5_d10.csv"><code>Download</code></a>, <a href="browse?prime=5&degree=10">Browse</a></td>
     <td>258</td>
     <td>LFDB.</td>
   </tr>
