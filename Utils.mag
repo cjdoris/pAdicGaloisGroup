@@ -978,3 +978,69 @@ intrinsic PGG_rectangle_divisions(width :: RngIntElt, height :: RngIntElt, areas
   end for;
   return ret;
 end intrinsic;
+
+function realcomplexpairs(xs)
+  rs := [Z|];
+  cs := [car<Z,Z>|];
+  todo := [<true,x> : x in xs];
+  for i in [1..#todo] do
+    if todo[i][1] then
+      x := todo[i][2];
+      sz,j := Min([todo[j][1] select Abs(x - Conjugate(todo[j][2])) else Infinity() : j in [i..#todo]]);
+      j +:= i-1;
+      assert todo[j][1];
+      if j eq i then
+        Append(~rs, i);
+      else
+        todo[j][1] := false;
+        Append(~cs, <i,j>);
+      end if;
+    end if;
+  end for;
+  assert #rs + 2*#cs eq #xs;
+  assert ({r:r in rs} join {r:r in c, c in cs}) eq {1..#xs};
+  return rs, cs;
+end function;
+
+intrinsic PGG_realcomplexpairs(xs :: [FldComElt]) -> [], []
+  {Returns the sequence of `i` such that `xs[i]` are real, and the sequence of pairs `<i,j>` such that `xs[i]` and `xs[j]` are a complex conjugate pair. Assumes that xs are all the roots of a squarefree real polynomial in some order.}
+  return realcomplexpairs(xs);
+end intrinsic;
+
+intrinsic PGG_CloseVector(L :: Lat, vec : Close:=0) -> LatElt
+  {A vector of L close to vec.}
+  V := AmbientSpace(L);
+  vec := V ! vec;
+  n := Dimension(V);
+  m := #Basis(L);
+  M := Matrix([Eltseq(V!b) cat [0] : b in Basis(L)] cat [Eltseq(vec) cat [0]]);
+  assert Nrows(M) eq m+1;
+  assert Ncols(M) eq n+1;
+  weight := BaseRing(L) ! 1.0;
+  bestnorm := false;
+  bestvec := false;
+  normbound := Close^2;
+  while true do
+    M[m+1,n+1] := weight;
+    M2, T := LLL(M);
+    goodrows := [i : i in [1..m+1] | T[i,m+1] in [1,-1]];
+    for i in goodrows do
+      coeffs := [-T[i,j]*T[i,m+1] : j in [1..m]];
+      lvec := &+[coeffs[j]*Basis(L)[j] : j in [1..m]];
+      norm := Norm(vec - V!lvec);
+      if norm le normbound then
+        return lvec;
+      elif bestnorm cmpeq false or norm lt bestnorm then
+        bestnorm := norm;
+        bestvec := lvec;
+      end if;
+    end for;
+    if #goodrows gt 0 then
+      weight *:= 0.5;
+    elif bestnorm cmpeq false then
+      weight *:= 2;
+    else
+      return bestvec;
+    end if;
+  end while;
+end intrinsic;

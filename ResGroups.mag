@@ -643,9 +643,10 @@ function pool_has_one_class(s)
   if #s`pool eq 0 then
     return false;
   else
-    pool_seq := SetToSequence(s`pool);
-    s`pool := {pool_seq[i] : i in [1..#pool_seq] | i eq 1 or not (n eq n0 or IsEquivalent(s`upto, Rep(n`class), Rep(n0`class)) where n:=pool_seq[i] where n0:=pool_seq[i-1])};
-    return #s`pool eq 1;
+    // OPTIONAL: do a linear pass through the data to eliminate conjugates
+    s`pool := {pool_seq[i] : i in [1..#pool_seq] | i eq 1 or not (n eq n0 or IsConjugate(Group(s`galois_conjugacy), Rep(n`class), Rep(n0`class)) where n:=pool_seq[i] where n0:=pool_seq[i-1])} where pool_seq := SetToSequence(s`pool);
+    // now see if there is one group up to UpTo
+    return forall{i : i in [2..pool_seq] | IsEquivalent(s`upto, Rep(pool_seq[i]`class), Rep(n0`class))} where n0:=pool_seq[1] where pool_seq := SetToSequence(s`pool);
   end if;
 end function;
 

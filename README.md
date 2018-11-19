@@ -69,7 +69,7 @@ How to compute a Galois group.
 
 ### `GROUP_ALG`
 
-How to deduce the Galois group using resolvents.
+How to deduce the Galois group using resolvents. Use `Maximal2` in general or `All` when it is quick to enumerate all possible Galois groups.
 
 - `All [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, Dedupe:SUBGROUP_DEDUPE]`: Enumerate all possible Galois groups, then eliminate possibilities until only one remains. `Stat` is the statistic used to distinguish between possible Galois groups. `Choice` determines how to choose which subgroups to form resolvents from. `Dedupe` determines how to dedupe any groups considered up to conjugacy.
 - `Maximal [Stat:STATISTIC, Choice:SUBGROUP_CHOICE, DescendWhen, Descend, Useful, Reprocess:BOOL, Reset:BOOL, Blacklist:BOOL, Dedupe:SUBGROUP_DEDUPE]`: Work down the graph of possible Galois groups by maximal inclusion.
@@ -118,13 +118,14 @@ How to produce a global model, a global number field which completes to a given 
 - `Symmetric [GALOISGROUP]`: Use a global approximation of the defining polynomial, with its coefficients minimized if possible. Assume the global Galois group is the full symmetric group. The `GALOISGROUP` algorithm is used to compute the actual Galois group; this doesn't change the global model, but it can cut down the possibilities for the overall Galois group.
 - `Factors [GLOBAL_MODEL]`: Factorize the polynomial and produce a global model for each factor. Corresponds to a direct product of groups.
 - `RamTower [GLOBAL_MODEL]`: Get the ramification filtration of the extension defined by the polynomial, and produce a global model for each piece. Corresponds to a wreath product of groups.
+- `D4Tower [GLOBAL_MODEL]`: Given an irreducible polynomial of degree 4 defining an extension with Galois group `D4`, splits the extension into a tower of two quadratics and makes a `S2` extension for each one.
 - `RootOfUnity [Minimize:BOOL, Complement:BOOL]`: Adjoin a root of unity to make an unramified extension. The local Galois group is cyclic and the global one is abelian and known. By default, we adjoin a `(q^d-1)`th root of unity; when `Minimize` is true, we minimize the degree of the extension by choosing a suitable divisor of this; when `Complement` is set we take a subfield of this so that the global degree is as small as possible. **Note:** The global model may be of higher degree than the local extension, which in a wreath product can make the overall group size exponentially larger.
 - `RootOfUniformizer`: Adjoin a root of a uniformizer to make a totally tamely ramified extension. The local and global Galois groups are known.
 - `Select [EXPRESSION, GLOBAL_MODEL] ... [GLOBAL_MODEL]`: Select between several global models. The global model next to the first expression evaluating to true is used, or else the final model is used. The expressions are in the following variables: `p` (the prime), `irr` (true if irreducible), `deg` (degree), `unram` (true if defines an unramified extension), `tame` (true if defines a tamely ramified extension), `ram` (true if defines a ramified extension), `wild` (true if defines a wildly ramified extension), `totram` (true if defines a totally ramified extension), `totwild` (true if defines a totally wildly ramified extension).
 
 ### `STATISTIC`
 
-A function which can be applied to polynomials and groups, with the property that the statistic of a polynomial equals the statistic of its Galois group.
+A function which can be applied to polynomials and groups, with the property that the statistic of a polynomial equals the statistic of its Galois group. The most useful is usually `FactorDegrees`.
 
 - `HasRoot`: True or false depending on whether the resolvent has a root (i.e. the group has a fixed point).
 - `NumRoots`: The number of roots of the resolvent (i.e. the number of fixed points in the group).
@@ -134,6 +135,7 @@ A function which can be applied to polynomials and groups, with the property tha
 - `Factors2 [Stat2:STATISTIC, Stat1:STATISTIC, Strict:BOOL]`: If there are `n` irreducible factors, this is the `n x n` array where the `(i,j)` entry is the multiset of statistics (by `Stat2`) of factors of the `i`th factor over the field defined by the `j`th factor. Each row and column in the array is also labelled with a statistic (by `Stat1`) for the corresponding factor. The array is defined up to a permutation on factors. When `Strict` is true, then two values are equal iff there is a permutation of the factors making the arrays and labels equal; when false, we just check if the multisets along rows and columns are the same, which is much faster (and in practice usually just as good).
 - `Degree`: The degree of the polynomial or group.
 - `AutGroup`: The automorphism group assuming the polynomial is irreducible (i.e. `N_G(S)/S` where `S=Stab_G(1)` up to `S_d`-conjugacy, where `d` is the order of the group, assuming the group is transitive).
+- `NumAuts`: The number of automorphisms, i.e. the order of the automorphism group.
 - `Tup [STATISTIC, ...]`: A tuple of statistics.
 - `Stab [STATISTIC]`: The statistic applied to a point stabilizer of a transitive group (equivalently, the polynomial over the field it defines).
 - `GaloisGroup [DegLe:INTEGER, Alg:GALOISGROUP]`: The Galois group, computed using `Alg`, if the degree is at most `DegLe`, and otherwise the trivial group.

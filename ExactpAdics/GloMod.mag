@@ -1,4 +1,27 @@
 import "../Utils.mag": not_implemented, Z;
+import "../GloMod.mag": make_primes, number_field;
+
+intrinsic Tower(alg :: PGGAlg_ResEval_Global_Model_D4Tower, L :: PGGFldExact, K :: PGGFldExact) -> []
+  {The tower from K to L.}
+  require Degree(L,K) eq 4: "L/K must be a D4 extension";
+  aK := Actual(K);
+  aL := Actual(L);
+  af := DefiningPolynomial(aL, aK);
+  assert Degree(af) eq 4;
+  ars := [aL| r[1] : r in Roots(ChangeRing(af, aL))];
+  require #ars eq 2: "L/K must be a D4 extension";
+  at := Parent(af) ! [RandomInteger(aK) : i in [1..4]];
+  ag := &+[aL| Evaluate(at, r) : r in ars];
+  am := MinimalPolynomialAssumingDegree(ag, aK, 2);
+  aL1 := certs[1]`Extension where _,_,certs := Factorization(am:Extensions);
+  assert Degree(aL1,aK) eq 2;
+  aL2 := certs[2]`Extension where _,_,certs := Factorization(ChangeRing(af,aL1):Extensions);
+  assert Degree(aL2,aL1) eq 2;
+  L1 := PGGFldExact_Make(aL1, K);
+  L2 := PGGFldExact_Make(aL2, L1);
+  assert Degree(L2,K) eq 4;
+  return [K,L1,L2];
+end intrinsic;
 
 intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_PthRoots, f :: PGGPolExact, bm :: PGGGloMod_Fld : TopField:=false, Extendible:=false) -> PGGGloMod, PGGHomGrpPerm
   {Global model.}
@@ -67,7 +90,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_PthRoots, f :: PGGPolEx
       // since S2=C2, symmetric models suffice when p=2
       gloppols := [GlobalModel(PGGAlg_ResEval_Global_Model_Symmetric_Make(), locppols[i], bm : TopField:=locpexts[i])`global_pol : i in [1..n]];
       assert forall{pol : pol in gloppols | Degree(pol) eq 2};
-      glogens := [glofld| (cs[2]*cs[2] - 4*cs[1]*cs[3])/(4*cs[3]*cs[3]) where cs:=Coefficients(pol) : pol in gloppols];
+      glogens := [glofld| (cs[2]*cs[2] - 4*cs[1]*cs[3])/*/(4*cs[3]*cs[3])*/ where cs:=Coefficients(pol) : pol in gloppols];
     else
       // more generally, we need to check that the global base field contains pth roots of unity and use these to construct a Kummer extension
       not_implemented("GlobalModel:", Type(alg), Type(f), Type(bm), "(unless p=2)");
@@ -78,7 +101,7 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_PthRoots, f :: PGGPolEx
     gloseqelt := func<x | x[1]>;
     gloroots := [gloext|];
     for i in [1..n] do
-      gloext := ext<gloext | PolynomialRing(gloext).1^p - glogens[i]>;
+      gloext := number_field(PolynomialRing(gloext).1^p - glogens[i] : base:=gloext);//ext<gloext | PolynomialRing(gloext).1^p - glogens[i]>;
       gloeltseq := func<x | &cat[gloeltseq0(y) : y in Eltseq(gloext!x)]> where gloeltseq0:=gloeltseq;
       gloseqelt := func<x | gloext![gloseqelt0(x[j..j+d0-1]) : j in [1..d by d0]]> where d0:=p^(i-1) where d:=p^i where gloseqelt0:=gloseqelt;
       ChangeUniverse(~gloroots, gloext);
@@ -106,12 +129,15 @@ intrinsic GlobalModel(alg :: PGGAlg_ResEval_Global_Model_PthRoots, f :: PGGPolEx
     Minvs := [M^-1 : M in Ms];
     // make the global model
     glomod := New(PGGGloMod_PthRoots);
+    glomod`base_model := bm;
     glomod`local_field := locext;
     glomod`global_field := gloext;
     glomod`global_pol := glopol;
-    glomod`embeddings := [map<gloext -> locext | x :-> locext!(((V![Actual(y@emb) : y in gloeltseq(x)])*M)@@Vmap)>  where M:=Ms[i] where emb:=bm`embeddings[i] : i in [1..nembs]];
-    glomod`approximations := [func<y,pr | [a(locfld!x,pr) : x in Eltseq((Actual(y)@Vmap)*Minv)]@gloseqelt> where Minv:=Minvs[i] where a:=bm`approximations[i] : i in [1..nembs]];
-    glomod`primes := [Factorization(Integers(glomod`global_field) !! p)[1][1] : p in bm`primes];
+    if Extendible then
+      glomod`embeddings := [map<gloext -> locext | x :-> locext!(((V![Actual(y@emb) : y in gloeltseq(x)])*M)@@Vmap)>  where M:=Ms[i] where emb:=bm`embeddings[i] : i in [1..nembs]];
+      glomod`approximations := [func<y,pr | [a(locfld!x,pr) : x in Eltseq((Actual(y)@Vmap)*Minv)]@gloseqelt> where Minv:=Minvs[i] where a:=bm`approximations[i] : i in [1..nembs]];
+      make_primes(~glomod);
+    end if;
     glomod`global_gens := glogens;
     glomod`global_root_coeffs := cs;
     glomod`global_zetap := zetap;

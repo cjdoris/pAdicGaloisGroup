@@ -90,7 +90,7 @@ intrinsic HasNextGroup(s :: PGGAlgState_Stream_Index) -> BoolElt, .
       s`stream_done := true;
       return true, Group(s`overgroup);
     else
-      ok, H := PGG_has_random_subgroup_of_index(Group(s`overgroup), idx : MaxTries:=100);
+      ok, H := PGG_has_random_subgroup_of_index(Group(s`overgroup), idx : MaxTries:=1000);
       if ok then
         return true, H;
       else

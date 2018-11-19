@@ -402,7 +402,6 @@ intrinsic _OrbitsOfSubgroups(G :: PGGGrpPerm_WrProd, n :: RngIntElt, m :: RngInt
           S := WreathProduct(sub<SymmetricGroup(d)|1>, S0)
             where S0 := DirectProduct([WreathProduct(sub<SymmetricGroup(#os[c[1]])|1>, SymmetricGroup(#c)) : c in cs])^g
             where g := SymmetricGroup(d0) ! [j : j in os[i], i in c, c in cs];
-          print "S =", S;
           // find factorizations n2 = prod_[X] n_[X]^|X| over classes [X] of orbits X
           for cn2s in factorizations_of_shape(n2, [#os[c[1]] : c in cs]) do
             // factorize n_[X] = prod_X n_X (so n2 = prod_X n_X^|X|)

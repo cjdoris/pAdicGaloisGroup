@@ -147,6 +147,11 @@ function parse_algorithm(alg : prime:=false, degree:=false)
         [<get("GLOBAL_MODEL"),"Next",false>],
         func<args | PGGAlg_ResEval_Global_Model_RamTower_Make(:Next:=args[1])>
       ),
+      PGG_ArgSpec_Attr(
+        "D4Tower",
+        [<get("GLOBAL_MODEL"),"Next",false>],
+        func<args | PGGAlg_ResEval_Global_Model_D4Tower_Make(:Next:=args[1])>
+      ),
       PGG_ArgSpec_AttrSelect(
         "Select",
         EXPRESSION(["p","faccerts","irr","unram","tame","ram","wild","totram","totwild"]),
@@ -180,6 +185,7 @@ function parse_algorithm(alg : prime:=false, degree:=false)
       PGG_ArgSpec_Attr("FactorDegrees", [], func<args | PGGStat_FactorDegrees_Make()>),
       PGG_ArgSpec_Attr("FactorDegreesSeq", [], func<args | PGGStat_FactorDegreesSeq_Make()>),
       PGG_ArgSpec_Attr("Degree", [], func<args | PGGStat_Degree_Make()>),
+      PGG_ArgSpec_Attr("NumAuts", [], func<args | PGGStat_NumAuts_Make()>),
       PGG_ArgSpec_Attr("AutGroup", [], func<args | PGGStat_AutGroup_Make()>),
       PGG_ArgSpec_AttrList("Tup", get("STATISTIC"), func<args | PGGStat_Tup_Make(args)>),
       PGG_ArgSpec_Attr("Factors", [<get("STATISTIC"), "Stat", false>], func<args | PGGStat_Factors_Make(:Stat:=args[1])>),

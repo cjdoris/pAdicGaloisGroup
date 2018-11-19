@@ -9,6 +9,7 @@ declare type PGGStat_Degree: PGGStat_EqSimple;
 declare type PGGStat_Order: PGGStat_EqSimple;
 declare type PGGStat_AutGroup: PGGStat_EqSimple;
 declare attributes PGGStat_AutGroup: conjugacy_classes;
+declare type PGGStat_NumAuts: PGGStat_EqSimple;
 declare type PGGStat_Tup: PGGStat_EqSimple;
 declare attributes PGGStat_Tup: stats;
 declare type PGGStat_Factors: PGGStat_EqSimple;
@@ -85,6 +86,11 @@ intrinsic 'eq'(S1 :: PGGStat_AutGroup, S2 :: PGGStat_AutGroup) -> BoolElt
   return true;
 end intrinsic;
 
+intrinsic 'eq'(S1 :: PGGStat_NumAuts, S2 :: PGGStat_NumAuts) -> BoolElt
+  {"}
+  return true;
+end intrinsic;
+
 intrinsic 'eq'(S1 :: PGGStat_Order, S2 :: PGGStat_Order) -> BoolElt
   {"}
   return true;
@@ -147,6 +153,11 @@ end intrinsic;
 intrinsic PGGStat_AutGroup_Make() -> PGGStat_AutGroup
   {"}
   return New(PGGStat_AutGroup);
+end intrinsic;
+
+intrinsic PGGStat_NumAuts_Make() -> PGGStat_NumAuts
+  {"}
+  return New(PGGStat_NumAuts);
 end intrinsic;
 
 intrinsic PGGStat_Degree_Make() -> PGGStat_Degree
@@ -228,6 +239,11 @@ end intrinsic;
 intrinsic Print(S :: PGGStat_AutGroup)
   {"}
   printf "automorphism group";
+end intrinsic;
+
+intrinsic Print(S :: PGGStat_NumAuts)
+  {"}
+  printf "number of automorphisms";
 end intrinsic;
 
 intrinsic Print(S :: PGGStat_Degree)
@@ -370,6 +386,14 @@ intrinsic GroupStat(S :: PGGStat_AutGroup, G :: GrpPerm) -> PGGStatVal
   return MakeValue(S, ConjugacyClasses(S, Degree(aut)) ! aut);
 end intrinsic;
 
+intrinsic GroupStat(S :: PGGStat_NumAuts, G :: GrpPerm) -> PGGStatVal
+  {"}
+  assert IsTransitive(G);
+  stab := Stabilizer(G, 1);
+  norm := Normalizer(G, stab);
+  return MakeValue(S, Index(norm, stab));
+end intrinsic;
+
 intrinsic GroupStat(S :: PGGStat_Tup, G :: GrpPerm) -> PGGStatVal
   {"}
   return MakeValue(S, <GroupStat(S2, G) : S2 in S`stats>);
@@ -460,6 +484,15 @@ intrinsic ResolventStat(S :: PGGStat_AutGroup, R :: PGGPol) -> PGGStatVal
   L := Extension(R);
   aut := AutomorphismGroup(L, K);
   return MakeValue(S, ConjugacyClasses(S, Degree(aut)) ! aut);
+end intrinsic;
+
+intrinsic ResolventStat(S :: PGGStat_NumAuts, R :: PGGPol) -> PGGStatVal
+  {"}
+  K := BaseRing(R);
+  L := Extension(R);
+  f := DefiningPolynomial(L,K);
+  naut := #Roots(ChangeRing(f, L));
+  return MakeValue(S, naut);
 end intrinsic;
 
 intrinsic ResolventStat(S :: PGGStat_Tup, R :: PGGPol) -> PGGStatVal

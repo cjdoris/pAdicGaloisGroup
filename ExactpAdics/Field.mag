@@ -227,6 +227,11 @@ intrinsic IsExtensionOf(E :: PGGFldExact, F :: PGGFldExact) -> BoolElt
   return ok;
 end intrinsic;
 
+intrinsic _BaseField(F :: PGGFldExact) -> PGGFldExact
+  {"}
+  return PGGFldExact_Make(BaseField(Actual(F)));
+end intrinsic;
+
 intrinsic RamificationTower(E :: PGGFldExact, F :: PGGFldExact) -> []
   {The ramification tower of extensions from F to E.}
   t := use_strategy()

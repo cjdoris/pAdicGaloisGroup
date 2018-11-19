@@ -6,7 +6,7 @@ declare type PGGAlg_ResEval_Global: PGGAlg_ResEval;
 declare attributes PGGAlg_ResEval_Global: model;
 
 declare type PGGAlgState_ResEval_Global: PGGAlgState;
-declare attributes PGGAlgState_ResEval_Global: base_field_model, pol_model, precision, complex_roots, overgroup_embedding;
+declare attributes PGGAlgState_ResEval_Global: base_field_model, pol_model, precision, base_complex_embeddings, complex_roots, overgroup_embedding;
 
 declare type PGGAlg_ResEval_Global_Model: PGGAlg;
 
@@ -16,8 +16,12 @@ declare attributes PGGAlg_ResEval_Global_Model_Symmetric: galois_group_alg;
 declare type PGGAlg_ResEval_Global_Model_Factors: PGGAlg_ResEval_Global_Model;
 declare attributes PGGAlg_ResEval_Global_Model_Factors: next;
 
-declare type PGGAlg_ResEval_Global_Model_RamTower: PGGAlg_ResEval_Global_Model;
-declare attributes PGGAlg_ResEval_Global_Model_RamTower: next;
+declare type PGGAlg_ResEval_Global_Model_Tower: PGGAlg_ResEval_Global_Model;
+declare attributes PGGAlg_ResEval_Global_Model_Tower: next;
+
+declare type PGGAlg_ResEval_Global_Model_RamTower: PGGAlg_ResEval_Global_Model_Tower;
+
+declare type PGGAlg_ResEval_Global_Model_D4Tower: PGGAlg_ResEval_Global_Model_Tower;
 
 declare type PGGAlg_ResEval_Global_Model_Select: PGGAlg_ResEval_Global_Model;
 declare attributes PGGAlg_ResEval_Global_Model_Select: predicates, models;
@@ -51,15 +55,17 @@ intrinsic OvergroupEmbedding(s :: PGGAlgState_ResEval_Global) -> PGGHomGrpPerm
   return s`overgroup_embedding;
 end intrinsic;
 
-intrinsic ComplexRoots(s :: PGGAlgState_ResEval_Global, pr :: RngIntElt) -> []
-  {A sequence of complex roots, one for each embedding of the base field.}
+intrinsic ComplexRoots(s :: PGGAlgState_ResEval_Global, pr :: RngIntElt) -> [], []
+  {A sequence of complex roots, one for each embedding of the base field. Also returns the base field embeddings.}
   C := ComplexField(pr);
   if pr gt s`precision then
     vprint PGG_GaloisGroup: "complex precision =", pr;
-    s`complex_roots := ComplexRoots(s`pol_model, ComplexEmbeddings(s`base_field_model, [map<Q -> C | x :-> C!x>]));
+    // s`complex_roots := ComplexRoots(s`pol_model, ComplexEmbeddings(s`base_field_model, [map<Q -> C | x :-> C!x>]));
+    s`base_complex_embeddings := AllComplexEmbeddings(s`base_field_model, C);
+    s`complex_roots := ComplexRoots(s`pol_model, s`base_complex_embeddings);
     s`precision := pr;
   end if;
-  return PowerSequence(PowerSequence(C)) ! s`complex_roots;
+  return PowerSequence(PowerSequence(C)) ! s`complex_roots, [map<s`base_field_model`global_field -> C | x :-> C!(x@e)> : e in s`base_complex_embeddings];
 end intrinsic;
 
 intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, I, U :: GrpPerm) -> PGGPol
@@ -72,27 +78,84 @@ intrinsic Resolvent(s :: PGGAlgState_ResEval_Global, m :: PGGGloMod, I, U :: Grp
   W := Group(Codomain(s`overgroup_embedding));
   assert U subset W;
   ntries := 0;
+  dim := AbsoluteDegree(s`base_field_model`global_field);
+  deg := Index(W, U);
   while true do
     assert ntries lt 1000;
     ntries +:= 1;
     trans := tschirnhaus_transformation(ntries, Max(3, Index(W, U)));
-    rss0 := ComplexRoots(s, 30);
+    rss0, embs0 := ComplexRoots(s, 30);
+    CC0 := Universe(rss0[1]);
+    RR0 := RealField(CC0);
+    assert #rss0 eq dim;
+    assert #embs0 eq dim;
     trss0 := [[Evaluate(trans, r) : r in rs] : rs in rss0];
     rbound := Max([Abs(r) : r in rs, rs in trss0]);
-    pr := Ceiling(Log(10, slpol_bound(I, rbound)) * Index(W, U) * 2 + 30);
-    rss := ComplexRoots(s, pr);
+    if dim eq 1 then
+      radius0 := 1;
+    else
+      basis := AbsoluteBasis(Integers(s`base_field_model`global_field));
+      assert #basis eq dim;
+      vecs0 := [[x@e : e in embs0] : x in basis];
+      assert #vecs0 eq dim;
+      // rls0, cxs0 := PGG_realcomplexpairs([&+[CC0| coeffs[i]*vec[i] : i in [1..dim]] : vec in vecs0])
+      //   where coeffs := [Random(2^30) : i in [1..dim]];
+      // assert #rls0 + 2*#cxs0 eq dim;
+      // Lemb0 := func<vec | [Real(vec[i]) : i in rls0] cat [x : x in [Real(vec[i[1]]),Imaginary(vec[i[1]])], i in cxs0]>;
+      // Ldim := dim;
+      Lemb0 := func<vec | &cat[[RR0| Real(c), Imaginary(c)] : c in vec]>;
+      Ldim0 := 2*dim;
+      L0 := Lattice(Ldim0, &cat[Lemb0(vec) : vec in vecs0]);
+      assert Rank(L0) eq dim;
+      radius0 := PackingRadius(L0);
+    end if;
+    pr := Ceiling(Log(10, slpol_bound(I, rbound)) * Index(W, U) * 2 - Log(10, radius0) + 30);
+    rss, embs := ComplexRoots(s, pr);
+    CC := Universe(rss[1]);
+    RR := RealField(CC);
     trss := [[Evaluate(trans, r) : r in rs] : rs in rss];
     Rxrss := [[Evaluate(I, permute_seq(g, rs)) : g in left_coset_representatives(W, U)] : rs in trss];
     Rxs := [polynomial_with_roots(rs) : rs in Rxrss];
-    if #Rxs eq 1 then
+    assert #Rxs eq dim;
+    assert forall{Rx : Rx in Rxs | Degree(Rx) eq deg};
+    if dim eq 1 then
       R := Polynomial([Round(Real(c)) : c in Coefficients(Rxs[1])]);
       err := Max([Abs(c) : c in Coefficients(R - Rxs[1])] cat [0]);
       assert err lt 1e-20;
-      if IsSquarefree(R) then
-        return PolynomialRing(s`base_field_model`local_field) ! R;
-      end if;
     else
-      not_implemented("Resolvent: only implemented over Q");
+      vecs := [[x@e : e in embs] : x in basis];
+      // rls, cxs := PGG_realcomplexpairs([CC| &+[coeffs[i]*vec[i] : i in [1..dim]] : vec in vecs])
+      //   where coeffs := [Random(2^30) : i in [1..dim]];
+      // assert #rls + 2*#cxs eq dim;
+      // Lemb := func<vec | [Real(vec[i]) : i in rls] cat [x : x in [Real(vec[i[1]]),Imaginary(vec[i[1]])], i in cxs]>;
+      // Ldim := dim;
+      Lemb := func<vec | &cat[[RR| Real(c), Imaginary(c)] : c in vec]>;
+      Ldim := 2*dim;
+      Lorig := LatticeWithBasis(Ldim, &cat[Lemb(vec) : vec in vecs]);
+      L, T := LLL(Lorig);
+      print "L";
+      assert Rank(L0) eq dim;
+      radius := PackingRadius(L);
+      print "radius =", radius;
+      assert radius0 lt 1e5*radius; // if radius0 is a lot larger than radius then L0 was way off and the precision pr is incorrect
+      // for each coefficient of R, construct an approximation to its embedding in L
+      Rcxvs := [AmbientSpace(L)| Lemb([Coefficient(Rx,i) : Rx in Rxs]) : i in [0..deg]];
+      print "Rcxvs";
+      // round each coefficient to the nearest element of L
+      Rcvs := [L| PGG_CloseVector(L, xv : Close:=radius*1e-15) /*ClosestVectors(L, xv : Max:=1)[1]*/ : xv in Rcxvs];
+      print "Rcvs";
+      // check we are close
+      err := Max([Sqrt(Norm(Rcxvs[i] - AmbientSpace(L)!Rcvs[i])) : i in [1..deg+1]]);
+      assert err/radius lt 1e-20;
+      // convert to actual coefficients
+      Rcs := [Integers(s`base_field_model`global_field)| &+[cs[i]*basis[i] : i in [1..dim]] where cs:=Eltseq(Vector(Coordinates(v))*T) : v in Rcvs];
+      print "Rcs";
+      // convert to resolvent
+      R := PolynomialRing(s`base_field_model`global_field) ! Rcs;
+      print "R";
+    end if;
+    if IsSquarefree(R) then
+      return PolynomialRing(s`base_field_model`local_field) ! [s`base_field_model`embeddings[1](c) : c in Coefficients(R)];
     end if;
   end while;
 end intrinsic;
@@ -131,6 +194,13 @@ end intrinsic;
 intrinsic PGGAlg_ResEval_Global_Model_RamTower_Make(:Next:=false) -> PGGAlg_ResEval_Global_Model_RamTower
   {The "RamTower" conjugacy algorithm.}
   a := New(PGGAlg_ResEval_Global_Model_RamTower);
+  a`next := Next cmpne false select Next else PGGAlg_ResEval_Global_Model_Symmetric_Make(:GaloisGroupAlg:=PGGAlg_GaloisGroup_SinglyRamified_Make());
+  return a;
+end intrinsic;
+
+intrinsic PGGAlg_ResEval_Global_Model_D4Tower_Make(:Next:=false) -> PGGAlg_ResEval_Global_Model_D4Tower
+  {The "D4Tower" conjugacy algorithm.}
+  a := New(PGGAlg_ResEval_Global_Model_D4Tower);
   a`next := Next cmpne false select Next else PGGAlg_ResEval_Global_Model_Symmetric_Make(:GaloisGroupAlg:=PGGAlg_GaloisGroup_SinglyRamified_Make());
   return a;
 end intrinsic;
@@ -194,6 +264,11 @@ end intrinsic;
 intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_RamTower)
   {"}
   printf "ramification tower -> "; Print(alg`next);
+end intrinsic;
+
+intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_D4Tower)
+  {"}
+  printf "D4 tower -> "; Print(alg`next);
 end intrinsic;
 
 intrinsic Print(alg :: PGGAlg_ResEval_Global_Model_Select)
