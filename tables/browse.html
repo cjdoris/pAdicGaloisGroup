@@ -132,7 +132,8 @@
       let prime = parseInt(getvars.prime, 10);
       let degree = parseInt(getvars.degree, 10);
       let suffix = getvars.suffix;
-      let csvfile = 'https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/p'+prime+'_d'+degree+(suffix?'_'+suffix:'')+'.csv';
+      let csvfile = 'p'+prime+'_d'+degree+(suffix?'_'+suffix:'')+'.csv';
+      let csvurl = 'https://raw.githubusercontent.com/cjdoris/pAdicGaloisGroup/master/tables/' + csvfile;
       $('#prime').text(prime);
       $('#degree').text(degree);
       if (suffix) {
@@ -141,10 +142,10 @@
       if (getvars.dupes) {
         $('#info').append($('<p>Note: Possibly several polynomials per field</p>'))
       }
-      $('#info').append($('<p>File: <a href="'+csvfile+'">'+csvfile+'</a></p>'))
+      $('#info').append($('<p>File: <a href="'+csvurl+'">'+csvfile+'</a></p>'))
       $.ajax({
         type: 'GET',
-        url: csvfile,
+        url: csvurl,
         dataType: 'text',
         success: function (data) { $('#loading').remove(); CSVtoTable($('table'), data, degree); },
         error: function (xhr,st,err) { $('#loading').empty().text('Error loading CSV file! (check URL parameters)').css('color','red'); },
