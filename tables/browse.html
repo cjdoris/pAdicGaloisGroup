@@ -143,6 +143,9 @@
         $('#info').append($('<p>Note: Possibly several polynomials per field</p>'))
       }
       $('#info').append($('<p>File: <a href="'+csvurl+'">'+csvfile+'</a></p>'))
+      if (degree <= 12 && !suffix) {
+        $('#info').append($('<p>Also in: <a href="https://hobbes.la.asu.edu/LocalFields/basic-table.cgi?prime='+prime+'&degree='+degree+'">LFDB</a></p>'))
+      }
       $.ajax({
         type: 'GET',
         url: csvurl,
