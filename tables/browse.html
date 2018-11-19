@@ -143,8 +143,11 @@
         $('#info').append($('<p>Note: Possibly several polynomials per field</p>'))
       }
       $('#info').append($('<p>File: <a href="'+csvurl+'">'+csvfile+'</a></p>'))
-      if (degree <= 12 && !suffix) {
+      if (degree <= 12) {
         $('#info').append($('<p>Also in: <a href="https://hobbes.la.asu.edu/LocalFields/basic-table.cgi?prime='+prime+'&degree='+degree+'" target="_blank">LFDB</a>, <a href="http://www.lmfdb.org/LocalNumberField/?p='+prime+'&n='+degree+'" target="_blank">LMFDB</a></p>'))
+      }
+      else if (degree <= 14) {
+        $('#info').append($('<p>Also in: <a href="http://www.lmfdb.org/LocalNumberField/?p='+prime+'&n='+degree+'" target="_blank">LMFDB</a></p>'))
       }
       $.ajax({
         type: 'GET',
