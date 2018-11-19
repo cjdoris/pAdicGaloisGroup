@@ -1,6 +1,6 @@
 # Tables of Galois groups
 
-This directory contains CSV files describing the Galois groups of polynomials over the *p*-adic field. Each file has a fixed degree *d*, the first *d*+1 columns give the coefficients of the polynomial, and the final number gives the [T-number](http://groupnames.org/T31.html) of its Galois group.
+This directory contains CSV files describing the Galois groups of polynomials over the *p*-adic field &#8474;<sub><em>p</em></sub>. Each file has *d*+2 columns, the first *d*+1 columns being the coefficients of a degree *d* polynomial, and the final column being the [T-number](http://groupnames.org/T31.html) (also [see here](https://hobbes.la.asu.edu/Groups/)) of its Galois group.
 
 Unless otherwise specified in the notes column, the files contain precisely one defining polynomial for every field of the given degree.
 
