@@ -144,7 +144,7 @@
       }
       $('#info').append($('<p>File: <a href="'+csvurl+'">'+csvfile+'</a></p>'))
       if (degree <= 12 && !suffix) {
-        $('#info').append($('<p>Also in: <a href="https://hobbes.la.asu.edu/LocalFields/basic-table.cgi?prime='+prime+'&degree='+degree+'">LFDB</a></p>'))
+        $('#info').append($('<p>Also in: <a href="https://hobbes.la.asu.edu/LocalFields/basic-table.cgi?prime='+prime+'&degree='+degree+'" target="_blank">LFDB</a>, <a href="http://www.lmfdb.org/LocalNumberField/?p='+prime+'&n='+degree+'" target="_blank">LMFDB</a></p>'))
       }
       $.ajax({
         type: 'GET',
