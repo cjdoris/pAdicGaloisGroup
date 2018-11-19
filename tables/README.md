@@ -8,8 +8,6 @@ Up to degree 12, the polynomials are the same as in [the Local Fields Database (
 
 Occasionally we could not find the Galois group of all polynomials in a file. In such cases the T-number is recorded as 0 and the number of such ommissions is recorded in the notes column.
 
-The files can be [browsed directly on GitHub](https://github.com/cjdoris/pAdicGaloisGroup/tree/master/tables/).
-
 <table>
   <style type="text/css">
     td:nth-child(1) { text-align: right; }
