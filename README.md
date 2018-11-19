@@ -57,7 +57,7 @@ The group is a permutation group on the roots of `f`, and therefore has the same
 If using the `ExactpAdics` package, the polynomial can be over an exact p-adic field.
 
 **Parameters.**
-- `Alg`: The algorithm to use ([see here](#algorithm-parameter)).
+- `Alg`: The algorithm to use (see ["Algorithm parameter"](#algorithm-parameter)).
 - `Time`: When true, prints out detailed timings of each part of the algorithm.
 
 
